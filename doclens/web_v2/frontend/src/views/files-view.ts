@@ -4,9 +4,9 @@ import { store, actions } from "../state/store";
 import { filesApi } from "../api/files";
 import type { FileEntry as FileEntryLike } from "../api/files";
 import { gitApi } from "../api/git";
-import type { GitDiffResponse } from "../api/git";
 import { probeUploadTarget, uploadPreview } from "../api/preview";
 import { PreviewController } from "../utils/preview-controller";
+import { FilesModesController } from "../utils/files-modes-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import "../components/pst-email-list";
 import "../components/file-tree";
@@ -23,8 +23,10 @@ import "../components/delete-dialog";
 import "../components/skill-toolbox-dialog";
 import "../components/skill-run-dialog";
 import "../components/deep-read-list";
+import type { GitChangesList } from "../components/git-changes-list";
+import type { DeepReadList } from "../components/deep-read-list";
 import type { SkillInfo, BookSkillItem } from "../api/skills";
-import { fetchSkills, fetchBookSkills, deleteSkill } from "../api/skills";
+import { fetchSkills, fetchBookSkills } from "../api/skills";
 import { recordSkillUse } from "../state/recent-skills";
 import "../components/drop-zone";
 import "../components/icon";
@@ -430,30 +432,20 @@ export class FilesView extends LitElement {
    *  比例轨道（file-list:preview = 1:2）；拖动落盘后落 px 固定轨道。 */
   @state() private _previewPaneWidth: number | null = null;
 
-  // 未提交改动模式（CONTEXT.md 2026-10-01）：中间栏切换为改动列表 + 预览栏 diff
-  /** 改动模式开关（git 根才显示入口；探测失败静默隐藏）。 */
-  @state() private _changesMode = false;
-  /** 知识库是否 git 根（入口显隐依据；null = 未探测）。 */
-  @state() private _isGitRoot: boolean | null = null;
-  /** 当前 diff 预览的文件路径（空 = 无）。 */
-  @state() private _diffPath = "";
-  /** diff 响应（null = 加载中/失败共用态机）。 */
-  @state() private _diffResp: GitDiffResponse | null = null;
-  @state() private _diffError: string | null = null;
-  /** 上次见到的同步时间戳——变化即顺带重拉改动列表（Q5 决议）。 */
-  private _lastSeenSyncAt: number | null | undefined = undefined;
-  /** 进入改动模式时记录的当前目录——变化 = 用户点了 file-tree（Q15 退出依据）。 */
-  private _lastDirBeforeChanges: string | null = null;
-
-  // 深读面板模式（ADR-0041）：中间栏切换为深读书目列表（同改动模式形态）
-  /** 深读模式开关（存在深读技能才显示入口；探测失败静默隐藏）。 */
-  @state() private _deepReadMode = false;
-  /** 是否存在深读技能（入口显隐依据；null = 未探测）。 */
-  @state() private _hasBooks: boolean | null = null;
-  /** 进入深读模式时记录的当前目录——变化 = 用户点了 file-tree（同 Q15 退出依据）。 */
-  private _lastDirBeforeDeepRead: string | null = null;
-  /** 待删除的深读技能（删除确认对话框数据；null = 无）。 */
-  @state() private _deleteBook: BookSkillItem | null = null;
+  // 未提交改动模式 / 深读模式（CONTEXT.md 2026-10-01；ADR-0041）：
+  // 状态机与副作用在 FilesModesController（AP-3 拆分），此处只留渲染接线。
+  private _modes = new FilesModesController(this, {
+    probeGitRoot: () => this._probeGitRoot(),
+    probeBooks: () => this._probeBooks(),
+    restoreNormalPreview: () => {
+      if (this._previewPath) void this._previewPathWithDirtyCheck(this._previewPath);
+    },
+    toMobileList: () => {
+      if (this._isMobile) actions.setMobilePane("list");
+    },
+    notify: (message) => this._showToast(message),
+    onBookActivated: (book) => this._onBookActivated(book),
+  });
 
   /** jsbridge 上传进行中（App 内）：禁用上传入口，防重复触发 */
   @state() private _uploading = false;
@@ -477,8 +469,6 @@ export class FilesView extends LitElement {
     this._unsubscribe = store.subscribe(() => this._onStoreChange());
     this._ensureLoaded("");
     this._loadPaneWidths();
-    this._probeGitRoot();
-    void this._probeBooks();
     // 家目录探测（ADR-0049 快速跳转）：复用 drives 端点顺带的 home 字段；
     // 失败静默（按钮不显示，不阻塞页面）
     void this._probeHomeDir();
@@ -491,37 +481,20 @@ export class FilesView extends LitElement {
     window.addEventListener("cortex:files-changed", this._onExternalFilesChanged);
   }
 
-  /** store 订阅回调：检测 Git Sync 轮次（last_sync_at 变化）顺带重拉改动列表
-   *  （Q5 决议：进模式拉取 + 手动刷新 + 同步轮次 SSE 零新事件重拉）。 */
+  /** store 订阅回调：改动/深读模式的相关切片已由 FilesModesController
+   *  以 selector 订阅接管（同步轮次 + 当前目录）；此处只保留视图自身的
+   *  重渲染触发。 */
   private _onStoreChange() {
-    const syncAt = store.getState().syncStatus?.last_sync_at ?? null;
-    if (this._lastSeenSyncAt !== undefined && syncAt !== this._lastSeenSyncAt && this._changesMode) {
-      const list = this.shadowRoot?.querySelector("git-changes-list") as any;
-      void list?.refresh?.();
-    }
-    this._lastSeenSyncAt = syncAt;
-    // Q15 决议：改动模式是中间栏的一个态——点 file-tree 目录节点照常切目录并退出改动模式
-    if (this._changesMode && store.getState().files.currentDir !== this._lastDirBeforeChanges) {
-      // selectDir 已由 file-tree 派发；这里被动感知并收起改动模式
-      this._changesMode = false;
-      this._diffPath = "";
-      this._diffResp = null;
-      this._diffError = null;
-    }
-    // 深读模式同律：点 file-tree 目录节点 = 退出深读模式
-    if (this._deepReadMode && store.getState().files.currentDir !== this._lastDirBeforeDeepRead) {
-      this._deepReadMode = false;
-    }
     this.requestUpdate();
   }
 
   /** 探测知识库是否 git 根（入口显隐；非 git 根 / 探测失败均隐藏，Q6 决议）。 */
-  private async _probeGitRoot() {
+  private async _probeGitRoot(): Promise<boolean> {
     try {
       await gitApi.changes();
-      this._isGitRoot = true;
+      return true;
     } catch {
-      this._isGitRoot = false;
+      return false;
     }
   }
 
@@ -534,52 +507,19 @@ export class FilesView extends LitElement {
     } catch { /* 静默：按钮不显示 */ }
   }
 
-  /** 进入 / 退出改动模式。进入时预览栏清空（diff 由用户点行触发）。 */
-  private _toggleChangesMode() {
-    this._changesMode = !this._changesMode;
-    if (!this._changesMode) {
-      this._diffPath = "";
-      this._diffResp = null;
-      this._diffError = null;
-      this._lastDirBeforeChanges = null;
-      // 回到普通列表时恢复常规预览态（dirty 编辑丢弃确认与切文件同律）
-      if (this._previewPath) void this._previewPathWithDirtyCheck(this._previewPath);
-    } else {
-      this._diffPath = "";
-      this._diffResp = null;
-      this._diffError = null;
-      this._lastDirBeforeChanges = store.getState().files.currentDir;
-      if (this._isMobile) actions.setMobilePane("list");
-    }
-  }
-
-  /** 进入 / 退出深读模式（ADR-0041；与改动模式互斥——进深读时先退改动）。
-   *  预览栏保持常规态（点书跳 chat，预览栏无深读专属内容）。 */
-  private _toggleDeepReadMode() {
-    if (this._changesMode) this._toggleChangesMode();
-    this._deepReadMode = !this._deepReadMode;
-    if (this._deepReadMode) {
-      this._lastDirBeforeDeepRead = store.getState().files.currentDir;
-      if (this._isMobile) actions.setMobilePane("list");
-    } else {
-      this._lastDirBeforeDeepRead = null;
-    }
-  }
-
   /** 探测是否存在深读技能（入口显隐依据；失败静默隐藏，同 git 根探测）。 */
-  private async _probeBooks() {
+  private async _probeBooks(): Promise<boolean> {
     try {
       const books = await fetchBookSkills();
-      this._hasBooks = books.length > 0;
+      return books.length > 0;
     } catch {
-      this._hasBooks = false;
+      return false;
     }
   }
 
   /** 深读书目行点击：跳 chat 新建技能会话，直发开场白（斜杠形态，
    *  与 files 工具箱同一条 pendingSkillChat 收尾链路；ADR-0041 D2）。 */
-  private _onBookActivated(e: CustomEvent<{ book: BookSkillItem }>) {
-    const book = e.detail.book;
+  private _onBookActivated(book: BookSkillItem) {
     const message = `/${book.name} 请按技能指引，先对本书内容做整体概要介绍，再以本书涉及的典型问题引导我开展深读。`;
     actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false });
     actions.setPendingSkillChat({
@@ -592,34 +532,13 @@ export class FilesView extends LitElement {
 
   /** 删除确认提交：真删技能目录（非内置 → DELETE 真删分支），刷新面板与入口。 */
   private async _onBookDeleteConfirm() {
-    const book = this._deleteBook;
-    this._deleteBook = null;
-    if (!book) return;
-    try {
-      await deleteSkill(book.name);
-      this._showToast(`已删除深读技能：${book.title}`);
-      const list = this.shadowRoot?.querySelector("deep-read-list") as any;
-      await list?.refresh?.();
-      await this._probeBooks();
-      // 删空后退出深读模式（面板只剩空态引导）
-      if (this._hasBooks === false) this._deepReadMode = false;
-    } catch (e: any) {
-      this._showToast(e?.message || "删除失败");
-    }
+    await this._modes.deleteBookConfirm();
   }
 
   /** 改动列表行点击 → 预览栏加载该文件的 Unified Diff。 */
   private async _onChangeActivated(e: CustomEvent<{ path: string }>) {
-    const path = e.detail.path;
-    this._diffPath = path;
-    this._diffResp = null;
-    this._diffError = null;
     if (this._isMobile) actions.setMobilePane("detail");
-    try {
-      this._diffResp = await gitApi.diff(path);
-    } catch (err: any) {
-      this._diffError = err?.message || "diff 加载失败";
-    }
+    await this._modes.openDiff(e.detail.path);
   }
 
   /** 祖先前缀链："a/b/c" → ["", "a", "a/b", "a/b/c"]。 */
@@ -876,6 +795,14 @@ export class FilesView extends LitElement {
     // 列分隔线 .col-resize z-index: var(--cortex-z-base)）会穿透压在对话框之上
     const dlg = this.shadowRoot?.querySelector("dialog");
     if (dlg && !dlg.open) dlg.showModal();
+    // 登记模式列表组件句柄（AP-3：controller 经公共 refresh() 调子组件，
+    // 消 `as any` 直捣子组件内部）
+    this._modes.registerChangesList(
+      this.shadowRoot?.querySelector<GitChangesList>("git-changes-list") ?? null,
+    );
+    this._modes.registerDeepReadList(
+      this.shadowRoot?.querySelector<DeepReadList>("deep-read-list") ?? null,
+    );
   }
 
   private _showToast(msg: string) {
@@ -914,11 +841,11 @@ export class FilesView extends LitElement {
       return;
     }
     if (name === "git-changes") {
-      this._toggleChangesMode();
+      this._modes.toggleChangesMode();
       return;
     }
     if (name === "deep-read") {
-      this._toggleDeepReadMode();
+      this._modes.toggleDeepReadMode();
       return;
     }
     if (name === "upload") {
@@ -1428,7 +1355,7 @@ export class FilesView extends LitElement {
 
   /** 改动模式预览栏：极简 header（Q14）+ diff-viewer / 二进制占位卡片（Q8）。 */
   private _renderDiffPane(mobile: boolean) {
-    const name = this._diffPath ? this._diffPath.split("/").pop() ?? this._diffPath : "";
+    const name = this._modes.diffPath ? this._modes.diffPath.split("/").pop() ?? this._modes.diffPath : "";
     const header = html`
       <div class="diff-header">
         ${mobile
@@ -1439,8 +1366,8 @@ export class FilesView extends LitElement {
               @click=${() => this._goBack()}
             ><doclens-icon name="arrow-left"></doclens-icon></button>`
           : null}
-        <span class="diff-filename" title=${this._diffPath}>${name}</span>
-        ${this._diffPath && this._diffResp?.kind !== "deleted"
+        <span class="diff-filename" title=${this._modes.diffPath}>${name}</span>
+        ${this._modes.diffPath && this._modes.diffResp?.kind !== "deleted"
           ? html`<button
               class="preview-btn"
               type="button"
@@ -1451,19 +1378,19 @@ export class FilesView extends LitElement {
       </div>
     `;
     let body: unknown;
-    if (!this._diffPath) {
+    if (!this._modes.diffPath) {
       body = html`<div class="preview-placeholder">点击改动列表中的文件查看差异</div>`;
-    } else if (this._diffError) {
-      body = html`<div class="preview-placeholder">${this._diffError}</div>`;
-    } else if (!this._diffResp) {
+    } else if (this._modes.diffError) {
+      body = html`<div class="preview-placeholder">${this._modes.diffError}</div>`;
+    } else if (!this._modes.diffResp) {
       body = html`<div class="preview-placeholder">加载差异…</div>`;
-    } else if (this._diffResp.is_binary) {
-      const info = this._diffResp.binary_info;
+    } else if (this._modes.diffResp.is_binary) {
+      const info = this._modes.diffResp.binary_info;
       const fmt = (n: number | null) => (n === null ? "—" : `${n} B`);
       body = html`
         <div class="binary-card">
           <doclens-icon name="alert-triangle"></doclens-icon>
-          <div class="binary-title">二进制文件${this._diffResp.kind === "deleted" ? "已删除" : "已修改"}，无行级差异</div>
+          <div class="binary-title">二进制文件${this._modes.diffResp.kind === "deleted" ? "已删除" : "已修改"}，无行级差异</div>
           <div class="binary-meta">
             <div><span>旧版本</span><code>${info?.old_sha ?? "—"}</code><span>${fmt(info?.old_size ?? null)}</span></div>
             <div><span>新版本</span><code>${info?.new_sha ?? "—"}</code><span>${fmt(info?.new_size ?? 0)}</span></div>
@@ -1471,19 +1398,19 @@ export class FilesView extends LitElement {
         </div>
       `;
     } else {
-      body = html`<diff-viewer .diff=${this._diffResp.diff}></diff-viewer>`;
+      body = html`<diff-viewer .diff=${this._modes.diffResp.diff}></diff-viewer>`;
     }
     return html`${header}${body}`;
   }
 
   /** diff header「预览」按钮：退出改动模式并常规预览该文件（Q14 次级入口）。 */
   private async _openNormalPreview() {
-    if (!this._diffPath) return;
-    const path = this._diffPath;
-    this._changesMode = false;
-    this._diffPath = "";
-    this._diffResp = null;
-    this._diffError = null;
+    if (!this._modes.diffPath) return;
+    const path = this._modes.diffPath;
+    this._modes.changesMode = false;
+    this._modes.diffPath = "";
+    this._modes.diffResp = null;
+    this._modes.diffError = null;
     await this._previewPathWithDirtyCheck(path);
   }
 
@@ -1687,25 +1614,25 @@ export class FilesView extends LitElement {
               @activated=${this._onFilenameResultActivated}
               @clear=${this._onFilenameClear}
             ></file-search-results>`
-          : this._deepReadMode
+          : this._modes.deepReadMode
             ? html`<deep-read-list
-                @activated=${this._onBookActivated}
-                @delete=${(e: CustomEvent<{ book: BookSkillItem }>) => { this._deleteBook = e.detail.book; }}
-                @exit=${() => this._toggleDeepReadMode()}
+                @activated=${(e: CustomEvent<{ book: BookSkillItem }>) => this._modes.emitBookActivated(e.detail.book)}
+                @delete=${(e: CustomEvent<{ book: BookSkillItem }>) => { this._modes.deleteBook = e.detail.book; }}
+                @exit=${() => this._modes.toggleDeepReadMode()}
               ></deep-read-list>`
-            : this._changesMode
+            : this._modes.changesMode
             ? html`<git-changes-list
-                .activePath=${this._diffPath}
+                .activePath=${this._modes.diffPath}
                 @activated=${this._onChangeActivated}
-                @exit=${() => this._toggleChangesMode()}
+                @exit=${() => this._modes.toggleChangesMode()}
               ></git-changes-list>`
             : html`<file-list
                 .activePath=${this._previewPath}
                 .uploading=${this._uploading}
-                .gitChangesAvailable=${this._isGitRoot === true}
-                .changesMode=${this._changesMode}
-                .deepReadAvailable=${this._hasBooks === true}
-                .deepReadMode=${this._deepReadMode}
+                .gitChangesAvailable=${this._modes.isGitRoot === true}
+                .changesMode=${this._modes.changesMode}
+                .deepReadAvailable=${this._modes.hasBooks === true}
+                .deepReadMode=${this._modes.deepReadMode}
                 .homeDir=${this._homeDir}
                 @action=${this._onAction}
                 @activated=${this._onFileListActivated}
@@ -1719,7 +1646,7 @@ export class FilesView extends LitElement {
           aria-label="调整预览栏宽度"
           @mousedown=${this._onPreviewSplitterMouseDown}
         ></div>
-        <div class="preview-col">${this._changesMode ? this._renderDiffPane(false) : this._renderPreviewPane({ noHeader: false })}</div>
+        <div class="preview-col">${this._modes.changesMode ? this._renderDiffPane(false) : this._renderPreviewPane({ noHeader: false })}</div>
       </div>
     `;
   }
@@ -1743,25 +1670,25 @@ export class FilesView extends LitElement {
                     @activated=${this._onFilenameResultActivated}
                     @clear=${this._onFilenameClear}
                   ></file-search-results>`
-                  : this._deepReadMode
+                  : this._modes.deepReadMode
                   ? html`<deep-read-list
-                      @activated=${this._onBookActivated}
-                      @delete=${(e: CustomEvent<{ book: BookSkillItem }>) => { this._deleteBook = e.detail.book; }}
-                      @exit=${() => this._toggleDeepReadMode()}
+                      @activated=${(e: CustomEvent<{ book: BookSkillItem }>) => this._modes.emitBookActivated(e.detail.book)}
+                      @delete=${(e: CustomEvent<{ book: BookSkillItem }>) => { this._modes.deleteBook = e.detail.book; }}
+                      @exit=${() => this._modes.toggleDeepReadMode()}
                     ></deep-read-list>`
-                  : this._changesMode
+                  : this._modes.changesMode
                   ? html`<git-changes-list
-                      .activePath=${this._diffPath}
+                      .activePath=${this._modes.diffPath}
                       @activated=${this._onChangeActivated}
-                      @exit=${() => this._toggleChangesMode()}
+                      @exit=${() => this._modes.toggleChangesMode()}
                     ></git-changes-list>`
                   : html`<file-list
                       .activePath=${this._previewPath}
                       .uploading=${this._uploading}
-                      .gitChangesAvailable=${this._isGitRoot === true}
-                      .changesMode=${this._changesMode}
-                      .deepReadAvailable=${this._hasBooks === true}
-                      .deepReadMode=${this._deepReadMode}
+                      .gitChangesAvailable=${this._modes.isGitRoot === true}
+                      .changesMode=${this._modes.changesMode}
+                      .deepReadAvailable=${this._modes.hasBooks === true}
+                      .deepReadMode=${this._modes.deepReadMode}
                       .homeDir=${this._homeDir}
                       ?mobile=${true}
                       @action=${this._onAction}
@@ -1773,7 +1700,7 @@ export class FilesView extends LitElement {
             `
           : ""}
         ${pane === "detail"
-          ? html`<div class="mobile-preview" data-ptr-off>${this._changesMode ? this._renderDiffPane(true) : this._renderPreviewPane({ mobile: true })}</div>`
+          ? html`<div class="mobile-preview" data-ptr-off>${this._modes.changesMode ? this._renderDiffPane(true) : this._renderPreviewPane({ mobile: true })}</div>`
           : ""}
       </div>
     `;
@@ -1852,15 +1779,15 @@ export class FilesView extends LitElement {
         ></skill-run-dialog>
       </dialog>`;
     }
-    if (this._deleteBook) {
+    if (this._modes.deleteBook) {
       // 深读技能删除确认（ADR-0041：真删，源书文件不动，可随时重新生成）
-      const b = this._deleteBook;
-      return html`<dialog @cancel=${() => { this._deleteBook = null; }}>
+      const b = this._modes.deleteBook;
+      return html`<dialog @cancel=${() => { this._modes.deleteBook = null; }}>
         <div class="confirm-dialog">
           <h3>删除深读技能</h3>
           <p>将删除「${b.title}」的深读技能（技能目录真删，不可恢复）。源文件不受影响，可随时用 /deep-read 重新生成。</p>
           <div class="confirm-actions">
-            <button class="secondary" @click=${() => { this._deleteBook = null; }}>取消</button>
+            <button class="secondary" @click=${() => { this._modes.deleteBook = null; }}>取消</button>
             <button class="danger" @click=${() => void this._onBookDeleteConfirm()}>删除</button>
           </div>
         </div>

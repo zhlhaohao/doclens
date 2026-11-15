@@ -72,8 +72,9 @@ describe("<focus-header> actions prop", () => {
     // 回归：detail-overlay 中 preview-pane（position:relative）DOM 序在
     // focus-header 之后；backdrop-filter 已使 :host 成为层叠上下文，
     // 缺 z-index 时菜单会被 preview-pane 整体盖住。
+    // AP-4：裸数字已换成分层变量（--cortex-z-raised = 10）。
     const cssText = FocusHeader.styles.cssText;
-    expect(cssText).toContain("z-index: 10");
+    expect(cssText).toContain("z-index: var(--cortex-z-raised)");
   });
 });
 
