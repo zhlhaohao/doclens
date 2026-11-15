@@ -17,12 +17,11 @@
 - **修复方案**：延续既有 controller 拆分方向（对照 chat-skills-controller 模式）：① 按职责块抽 FontScaleController / FindHighlightController / DownloadController 等；② 子组件句柄登记制（对照 files-modes-controller.ts:120 「消 `as any` 穿透」先例）取代散布 querySelector；③ 单视图专属 props 上提为视图侧 wrapper 或模式判定
 - **回归验证**：`npm run test -- tests/preview-pane.spec.ts`（同名）+ search-highlight-units / md-viewer / file-card spec + `npm run build`
 
-### AP-2 预览内容/令牌/脏标 三态多真相源手工同步 [P2] [status: pending]
+### AP-2 预览内容/令牌/脏标 三态多真相源手工同步 [P2] [status: closed-wontfix(部分误判)]
 - **形态**：Duplicated State Source（受控 prop + 内部 @state 双真相源）
-- **证据**：`preview-pane.ts:767-778`（`content` prop 与 `_content` 编辑副本靠 willUpdate 手工对账）；`preview-pane.ts:1411-1415`（组件自写受控 prop `this.tokens = null` 打断陈旧对齐）；`preview-controller.ts:238-259`（saved 回调清 tokens 再重拉回填）。注释自证历史闪回 bug："保存后一秒变回旧内容的根因"（preview-pane.ts:1411-1414）、"content 回填防宿主旧值回跳"（preview-controller.ts:243-244）。`dirty` 另有三层镜像（组件事件→controller 镜像→视图消费），丢弃路径靠命令式 `getPane().discard()` 复位，一处漏调即失步
-- **风险**：每次新增「保存后刷新/丢弃/切换」路径都要重新推演三处交接时序——闪回类 bug 已发生过，时序约定是隐性契约，无类型护栏
-- **修复方案**：以 controller 的 `PreviewState` 为单一真相源：`_content` 编辑副本上收到 controller（view-model 层），组件只渲染传入值；`tokens` 自清改为 saved 生命周期事件由 controller 统一驱动；`dirty` 改由 `_content !== content` 派生而非三处镜像
-- **回归验证**：preview-pane spec + `tests/test_web_preview_formats.py`（后端契约侧）+ `npm run build`
+- **证据**：`preview-pane.ts:767-778`（`content` prop 与 `_content` 编辑副本靠 willUpdate 手工对账）；`preview-pane.ts:1411-1415`（组件自写受控 prop `this.tokens = null` 打断陈旧对齐）；`preview-controller.ts:238-259`（saved 回调清 tokens 再重拉回填）。
+- **执行核实（2026-11-15）**：三项子发现两实一误——① `_content` 双源坐实，但本地副本是防 Lit 更新顺序（pane 先渲染、宿主 prop 后到）的必要防御，正解是收窄为保存窗口乐观覆盖而非删除；② tokens 双写坐实（controller.onSaved:251 已置 null，pane:1415 是防同一时序窗口的重复动作），可统一；③ **dirty 派生不可行**——编辑态活在 cm-editor 内部 CM6 doc，`_content` 不跟按键，派生需每键上抛 content（劣于现状）；现状「cm-editor 属主→事件上抛→controller 镜像」实为标准单向流
+- **处置**：用户裁定跳过（选 C）——核心架构比台账判断健康，剩余两处双写属低收益清理，AP-1 拆分触碰同批代码时顺带评估，不单独立项
 
 ### AP-3 preview-controller open/openHit 无请求序号守卫 [P2] [status: done(b1c1482c)]
 - **形态**：Race Hazard（守卫过窄）
@@ -99,4 +98,5 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-11-15 | 第一批 | AP-3 | done(b1c1482c) |
+| 2026-11-15 | 第一批 | AP-2 | closed-wontfix（部分误判：dirty 派生不可行，用户裁定跳过） |
 |---|---|---|---|
