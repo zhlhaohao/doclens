@@ -1,3 +1,4 @@
+import { ToastFlashMixin } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
@@ -33,7 +34,7 @@ interface InstallDialogState {
  * ≥44px，安装弹窗全屏。
  */
 @customElement("skills-section")
-export class SkillsSection extends LitElement {
+export class SkillsSection extends ToastFlashMixin(LitElement) {
   static styles = css`
     :host {
       display: block;
@@ -371,12 +372,10 @@ export class SkillsSection extends LitElement {
   @state() private _loading = true;
   @state() private _busy = false;
   @state() private _error: string | null = null;
-  @state() private _toast: string | null = null;
   @state() private _expandedName: string | null = null;
   @state() private _confirmDeleteName: string | null = null;
   @state() private _install: InstallDialogState | null = null;
 
-  private _toastTimer?: number;
 
   connectedCallback() {
     super.connectedCallback();
@@ -384,7 +383,6 @@ export class SkillsSection extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
     super.disconnectedCallback();
   }
 
@@ -397,12 +395,6 @@ export class SkillsSection extends LitElement {
     } finally {
       this._loading = false;
     }
-  }
-
-  private _setFlash(msg: string) {
-    this._toast = msg;
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
-    this._toastTimer = window.setTimeout(() => { this._toast = null; }, 3000);
   }
 
   /** 就地更新列表中的单条（不可变替换）。 */

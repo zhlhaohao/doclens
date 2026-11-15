@@ -1,3 +1,4 @@
+import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
@@ -95,7 +96,7 @@ function formatLines(obj: Record<string, string>): string {
  * 连接由后端异步 reconcile 建立，状态 5s 轮询同步。
  */
 @customElement("mcp-servers-section")
-export class McpServersSection extends LitElement {
+export class McpServersSection extends ToastFlashMixin(LitElement) {
   static styles = css`
     :host {
       display: block;
@@ -365,13 +366,11 @@ export class McpServersSection extends LitElement {
   @state() private _editing: EditingState | null = null;
   @state() private _busy = false;
   @state() private _error: string | null = null;
-  @state() private _toast: string | null = null;
   @state() private _confirmDeleteId: string | null = null;
   @state() private _formError: string | null = null;
   @state() private _expandedToolsId: string | null = null;
   @state() private _toolsCache: Record<string, McpToolInfo[]> = {};
 
-  private _toastTimer?: number;
   private _pollTimer?: number;
 
   connectedCallback() {
@@ -382,7 +381,6 @@ export class McpServersSection extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
     if (this._pollTimer !== undefined) window.clearInterval(this._pollTimer);
     super.disconnectedCallback();
   }
@@ -412,18 +410,8 @@ export class McpServersSection extends LitElement {
     }
   }
 
-  private _setFlash(msg: string) {
-    this._toast = msg;
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
-    this._toastTimer = window.setTimeout(() => { this._toast = null; }, 3000);
-  }
-
   private _errMsg(e: unknown): string {
-    if (e instanceof McpApiError) {
-      const body = e.body as { detail?: string } | null;
-      return body?.detail ?? `HTTP ${e.status}`;
-    }
-    return (e as Error).message;
+    return apiErrMsg(e, McpApiError);
   }
 
   private _openNew() {

@@ -570,6 +570,11 @@ export class ChatMessageEl extends LitElement {
     });
   }
 
+  /** 复制按钮（user/assistant 两分支共用模板，AP-40 归一）。 */
+  private _renderCopyBtn() {
+    return html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`;
+  }
+
   render() {
     if (!this.message) return null;
     const steps = this.message.tool_steps;
@@ -590,7 +595,7 @@ export class ChatMessageEl extends LitElement {
       // 对话图片（ADR-0034）：缩略图行渲染在正文之上；点击全屏复用 dialog 原生弹层
       const imgs = this.message.images ?? [];
       return html`<div class="bubble">${imgs.length > 0 ? this._renderImages(imgs) : null}${this.renderBubble(this.message.content)}</div><div class="actions">${ts ? html`<span class="ts">${ts}</span>` : null}${canCopy
-        ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
+        ? this._renderCopyBtn()
         : null}<button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${hasAnchor
         ? html`<button class="export" type="button" aria-label="导出到此为止" title="导出到此为止（只导出这条及之前的对话）" @click=${this._emitExportUpto}><doclens-icon name="download"></doclens-icon></button>`
         : null}${hasAnchor
@@ -614,7 +619,7 @@ export class ChatMessageEl extends LitElement {
       </div>
       ${canCopy || tsAi
         ? html`<div class="actions">${tsAi ? html`<span class="ts">${tsAi}</span>` : null}${canCopy
-          ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
+          ? this._renderCopyBtn()
           : null}</div>`
         : null}
       ${this._renderPreviewDialog()}

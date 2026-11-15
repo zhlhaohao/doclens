@@ -18,6 +18,7 @@ import {
   type PresetProtocol,
   type QuotaResult,
 } from "../api/presets";
+import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
 
 /** 空表单初值（新建用）。 */
 function emptyForm(kind: PresetKind): FormState {
@@ -106,7 +107,7 @@ const PROTOCOL_OPTIONS: { value: PresetProtocol; label: string }[] = [
  * 拉取 .env，从而刷新「当前激活预设」高亮与下方字段散填区。
  */
 @customElement("model-presets-section")
-export class ModelPresetsSection extends LitElement {
+export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
   static styles = css`
     :host {
       display: block;
@@ -368,7 +369,6 @@ export class ModelPresetsSection extends LitElement {
   @state() private _editing: EditingState | null = null;
   @state() private _busy = false;
   @state() private _error: string | null = null;
-  @state() private _toast: string | null = null;
   @state() private _confirmDeleteId: string | null = null;
   @state() private _formError: string | null = null;
   @state() private _probing = false;
@@ -381,8 +381,6 @@ export class ModelPresetsSection extends LitElement {
     string,
     { status: "loading" | "ok" | "error"; data?: QuotaResult }
   > = {};
-
-  private _toastTimer?: number;
 
   /** keep-alive view 下 connectedCallback 仅首次触发（app.ts 挂载后 [hidden]
    *  切换）；可见时重查额度，避免显示陈旧数据。同 password-section 模式。 */
@@ -398,7 +396,6 @@ export class ModelPresetsSection extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
     this._observer?.disconnect();
     super.disconnectedCallback();
   }
@@ -443,18 +440,8 @@ export class ModelPresetsSection extends LitElement {
     return (p.kind === "llm" ? this.activeLlm : this.activeVision) === p.name;
   }
 
-  private _setFlash(msg: string) {
-    this._toast = msg;
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
-    this._toastTimer = window.setTimeout(() => { this._toast = null; }, 3000);
-  }
-
   private _errMsg(e: unknown): string {
-    if (e instanceof PresetsApiError) {
-      const body = e.body as { detail?: string } | null;
-      return body?.detail ?? `HTTP ${e.status}`;
-    }
-    return (e as Error).message;
+    return apiErrMsg(e, PresetsApiError);
   }
 
   private _openNew(kind: PresetKind) {

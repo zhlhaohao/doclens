@@ -1,3 +1,4 @@
+import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
@@ -69,7 +70,7 @@ const FIELDS: { key: keyof Omit<FormState, "name">; label: string; hint: string;
  * 物化写 global .env），kind=search。切换即时热生效（无副作用）。
  */
 @customElement("search-presets-section")
-export class SearchPresetsSection extends LitElement {
+export class SearchPresetsSection extends ToastFlashMixin(LitElement) {
   static styles = css`
     :host {
       display: block;
@@ -253,11 +254,9 @@ export class SearchPresetsSection extends LitElement {
   @state() private _editing: EditingState | null = null;
   @state() private _busy = false;
   @state() private _error: string | null = null;
-  @state() private _toast: string | null = null;
   @state() private _confirmDeleteId: string | null = null;
   @state() private _formError: string | null = null;
 
-  private _toastTimer?: number;
 
   connectedCallback() {
     super.connectedCallback();
@@ -265,7 +264,6 @@ export class SearchPresetsSection extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
     super.disconnectedCallback();
   }
 
@@ -284,18 +282,8 @@ export class SearchPresetsSection extends LitElement {
     return this.activeSearch === p.name;
   }
 
-  private _setFlash(msg: string) {
-    this._toast = msg;
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
-    this._toastTimer = window.setTimeout(() => { this._toast = null; }, 3000);
-  }
-
   private _errMsg(e: unknown): string {
-    if (e instanceof PresetsApiError) {
-      const body = e.body as { detail?: string } | null;
-      return body?.detail ?? `HTTP ${e.status}`;
-    }
-    return (e as Error).message;
+    return apiErrMsg(e, PresetsApiError);
   }
 
   private _openNew() {

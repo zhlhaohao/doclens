@@ -643,17 +643,22 @@ export class FileList extends LitElement {
     return selEntry?.is_dir !== true;
   }
 
-  private _renderMobileHeader() {
-    const { currentDir, treeCache, selectedPaths } = store.getState().files;
-    // ADR-0049：与桌面 render() 同口径的外部只读判定（此处独立计算——
-    // mobile header 是独立渲染路径）
+  /** mobile header 与桌面 render 共用的七项派生态（AP-33：原先两路径各自
+   *  重复计算 readOnly/canRename/canDownload/canAct/canGoUp/breadcrumb/
+   *  showSetWorkdir，注释自认「独立计算」——口径靠手工保持一致，已现漂移风险）。 */
+  private get _toolbarState(): {
+    readOnly: boolean;
+    canRename: boolean;
+    canAct: boolean;
+    canGoUp: boolean;
+    breadcrumb: string;
+    showSetWorkdir: boolean;
+  } {
+    const { currentDir, selectedPaths } = store.getState().files;
+    // ADR-0049 外部浏览态：写操作全禁用（只读浏览），下载/拷贝路径照常
     const readOnly = isOutsideWorkdir(currentDir) || isDrivesLayer(currentDir);
-    const canRename = selectedPaths.length === 1 && !readOnly;
-    const canDownload = this._canDownloadSelected(
-      treeCache[currentDir] || [], selectedPaths,
-    );
-    const canAct = selectedPaths.length >= 1 && !readOnly;
-    // 上溯可用性（ADR-0049）：workdir 根也可上溯到 workdir 父目录
+    // 上溯（ADR-0049）：workdir 根也可上溯（→workdir 父目录）；仅当
+    // workdir 未知/是盘符根本身时置灰。外部链/此电脑层照常逐级上溯。
     const canGoUp = currentDir !== ""
       ? true
       : parentOfBrowseRoot(store.getState().status?.workdir) !== null;
@@ -661,8 +666,24 @@ export class FileList extends LitElement {
       : currentDir === "" ? "/"
       : isOutsideWorkdir(currentDir) ? `${currentDir}/`
       : `/${currentDir}/`;
-    // 「设为工作目录」：真实目录且非 workdir 本身（ADR-0049）
+    // 「设为工作目录」：真实目录且非 workdir 本身时显示（ADR-0049）
     const showSetWorkdir = currentDir !== "" && !isDrivesLayer(currentDir);
+    return {
+      readOnly,
+      canRename: selectedPaths.length === 1 && !readOnly,
+      canAct: selectedPaths.length >= 1 && !readOnly,
+      canGoUp,
+      breadcrumb,
+      showSetWorkdir,
+    };
+  }
+
+  private _renderMobileHeader() {
+    const { currentDir, treeCache, selectedPaths } = store.getState().files;
+    const { readOnly, canRename, canAct, canGoUp, breadcrumb, showSetWorkdir } = this._toolbarState;
+    const canDownload = this._canDownloadSelected(
+      treeCache[currentDir] || [], selectedPaths,
+    );
 
     return html`
       <div class="mobile-header">
@@ -853,28 +874,15 @@ export class FileList extends LitElement {
     const rawEntries = treeCache[currentDir] || [];
     const entries = sortFileEntries(rawEntries, sortKey, sortDir);
     const sel = new Set(selectedPaths);
-    // ADR-0049 外部浏览态：写操作全禁用（只读浏览），下载/拷贝路径照常
-    const outside = isOutsideWorkdir(currentDir);
-    const readOnly = outside || isDrivesLayer(currentDir);
-    const canRename = selectedPaths.length === 1 && !readOnly;
+    // 七项派生：与 mobile header 同口径（AP-33 归一，注释/ADR 见 _toolbarState）
+    const { readOnly, canRename, canAct, canGoUp, breadcrumb, showSetWorkdir } = this._toolbarState;
     const canDownload = this._canDownloadSelected(entries, selectedPaths);
-    const canAct = selectedPaths.length >= 1 && !readOnly;
-    // 上溯（ADR-0049）：workdir 根也可上溯（→workdir 父目录）；仅当
-    // workdir 未知/是盘符根本身时置灰。外部链/此电脑层照常逐级上溯。
-    const canGoUp = currentDir !== ""
-      ? true
-      : parentOfBrowseRoot(store.getState().status?.workdir) !== null;
-    const breadcrumb = currentDir === DRIVES_SENTINEL ? "此电脑"
-      : currentDir === "" ? "/"
-      : isOutsideWorkdir(currentDir) ? `${currentDir}/`
-      : `/${currentDir}/`;
     const allSelected = entries.length > 0 && entries.every(e => sel.has(e.path));
     // 加载中判定：请求进行中且当前目录尚未进 cache（首次进入/切换目录）——
     // 与「已加载但为空」区分，避免加载期间闪现误导性的「目录为空」
     const loading = listing && !(currentDir in treeCache);
     const emptyBlock = html`<div class="empty ${loading ? "loading" : ""}">${loading ? "加载中…" : "目录为空"}</div>`;
-    // 「设为工作目录」：真实目录且非 workdir 本身时显示（ADR-0049）
-    const showSetWorkdir = currentDir !== "" && !isDrivesLayer(currentDir);
+    const outside = isOutsideWorkdir(currentDir);
 
     if (this.mobile) {
       return html`

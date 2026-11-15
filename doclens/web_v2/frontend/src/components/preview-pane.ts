@@ -940,36 +940,65 @@ export class PreviewPane extends LitElement {
     this._showMobileMenu = !this._showMobileMenu;
   };
 
-  /** 字号 stepper（mobile-menu 内一行）：− 当前% +，连点不关菜单，边界 disabled。 */
-  private _renderFontScaleStepper() {
-    const atMin = this._fontScalePct <= FONT_SCALE_MIN_PCT;
-    const atMax = this._fontScalePct >= FONT_SCALE_MAX_PCT;
+  /** −/值/+ stepper（mobile-menu 内一行，AP-5 参数化合一：六份渲染方法
+   *  收敛为此一份——值文案/边界判定/三回调注入；PDF 缩放与字号共用）。
+   *  连点不关菜单，边界 disabled；中值按钮点击回默认（100% 或适宽）。 */
+  private _renderStepper(opts: {
+    ariaLabel: string;
+    rowLabel: string;
+    valueText: string;
+    atMin: boolean;
+    atMax: boolean;
+    minusLabel: string;
+    plusLabel: string;
+    resetTitle: string;
+    onMinus: () => void;
+    onReset: () => void;
+    onPlus: () => void;
+  }) {
     return html`
-      <div class="font-scale-row" role="group" aria-label="正文字号">
-        <span class="font-scale-label">字号</span>
+      <div class="font-scale-row" role="group" aria-label=${opts.ariaLabel}>
+        <span class="font-scale-label">${opts.rowLabel}</span>
         <button
           class="font-scale-btn"
           type="button"
-          aria-label="缩小字号"
-          ?disabled=${atMin}
-          @click=${() => this._bumpFontScale(-FONT_SCALE_STEP_PCT)}
+          aria-label=${opts.minusLabel}
+          ?disabled=${opts.atMin}
+          @click=${opts.onMinus}
         ><doclens-icon name="minus"></doclens-icon></button>
         <button
           class="font-scale-value"
           type="button"
           style="background:transparent;border:none;cursor:pointer;font-family:inherit;color:var(--cortex-text-muted)"
-          title="点击回到 100%"
-          @click=${() => this._resetFontScale()}
-        >${this._fontScalePct}%</button>
+          title=${opts.resetTitle}
+          @click=${opts.onReset}
+        >${opts.valueText}</button>
         <button
           class="font-scale-btn"
           type="button"
-          aria-label="放大字号"
-          ?disabled=${atMax}
-          @click=${() => this._bumpFontScale(FONT_SCALE_STEP_PCT)}
+          aria-label=${opts.plusLabel}
+          ?disabled=${opts.atMax}
+          @click=${opts.onPlus}
         ><doclens-icon name="plus"></doclens-icon></button>
       </div>
     `;
+  }
+
+  /** 字号 stepper（mobile-menu；正文 md 字号）。 */
+  private _renderFontScaleStepper() {
+    return this._renderStepper({
+      ariaLabel: "正文字号",
+      rowLabel: "字号",
+      valueText: `${this._fontScalePct}%`,
+      atMin: this._fontScalePct <= FONT_SCALE_MIN_PCT,
+      atMax: this._fontScalePct >= FONT_SCALE_MAX_PCT,
+      minusLabel: "缩小字号",
+      plusLabel: "放大字号",
+      resetTitle: "点击回到 100%",
+      onMinus: () => this._bumpFontScale(-FONT_SCALE_STEP_PCT),
+      onReset: () => this._resetFontScale(),
+      onPlus: () => this._bumpFontScale(FONT_SCALE_STEP_PCT),
+    });
   }
 
   private _bumpFontScale(delta: number) {
@@ -1063,131 +1092,113 @@ export class PreviewPane extends LitElement {
     writeCodeFontScalePct(CODE_FONT_SCALE_DEFAULT_PCT);
   }
 
-  /** 桌面 header 的 md 正文字号组（− 比例 +，复用 PDF zoom-group 联排样式）。
-   *  桌面补齐——原先字号 stepper 只在移动端 more 菜单（_renderFontScaleStepper），
-   *  同一 _fontScalePct 状态两入口共享；点击百分比回 100%。 */
+  /** 桌面 header 的 −/比例/+ 联排组（AP-5 参数化合一：zoom-group 样式，
+   *  与 mobile stepper 同参注入；md 字号/行号字号/PDF 缩放共用）。 */
+  private _renderZoomGroup(opts: {
+    ariaLabel: string;
+    valueText: string;
+    atMin: boolean;
+    atMax: boolean;
+    minusLabel: string;
+    plusLabel: string;
+    resetTitle: string;
+    onMinus: () => void;
+    onReset: () => void;
+    onPlus: () => void;
+  }) {
+    return html`
+      <div class="zoom-group" role="group" aria-label=${opts.ariaLabel}>
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label=${opts.minusLabel}
+          ?disabled=${opts.atMin}
+          @click=${opts.onMinus}
+        ><doclens-icon name="minus"></doclens-icon></button>
+        <button
+          class="zoom-label"
+          type="button"
+          title=${opts.resetTitle}
+          @click=${opts.onReset}
+        >${opts.valueText}</button>
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label=${opts.plusLabel}
+          ?disabled=${opts.atMax}
+          @click=${opts.onPlus}
+        ><doclens-icon name="plus"></doclens-icon></button>
+      </div>
+    `;
+  }
+
+  /** 桌面 header 的 md 正文字号组（AP-5 合一）。
+   *  桌面补齐——原先字号 stepper 只在移动端 more 菜单，同一 _fontScalePct
+   *  状态两入口共享；点击百分比回 100%。 */
   private _renderMdFontScaleGroup() {
-    const atMin = this._fontScalePct <= FONT_SCALE_MIN_PCT;
-    const atMax = this._fontScalePct >= FONT_SCALE_MAX_PCT;
-    return html`
-      <div class="zoom-group" role="group" aria-label="字号">
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="缩小字号"
-          ?disabled=${atMin}
-          @click=${() => this._bumpFontScale(-FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="zoom-label"
-          type="button"
-          title="点击回到 100%"
-          @click=${() => this._resetFontScale()}
-        >${this._fontScalePct}%</button>
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="放大字号"
-          ?disabled=${atMax}
-          @click=${() => this._bumpFontScale(FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    return this._renderZoomGroup({
+      ariaLabel: "字号",
+      valueText: `${this._fontScalePct}%`,
+      atMin: this._fontScalePct <= FONT_SCALE_MIN_PCT,
+      atMax: this._fontScalePct >= FONT_SCALE_MAX_PCT,
+      minusLabel: "缩小字号",
+      plusLabel: "放大字号",
+      resetTitle: "点击回到 100%",
+      onMinus: () => this._bumpFontScale(-FONT_SCALE_STEP_PCT),
+      onReset: () => this._resetFontScale(),
+      onPlus: () => this._bumpFontScale(FONT_SCALE_STEP_PCT),
+    });
   }
 
-  /** 行号视图字号 stepper（mobile-menu 内一行，复用 font-scale-row 样式）。 */
+  /** 行号视图字号 stepper（mobile-menu；AP-5 合一）。 */
   private _renderCodeFontScaleStepper() {
-    const atMin = this._codeFontScalePct <= CODE_FONT_SCALE_MIN_PCT;
-    const atMax = this._codeFontScalePct >= CODE_FONT_SCALE_MAX_PCT;
-    return html`
-      <div class="font-scale-row" role="group" aria-label="正文字号">
-        <span class="font-scale-label">字号</span>
-        <button
-          class="font-scale-btn"
-          type="button"
-          aria-label="缩小字号"
-          ?disabled=${atMin}
-          @click=${() => this._bumpCodeFontScale(-CODE_FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="font-scale-value"
-          type="button"
-          style="background:transparent;border:none;cursor:pointer;font-family:inherit;color:var(--cortex-text-muted)"
-          title="点击回到 100%"
-          @click=${() => this._resetCodeFontScale()}
-        >${this._codeFontScalePct}%</button>
-        <button
-          class="font-scale-btn"
-          type="button"
-          aria-label="放大字号"
-          ?disabled=${atMax}
-          @click=${() => this._bumpCodeFontScale(CODE_FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    return this._renderStepper({
+      ariaLabel: "正文字号",
+      rowLabel: "字号",
+      valueText: `${this._codeFontScalePct}%`,
+      atMin: this._codeFontScalePct <= CODE_FONT_SCALE_MIN_PCT,
+      atMax: this._codeFontScalePct >= CODE_FONT_SCALE_MAX_PCT,
+      minusLabel: "缩小字号",
+      plusLabel: "放大字号",
+      resetTitle: "点击回到 100%",
+      onMinus: () => this._bumpCodeFontScale(-CODE_FONT_SCALE_STEP_PCT),
+      onReset: () => this._resetCodeFontScale(),
+      onPlus: () => this._bumpCodeFontScale(CODE_FONT_SCALE_STEP_PCT),
+    });
   }
 
-  /** 桌面 header 的行号视图字号组（− 比例 +，复用 PDF zoom-group 联排样式；
-   *  点击百分比回 100%）。 */
+  /** 桌面 header 的行号视图字号组（AP-5 合一；点击百分比回 100%）。 */
   private _renderCodeFontScaleGroup() {
-    const atMin = this._codeFontScalePct <= CODE_FONT_SCALE_MIN_PCT;
-    const atMax = this._codeFontScalePct >= CODE_FONT_SCALE_MAX_PCT;
-    return html`
-      <div class="zoom-group" role="group" aria-label="字号">
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="缩小字号"
-          ?disabled=${atMin}
-          @click=${() => this._bumpCodeFontScale(-CODE_FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="zoom-label"
-          type="button"
-          title="点击回到 100%"
-          @click=${() => this._resetCodeFontScale()}
-        >${this._codeFontScalePct}%</button>
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="放大字号"
-          ?disabled=${atMax}
-          @click=${() => this._bumpCodeFontScale(CODE_FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    return this._renderZoomGroup({
+      ariaLabel: "字号",
+      valueText: `${this._codeFontScalePct}%`,
+      atMin: this._codeFontScalePct <= CODE_FONT_SCALE_MIN_PCT,
+      atMax: this._codeFontScalePct >= CODE_FONT_SCALE_MAX_PCT,
+      minusLabel: "缩小字号",
+      plusLabel: "放大字号",
+      resetTitle: "点击回到 100%",
+      onMinus: () => this._bumpCodeFontScale(-CODE_FONT_SCALE_STEP_PCT),
+      onReset: () => this._resetCodeFontScale(),
+      onPlus: () => this._bumpCodeFontScale(CODE_FONT_SCALE_STEP_PCT),
+    });
   }
 
-  /** PDF 缩放 stepper（mobile-menu 内一行，复用 font-scale-row 样式）：
-   *  − 适宽/百分比 +；点击中值回适宽。 */
+  /** PDF 缩放 stepper（mobile-menu；AP-5 合一）：− 适宽/百分比 +；点击中值回适宽。 */
   private _renderPdfZoomStepper() {
     const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-    return html`
-      <div class="font-scale-row" role="group" aria-label="缩放">
-        <span class="font-scale-label">缩放</span>
-        <button
-          class="font-scale-btn"
-          type="button"
-          aria-label="缩小"
-          ?disabled=${pdf?.atZoomMin()}
-          @click=${() => this._pdfZoom(-1)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="font-scale-value"
-          type="button"
-          style="background:transparent;border:none;cursor:pointer;font-family:inherit;color:var(--cortex-text-muted)"
-          title="点击回到适宽"
-          @click=${() => this._pdfZoom("fit")}
-        >${this._pdfZoomLabel}</button>
-        <button
-          class="font-scale-btn"
-          type="button"
-          aria-label="放大"
-          ?disabled=${pdf?.atZoomMax()}
-          @click=${() => this._pdfZoom(1)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    return this._renderStepper({
+      ariaLabel: "缩放",
+      rowLabel: "缩放",
+      valueText: this._pdfZoomLabel,
+      atMin: pdf?.atZoomMin() ?? false,
+      atMax: pdf?.atZoomMax() ?? false,
+      minusLabel: "缩小",
+      plusLabel: "放大",
+      resetTitle: "点击回到适宽",
+      onMinus: () => this._pdfZoom(-1),
+      onReset: () => this._pdfZoom("fit"),
+      onPlus: () => this._pdfZoom(1),
+    });
   }
 
   private _onDocClick = (e: MouseEvent) => {
@@ -1646,30 +1657,18 @@ export class PreviewPane extends LitElement {
   private _renderPdfZoomGroup() {
     if (this.language !== "pdf" || this._mode !== "preview") return null;
     const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-    return html`
-      <div class="zoom-group" role="group" aria-label="缩放">
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="缩小"
-          ?disabled=${pdf?.atZoomMin()}
-          @click=${() => this._pdfZoom(-1)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="zoom-label"
-          type="button"
-          title="点击回到适宽"
-          @click=${() => this._pdfZoom("fit")}
-        >${this._pdfZoomLabel}</button>
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="放大"
-          ?disabled=${pdf?.atZoomMax()}
-          @click=${() => this._pdfZoom(1)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    return this._renderZoomGroup({
+      ariaLabel: "缩放",
+      valueText: this._pdfZoomLabel,
+      atMin: pdf?.atZoomMin() ?? false,
+      atMax: pdf?.atZoomMax() ?? false,
+      minusLabel: "缩小",
+      plusLabel: "放大",
+      resetTitle: "点击回到适宽",
+      onMinus: () => this._pdfZoom(-1),
+      onReset: () => this._pdfZoom("fit"),
+      onPlus: () => this._pdfZoom(1),
+    });
   }
 
   /** pdf 文档就绪：滚动位置恢复（页号+页内偏移锚点；渲染管线就绪晚于

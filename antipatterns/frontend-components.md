@@ -39,7 +39,7 @@
 - **修复方案**：沿既有 P1-1 先例继续抽域：① 字号/缩放控件 → `zoom-stepper` 公共组件（吸收 AP-5）；② 书签域 → controller；③ 工具箱两段对话框 → 宿主视图级组件（files 页已有一份同交互）。不要求一次到位。
 - **回归验证**：`npm run test -- tests/preview-pane.spec.ts tests/md-viewer.spec.ts tests/file-card.spec.ts tests/search-highlight-units.spec.ts` + `npm run build`
 
-### AP-5 preview-pane 六个 stepper/group 渲染方法参数化可合一（内部 Copy-and-Paste） [P3] [status: pending]
+### AP-5 preview-pane 六个 stepper/group 渲染方法参数化可合一（内部 Copy-and-Paste） [P3] [status: done(批5c 提交待填)]
 - **形态**：Copy-and-Paste Programming（组件内）
 - **证据**：`_renderFontScaleStepper`(946-975) ≈ `_renderCodeFontScaleStepper`(1101-1130)：模板逐行相同，仅 state getter/bound 函数/常量组不同；`_renderMdFontScaleGroup`(1071-1098) ≈ `_renderCodeFontScaleGroup`(1134-1161) 同构；`_renderPdfZoomStepper`(1165-1193) 与 `_renderPdfZoomGroup`(1610-1636) 又是同一 −/值/+ 控件的 mobile/desktop 两套。同一「− 百分比 +」控件共 6 份实现（含 3 份逐字相同的内联 style 字符串，962/1117/1180）。
 - **风险**：改一处样式/交互漏五处；属 AP-4 的子症状。
@@ -152,7 +152,7 @@
 - **修复方案**：失败不写缓存（保留 error 态 + 重试入口），或缓存带 TTL。
 - **回归验证**：`npm run test -- tests/`（mcp section 同名 spec 如有）+ `npm run build`
 
-### AP-22 五个 section 设置页系统性样板复制（应抽公共层） [P2] [status: pending]
+### AP-22 五个 section 设置页系统性样板复制（应抽公共层） [P2] [status: done(批5c 提交待填)]
 - **形态**：Copy-and-Paste Programming（跨文件系统性）
 - **证据**（行号对照，四份逐字/近逐字）：
   - `_setFlash`/`_toast`/`_toastTimer`（3000ms 同硬编码）：model-presets-section.ts:446-450 ≡ mcp-servers-section.ts:415-419 ≡ skills-section.ts:402-406 ≡ search-presets-section.ts:313-317
@@ -237,7 +237,7 @@
 - **风险**：低——tokens.css 变量已约束色值，复制的是结构声明；改交互态要漏多处。记录为主，可随 AP-27 的 shared styles 一并收敛。
 - **修复方案**：并入 AP-27 共享样式层（圆钮/行 hover 习语）。
 
-### AP-33 file-list God Object（992 行，≥8 职责域）+ mobile/desktop 双渲染路径内部重复 [P2] [status: pending]
+### AP-33 file-list God Object（992 行，≥8 职责域）+ mobile/desktop 双渲染路径内部重复 [P2] [status: done(批5c 提交待填)]
 - **形态**：God Object + 组件内 Copy-and-Paste
 - **证据**：职责域：面包屑（29-96、545-601、910-940）/桌面工具栏 11 钮（97-166、941-961）/移动端 header+12 项菜单（167-255、646-796）/列宽拖拽+localStorage（322-351、427-514）/排序列头（360-385、812-846）/全选多选（529-543）/行渲染接线（897-907、977-985）/横滚同步（273-320、798-810）。内部重复：`_renderMobileHeader`(650-665) 与 render()(856-877) 重复计算 readOnly/canRename/canDownload/canAct/canGoUp/breadcrumb/showSetWorkdir 七项（注释 648-649 自认）。store.subscribe→requestUpdate 粗粒度全量重渲 + render 内 sortFileEntries/new Set 重算（854-855、871）。
 - **风险**：文件页任何功能改动都 touch 本文件；移动/桌面两路径已开始各自演化。
@@ -284,7 +284,7 @@
 - **修复方案**：抽 utils/toast.ts 单一入口（事件总线或直接定位函数），六处 import。
 - **回归验证**：`npm run build` + 手工触发各页 toast。
 
-### AP-40 chat-message render() 巨方法双分支 + user/assistant 复制按钮模板两份 [P3] [status: pending]
+### AP-40 chat-message render() 巨方法双分支 + user/assistant 复制按钮模板两份 [P3] [status: done(批5c 提交待填)]
 - **形态**：Long Method + Copy-and-Paste
 - **证据**：render() 579-631 单方法 if 分叉 user(591)/assistant(612+)，消息类型分派未表驱动；复制按钮模板 user(601)/assistant(626) 两份近同。input-box 内 L403-407 与 L436-440 按钮禁用同步逻辑逐行重复（AP-1 的孪生）。
 - **风险**：新增消息类型继续堆 if；P3。
@@ -349,6 +349,7 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-11-15 | 批 1（P1） | AP-1、AP-2 | AP-1：提交键统一加 `class="submit"`（含分裂按钮 primary），两处 querySelector 改 `button.submit:not(.caret)` 精确命中（input-box.ts:405-407/437-438 → 620/633/643 + selector 修正）；AP-2：icon.ts 补注册 `file-x`/`loader`（lucide-static 实有此二文件）。回归：input-box.test.ts 13 绿 + pdf-viewer.test.ts 7 绿 + `npm run build` 通过（tsc --noEmit 含内） |
+| 2026-11-15 | 批 5c（结构收敛） | AP-5、22（核心）、33、40 | AP-5：六个 −/值/+ 渲染方法收敛为 _renderStepper（mobile 菜单行）+ _renderZoomGroup（桌面 header 联排）两个参数化方法（AP-4 子症状，亦为后续拆分的组成件）；AP-22（核心）：新建 utils/section-mixins.ts（ToastFlashMixin：_toast/_toastTimer/_setFlash/3000ms/卸载清理 + apiErrMsg 工厂），model-presets/mcp/skills/search 四 section 迁移（_errMsg 改 apiErrMsg(e, XxxApiError)；confirm-delete/list-load/表单状态机/共享样式四件套其余部分留待后续轮次——模板结构耦合度高，强拆风险大于收益）；AP-33：file-list mobile/desktop 七项重复派生计算提为 _toolbarState getter（readOnly/canRename/canAct/canGoUp/breadcrumb/showSetWorkdir 单一定义，canDownload 因入参不同保留两处）；AP-40：chat-message user/assistant 复制按钮模板两份合一为 _renderCopyBtn。回归：8 spec 170 测试通过（settings-fields/settings-view 3 失败经 stash 基线验证为既有）+ build 通过 |
 | 2026-11-15 | 批 5b（性能缓存） | AP-7、12、34、37 | AP-7：md-viewer 单块模式按 content 记忆化 parse+sanitize 结果（keyword 高亮走 _stripKeywordMarks/_highlightKeyword DOM 后处理，不依赖重解析，安全性核实）；AP-12：cm-editor whenReady 改等 _loadCore promise（firstUpdated 记录 _coreReady），删 10ms×200 轮询；AP-34：tree-node 删每节点独立 store 订阅，expandedPaths/currentDir/treeCache 三态经属性由宿主下发（file-tree 单点订阅；move-dialog 同步补传），全树 N 份订阅收敛为 1；AP-37：diff-viewer parseUnifiedDiff 按 diff 内容记忆化。回归：9 spec 165 测试通过（chat-view-preview 1 失败为既有基线失败）+ build 通过 |
 | 2026-11-15 | 批 5a（小修快赢） | AP-8、9、10、11、20、21、41 | AP-8：pdf-viewer 交互监听句柄化（_portalHandlers 数组）+ 换文档先 _unbindPortalInteractions 再挂 + _destroyPortal 一并摘除；AP-9：_applyKeyword 400ms setTimeout 补 _loadSeq 代数守卫；AP-10：ask-card 加 _doneDispatched 单次派发守卫（超时与在途 respond 的先到者独占 ask-done，新 requestId 复位）；AP-11：input-box 补 disconnectedCallback 摘 document _onDocClick；AP-20：search-view history-list 补 @copy-failed toast（对齐 chat 侧）；AP-21：mcp _toggleTools 失败不再缓存空数组（cache 判据 id in cache，缺失保持加载中、重展开重试）；AP-41：chat-tool-trace 复制复位 timer 句柄化 + disconnectedCallback 清理。回归：7 spec 100 测试全绿 + build 通过 |
 | 2026-11-15 | 批 4（对话框抽公共层） | AP-27、28、29、30、31、35（部分）、36 | AP-31：新建 utils/nav.ts（NAV_ITEMS/navItems/emitNavigate），tab-bar/activity-bar 各删本地 _items+_select 副本；AP-30：新建 utils/side-drawer.ts（sideDrawerStyles+renderSideDrawer 骨架），bookmark-drawer/toc-drawer 重写为薄壳（仅留条目渲染与专属事件，keyframes 前缀改名痕迹一并归一）；AP-28：新建 components/input-dialog-base.ts（InputDialogBase：样式 60 行 + _onInput/_submit/_cancel/Enter/invalid 骨架 + prefill 预填即校验），mkdir/new-file/rename/session-rename 四件套变 ~40 行配置子类（validator/label/prefill/submitDetail）；AP-27/29：新建 utils/dialog-styles.ts（dialogSlotStyles：.note/.buttons/button.primary/移动端断点），fork-confirm/compact-confirm/import-confirm 三件迁移（fork 保留静态单态不并入 compact 四态机——反证防 DRY Misuse）；AP-35（部分）：rewind/turn-delete 样式经核对仅近似非逐字同（.anchor 边色/.warn 配色有真实差异），不做强行归一，ANCHOR_EXCERPT_LEN 已在批 3 常量化——本条按实际差异降档关闭；AP-36：删 turn-delete _submittingLocal 双真相源（dispatchEvent 同步性核实：confirm 派发后宿主随即置 submitting=true 回传，无覆盖窗口），统一为宿主单源。回归：12 spec 183 测试全绿 + npm run build 通过 |
