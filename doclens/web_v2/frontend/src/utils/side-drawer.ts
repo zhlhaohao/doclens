@@ -103,7 +103,12 @@ export function renderSideDrawer(opts: {
           ><doclens-icon name="x"></doclens-icon></button>
         </div>
       </header>
-      <${listTag} class="list">${opts.list}</${listTag}>
+      ${/* 动态标签名必须分支展开：Lit 模板不支持 <${listTag}> 这种动态元素名
+           （会被渲染成字面量元素 <lit$...>，内容全丢——E2E 实测目录条目全消失）。
+           E2E 捕获于 2026-11-15 验收批次 4。 */ ""}
+      ${listTag === "nav"
+        ? html`<nav class="list">${opts.list}</nav>`
+        : html`<div class="list">${opts.list}</div>`}
     </aside>
   `;
 }
