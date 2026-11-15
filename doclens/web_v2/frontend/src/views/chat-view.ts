@@ -21,10 +21,11 @@ import { chatStream, stopChat, interject } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, listSessions, clearSessions, starSession, fetchSessionDetail, fetchChatTrace } from "../api/sessions";
+import { createSession, fetchSessionDetail, fetchChatTrace } from "../api/sessions";
 import { router } from "../router/router";
 import { PreviewController } from "../utils/preview-controller";
 import { ChatSessionOpsController } from "../utils/chat-session-ops-controller";
+import { ChatHistoryController } from "../utils/chat-history-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import { listSkillsManage } from "../api/skills";
 import type { SkillInfo } from "../api/skills";
@@ -293,15 +294,6 @@ export class ChatView extends LitElement {
   /** 当前渲染的 ask 卡片载荷（交互态→摘要态由卡片内部管理；
    *  与 store.pendingAsk 分离：提交后输入恢复但摘要保留至流结束） */
   @state() private _activeAsk: PendingAsk | null = null;
-  @state() private historySessions: Session[] = [];
-  /** 历史分页当前页（1-based）；hasMore = 本页满 200 条 */
-  @state() private _historyPage = 1;
-  /** 星标置顶开关（localStorage 持久化；false = 加星条目按时间混排） */
-  @state() private _starPin = localStorage.getItem(ChatView.STAR_PIN_KEY) !== "0";
-  /** 会话列表高亮 id：重启恢复的「上次会话」（纯展示，不拉消息流）；
-   *  进入会话后跟随真实 id，返回 initial 清空。 */
-  @state() private _highlightSessionId: string | null = null;
-  @state() private _clearing = false;
   /** 导入确认框状态（2026-10-29：替代 window.confirm——后者被浏览器
    *  「阻止此页面创建更多对话框」静默返回 false 时，导入表现为毫无反应）。
    *  phase=exists 表示后端回报同 id 已存在，等待用户选择「作为副本导入」。 */
@@ -315,7 +307,7 @@ export class ChatView extends LitElement {
    *  回退 / 删轮的状态与副作用在 controller，视图只留事件接线。 */
   private _ops = new ChatSessionOpsController(this, {
     toast: (message, level, duration) => this._pushToast(message, level, duration),
-    reloadHistory: () => this._loadHistory(),
+    reloadHistory: () => this._history.load(),
     reloadSession: () => {
       const cur = this.viewState.currentSession;
       return cur ? this._loadSession(cur) : Promise.resolve();
@@ -329,7 +321,7 @@ export class ChatView extends LitElement {
       if (!session) return;
       // 同步当前会话与历史列表（updated_at 不动，历史顺序不变）
       actions.setChatState({ currentSession: { ...session, title } });
-      this.historySessions = this.historySessions.map((s) =>
+      this._history.sessions = this._history.sessions.map((s) =>
         s.id === session.id ? { ...s, title } : s);
     },
     currentSessionId: () => this.viewState.currentSession?.id ?? null,
@@ -338,6 +330,14 @@ export class ChatView extends LitElement {
     streaming: () => this.viewState.streaming,
     refreshCompaction: () => this._refreshCompaction(),
     enterSession: (session) => this._loadSession(session as unknown as Session),
+  });
+
+  /** 会话历史域（AP-1 外迁）：取数/分页/星标/清空/高亮在 controller。 */
+  private _history = new ChatHistoryController(this, {
+    toast: (message, level, duration) => this._pushToast(message, level, duration),
+    storageKey: ChatView.STAR_PIN_KEY,
+    currentSessionId: () => this.viewState.currentSession?.id ?? null,
+    syncCurrentSessionStar: (sessionId, starred) => this._history.syncStarToStore(sessionId, starred),
   });
 
   /** 对话框模板适配器（AP-1 模板域外迁）：把视图状态与回调接到
@@ -482,7 +482,7 @@ export class ChatView extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this._loadHistory();
+    void this._history.load();
     // 会话库恢复完成（ADR-0047 SSE sessions_restored）：重拉历史列表；
     // 当前打开的会话若已不存在（比备份旧），清空消息流回到欢迎页。
     window.addEventListener("cortex:sessions-restored", this._onSessionsRestored);
@@ -500,9 +500,9 @@ export class ChatView extends LitElement {
     // 启动恢复：上次会话在列表中高亮（幂等纯读；消息流不自动拉）。
     // 例外（ADR-0028）：上次会话仍在后台生成 → 自动进入恢复态（占位 +
     // 轮询），用户不用手点也能看到续跑结果。
-    this._highlightSessionId = loadSessionMemory().chat?.sessionId ?? null;
-    if (this._highlightSessionId) {
-      void this._autoResumeIfGenerating(this._highlightSessionId);
+    this._history.setHighlight(loadSessionMemory().chat?.sessionId ?? null);
+    if (this._history.highlightSessionId) {
+      void this._autoResumeIfGenerating(this._history.highlightSessionId);
     }
     this._consumePendingSkillChat();
     // 预拉技能候选（caret 菜单要展示最近技能，与候选求交）
@@ -689,23 +689,6 @@ export class ChatView extends LitElement {
 
   /** 历史列表星标切换：乐观翻转 starred，但保持列表顺序不变（重排在下次
    *  加载历史时自然发生），失败回滚。 */
-  private _onToggleStar = async (e: CustomEvent<{ session: Session; starred: boolean }>) => {
-    const { session, starred } = e.detail;
-    const prev = this.historySessions;
-    this.historySessions = prev
-      .map((s) => (s.id === session.id ? { ...s, starred } : s));
-    try {
-      await starSession(session.id, starred);
-      // 同步当前会话对象（加星态跟随，如 header/恢复逻辑消费）
-      const cur = this.viewState.currentSession;
-      if (cur && cur.id === session.id) {
-        actions.setChatState({ currentSession: { ...cur, starred } });
-      }
-    } catch (err) {
-      this.historySessions = prev;
-      this._pushToast(`加星失败：${(err as Error)?.message || err}`, "error", 5000);
-    }
-  };
 
   /** 会话改名对话框宿主（<dialog> 由 updated() showModal）。 */
 
@@ -791,7 +774,7 @@ export class ChatView extends LitElement {
     if (s.state === "focus" && s.currentSession) {
       await this._loadSession(s.currentSession);
     } else if (s.state === "initial") {
-      await this._loadHistory();
+      await void this._history.load();
     }
   }
 
@@ -813,7 +796,7 @@ export class ChatView extends LitElement {
 
   /** 会话库恢复完成（ADR-0047）：重拉历史；当前会话不复存在时回欢迎页。 */
   private _onSessionsRestored = (): void => {
-    void this._loadHistory();
+    void void this._history.load();
     const cur = store.getState().chat.currentSession;
     if (cur) {
       void fetchSessionDetail(cur.id, { metaOnly: true })
@@ -956,59 +939,7 @@ export class ChatView extends LitElement {
     }
   }
 
-  private async _loadHistory(page = 1) {
-    try {
-      const offset = (page - 1) * 200;
-      const { sessions } = await listSessions({ type: "chat", limit: 200, offset });
-      // 后端固定 starred DESC 返回；混排模式下按时间整理回时间线
-      this.historySessions = this._starPin
-        ? sessions
-        : [...sessions].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-      this._historyPage = page;
-    } catch (e) {
-      console.warn("load history failed", e);
-    }
-  }
 
-  private _onHistoryPage = (e: CustomEvent<{ page: number }>) => {
-    this._loadHistory(e.detail.page);
-    // 翻页后回到列表顶部
-    this.renderRoot.querySelector("history-list")?.scrollIntoView({ block: "start" });
-  };
-
-  /** 星标置顶开关：仅影响前端展示排序（后端仍按 starred DESC 返回），
-   *  关闭时把已拉取的星标条目按时间混排回去。 */
-  private _onStarPinChange = (e: CustomEvent<{ value: boolean }>) => {
-    this._starPin = e.detail.value;
-    localStorage.setItem(ChatView.STAR_PIN_KEY, e.detail.value ? "1" : "0");
-    if (!this._starPin) {
-      this.historySessions = [...this.historySessions]
-        .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-    } else {
-      // 重新拉第 1 页（_loadHistory 内部按 _starPin 整理）
-      this._loadHistory(1);
-    }
-  };
-
-  private async _onClearHistory() {
-    this._clearing = true;
-    this.requestUpdate();
-    try {
-      const res = await clearSessions("chat");
-      // 加星会话受保护：后端跳过，本地保留
-      this.historySessions = this.historySessions.filter((s) => s.starred);
-      if (res.skipped_starred > 0) {
-        this._pushToast(
-          `已清空 ${res.deleted_count} 条，${res.skipped_starred} 条加星会话保留`,
-          "info", 3500);
-      }
-    } catch (e) {
-      console.warn("clear sessions failed", e);
-    } finally {
-      this._clearing = false;
-      this.requestUpdate();
-    }
-  }
 
     private get viewState() {
     return store.getState().chat;
@@ -1239,7 +1170,7 @@ export class ChatView extends LitElement {
       // 收尾状态（弹窗/输入锁属于正在展示的那个会话）；历史列表是全局的，
       // 照常刷新（标题/条数随本轮落库更新）。
       if (stillOwn()) this._ops.finalizeAutoCompactDialog();
-      this._loadHistory();
+      void this._history.load();
     } catch (err) {
       if (this._isAbortError(err)) {
         // 用户主动停止：保留已生成的半截回答（2026-09-22 语义变更：后端
@@ -1248,7 +1179,7 @@ export class ChatView extends LitElement {
         if (stillOwn()) {
           messages = finalizeInterruptedMessages(messages);
           actions.setChatState({ messages });
-          this._loadHistory();
+          void this._history.load();
         }
       } else {
         // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断。
@@ -1318,14 +1249,14 @@ export class ChatView extends LitElement {
   private _backToInitial() {
     this._resetPreview();
     this._activeAsk = null;
-    this._highlightSessionId = null; // 「新会话」返回后不残留旧高亮
+    this._history.setHighlight(null); // 「新会话」返回后不残留旧高亮
     this._markTabSession(null); // 回到欢迎页：本页不再挂着任何会话
     this._rewindDividers = [];
     this._ops.cancelRewind();
     this._ops.cancelDeleteTurn();
     this._stopGeneratingPoll();
     actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null });
-    this._loadHistory();
+    void this._history.load();
   }
 
   /** 清空预览 pane 的全部状态（导航离开当前对话时调用，避免残留旧文档）。
@@ -1339,7 +1270,7 @@ export class ChatView extends LitElement {
     this._resetPreview();
     this._activeAsk = null;
     this._interjectPending = false;
-    this._highlightSessionId = s.id;
+    this._history.setHighlight(s.id);
     this._markTabSession(s.id); // 本页当前会话（自动恢复只看本页，见 _autoResumeIfGenerating）
     actions.setChatState({
       state: "focus",
@@ -1400,9 +1331,6 @@ export class ChatView extends LitElement {
     }
   }
 
-  private _onHistorySelect(e: CustomEvent<{ session: Session }>) {
-    this._loadSession(e.detail.session);
-  }
 
   /** 历史条目「复制会话」（2026-10-10）：先弹确认框说明复制语义，确认后
    *  调孪生复制 API → 刷新历史 → 直接进入孪生会话（复制即为了继续干活，
@@ -1619,19 +1547,19 @@ export class ChatView extends LitElement {
           <history-list
             title="历史会话"
             type="chat"
-            ?clearing=${this._clearing}
-            .sessions=${this.historySessions}
-            .activeId=${this._highlightSessionId}
-            .page=${this._historyPage}
-            ?hasMore=${this.historySessions.length >= 200}
-            .starPin=${this._starPin}
+            ?clearing=${this._history.clearing}
+            .sessions=${this._history.sessions}
+            .activeId=${this._history.highlightSessionId}
+            .page=${this._history.page}
+            ?hasMore=${this._history.hasMore}
+            .starPin=${this._history.starPin}
             ?importable=${true}
-            @select=${this._onHistorySelect}
-            @toggle-star=${this._onToggleStar}
+            @select=${(e: CustomEvent<{ session: Session }>) => this._loadSession(e.detail.session)}
+            @toggle-star=${(e: CustomEvent<{ session: Session; starred: boolean }>) => void this._history.toggleStar(e.detail.session.id, e.detail.starred)}
             @fork=${(e: CustomEvent<{ session: Session }>) => this._ops.openFork(e.detail.session)}
-            @page-change=${this._onHistoryPage}
-            @star-pin-change=${this._onStarPinChange}
-            @clear=${this._onClearHistory}
+            @page-change=${(e: CustomEvent<{ page: number }>) => void this._history.goToPage(e.detail.page)}
+            @star-pin-change=${(e: CustomEvent<{ value: boolean }>) => void this._history.setStarPin(e.detail.value)}
+            @clear=${() => void this._history.clear()}
             @import=${() => this._ops.importHistory()}>
           </history-list>
           <div class="input-row">
