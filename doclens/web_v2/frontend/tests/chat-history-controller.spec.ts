@@ -108,4 +108,21 @@ describe("ChatHistoryController（AP-1 会话历史域外迁）", () => {
     await c.load(1);
     expect(c.hasMore).toBe(true);
   });
+
+  it("load：响应体异常（缺 sessions 字段）时兜底空列表，不崩溃", async () => {
+    // 回归（AP-11）：代理错误页 / 后端字段缺失 → sessions 为 undefined，
+    // 原实现直接赋值会让「历史列表长度」读取抛 TypeError，整个对话页白屏
+    listSessionsMock.mockResolvedValueOnce({} as never);
+    const { c } = makeController();
+    await c.load(1);
+    expect(c.sessions).toEqual([]);
+    expect(c.hasMore).toBe(false);
+  });
+
+  it("load：响应体为 null 时同样兜底", async () => {
+    listSessionsMock.mockResolvedValueOnce(null as never);
+    const { c } = makeController();
+    await c.load(1);
+    expect(c.sessions).toEqual([]);
+  });
 });

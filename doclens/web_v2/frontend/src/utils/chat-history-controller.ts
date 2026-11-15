@@ -71,9 +71,12 @@ export class ChatHistoryController implements ReactiveController {
   async load(page = 1): Promise<void> {
     try {
       const offset = (page - 1) * HISTORY_PAGE_SIZE;
-      const { sessions } = await listSessions({
+      const res = await listSessions({
         type: "chat", limit: HISTORY_PAGE_SIZE, offset,
       });
+      // 防御异常响应体（代理错误页 / 字段缺失 → sessions 为 undefined）：
+      // 原实现直接赋值会让列表长度读取崩溃（整个对话页白屏）——统一兜底为空列表
+      const sessions = Array.isArray(res?.sessions) ? res.sessions : [];
       // 混排模式下按时间整理回时间线
       this.sessions = this.starPin
         ? sessions

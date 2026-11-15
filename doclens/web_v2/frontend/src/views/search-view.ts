@@ -277,7 +277,11 @@ export class SearchView extends LitElement {
   private async _loadHistory(page = 1) {
     try {
       const offset = (page - 1) * 200;
-      const { sessions } = await listSessions({ type: "search", limit: 200, offset });
+      const res = await listSessions({ type: "search", limit: 200, offset });
+      // 防御异常响应体（代理错误页 / 字段缺失 → sessions 为 undefined）：
+      // 直接赋值会让「历史列表长度」读取抛 TypeError，整个搜索页白屏
+      // （chat-view 同源缺陷已修，见 chat-history-controller.load）
+      const sessions = Array.isArray(res?.sessions) ? res.sessions : [];
       // 后端固定 starred DESC 返回；混排模式下按时间整理回时间线
       this.historySessions = this._starPin
         ? sessions
