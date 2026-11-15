@@ -83,11 +83,12 @@
 
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
-| 2026-11-15 | 修 AP-1 | AP-1 | done(35ade81f)：新建 vision-gate-dialog.ts / interject-dialog.ts，chat-view.ts 2396→2335 行；chat 域 136 测试过，build 过；chat-view-preview 1 败 + settings 3 败为预存失败（stash 对照证实）。提交时前存改动已不在工作区（期间被他流程提交），工作区仅剩 AP-1 四文件。 |
+| 2026-11-15 | 修 AP-1 | AP-1 | done(35ade81f→amend ed2fafbd)：新建 vision-gate-dialog.ts / interject-dialog.ts，chat-view.ts 2396→2335 行；chat 域 136 测试过，build 过；chat-view-preview 1 败 + settings 3 败为预存失败（stash 对照证实）。 |
+| 2026-11-15 | 按你的想法继续修 | AP-8 | done(b24db34e)：断言同步即梦×4 字段（18→22、AI tab 5→9）；根因 = jimeng 两提交加字段未同步测试（测试滞后，非固化错误）；22 测试过，build 过。 |
 
 ## 六、修复中新发现（discovered-during-fix）
 
-### AP-8 settings-fields 测试与字段清单已漂移（22 实际 vs 18 断言） [P2] [status: discovered-during-fix]
+### AP-8 settings-fields 测试与字段清单已漂移（22 实际 vs 18 断言） [P2] [status: done(b24db34e)]
 - **形态**：测试固化/失联——字段清单演进后断言未同步（AP-6 预言的漂移已实证发生）
 - **证据**：`tests/settings-fields.spec.ts` 断言 `SETTINGS_FIELDS` 长度 18，实际 22；AI tab 字段集合断言亦失配。settings-view.spec.ts 同因失败 1 项。
 - **风险**：已损——CI 红且 AP-6 的守卫缺失被实证。

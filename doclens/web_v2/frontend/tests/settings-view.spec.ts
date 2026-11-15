@@ -63,11 +63,12 @@ describe("<settings-view>", () => {
     expect(activePanel?.getAttribute("data-panel")).toBe("network");
   });
 
-  it("renders 5 .field for AI tab (百度天气 AK + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度；模型配置由预设区块接管)", () => {
+  it("renders 9 .field for AI tab (百度天气 AK + 即梦文生图×4 + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度；模型配置由预设区块接管)", () => {
     const aiPanel = el.shadowRoot?.querySelector('.tab-panel[data-panel="ai"]');
     const fields = aiPanel?.querySelectorAll(".field");
-    expect(fields?.length).toBe(5);
+    expect(fields?.length).toBe(9);
     expect(aiPanel?.querySelector('input[data-env="BAIDU_WEATHER_AK"]')).toBeTruthy();
+    expect(aiPanel?.querySelector('input[data-env="JIMENG_API_KEY"]')).toBeTruthy();
     // 提问方式下拉存在（ADR-0033）；未设置（空串）时回显出厂默认 interactive
     const askSelect = aiPanel?.querySelector('select[data-env="PLANIFY_ASK_MODE"]');
     expect(askSelect).toBeTruthy();
