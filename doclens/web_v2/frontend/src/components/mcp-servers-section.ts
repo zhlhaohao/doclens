@@ -571,7 +571,9 @@ export class McpServersSection extends LitElement {
     }
   }
 
-  /** 展开/收起工具清单（点击行主体切换）。 */
+  /** 展开/收起工具清单（点击行主体切换）。
+   *  失败不缓存（AP-21）：catch 里缓存空数组会把「加载失败」永久钉死成
+   *  「暂无工具」且重展开不重试——改为记录错误、下次展开重拉。 */
   private async _toggleTools(s: McpServer) {
     if (this._expandedToolsId === s.id) {
       this._expandedToolsId = null;
@@ -582,8 +584,10 @@ export class McpServersSection extends LitElement {
       try {
         const r = await listMcpServerTools(s.id);
         this._toolsCache = { ...this._toolsCache, [s.id]: r.tools };
-      } catch {
-        this._toolsCache = { ...this._toolsCache, [s.id]: [] };
+      } catch (e) {
+        console.warn("[mcp-servers] tools load failed:", e);
+        // 不写缓存：cache 判据是 id in cache，缺失即保持「加载中…」提示；
+        // 收起再展开即重试。
       }
     }
   }

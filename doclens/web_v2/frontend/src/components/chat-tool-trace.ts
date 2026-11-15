@@ -332,6 +332,25 @@ export class ChatToolTrace extends LitElement {
   private _userToggled = false;
   @state() private _fullResultIds = new Set<string>();
   @state() private _copied = false;
+  /** 复制反馈复位 timer（AP-41：卸载清理，对照 chat-message _copyTimer）。 */
+  private _copyTimer: number | null = null;
+
+  /** 置 _copied 并 2s 后复位（单一定时器入口）。 */
+  private _flashCopied(): void {
+    this._copied = true;
+    if (this._copyTimer !== null) window.clearTimeout(this._copyTimer);
+    this._copyTimer = window.setTimeout(() => {
+      this._copyTimer = null;
+      this._copied = false;
+    }, 2000);
+  }
+
+  disconnectedCallback(): void {
+    if (this._copyTimer !== null) window.clearTimeout(this._copyTimer);
+    this._copyTimer = null;
+    super.disconnectedCallback();
+  }
+
   /** 已上报给宿主的展开态（避免每次 updated 重复派发同一状态） */
   private _reportedExpanded: boolean | null = null;
   /** lineDiff 结果记忆化（tool_use_id + 两文本长度 → 行）：流式期间每次
@@ -399,8 +418,7 @@ export class ChatToolTrace extends LitElement {
     const text = buildFullText(this.steps);
     try {
       await navigator.clipboard.writeText(text);
-      this._copied = true;
-      setTimeout(() => { this._copied = false; }, 2000);
+      this._flashCopied();
     } catch (err) {
       // clipboard 不可用（权限/非安全上下文）时降级：使用隐藏 textarea + execCommand
       try {
@@ -412,8 +430,7 @@ export class ChatToolTrace extends LitElement {
         ta.select();
         document.execCommand("copy");
         document.body.removeChild(ta);
-        this._copied = true;
-        setTimeout(() => { this._copied = false; }, 2000);
+        this._flashCopied();
       } catch (err2) {
         console.warn("copy failed:", err2);
       }

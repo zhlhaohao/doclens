@@ -60,28 +60,28 @@
 - **修复方案**：单块模式也按 content+keyword 记忆化解析结果（content 未变则复用 DOM/html）；_matchIndex 派生更新与正文渲染解耦。
 - **回归验证**：`npm run test -- tests/md-viewer.spec.ts` + `npm run build`
 
-### AP-8 pdf-viewer 换文档时 host 监听叠加（挂/卸不对称） [P2] [status: pending]
+### AP-8 pdf-viewer 换文档时 host 监听叠加（挂/卸不对称） [P2] [status: done(批5a 提交待填)]
 - **形态**：ReactiveController 挂/卸不对称（Lit 栈清单）
 - **证据**：`pdf-viewer.ts:647-652` `_loadDocument` 每次执行 `_bindPinch/_bindWheel` + `host.addEventListener("scroll",…)`；注释称「每次重建 portal 后重挂」，但 `_ensurePortal`(402) 在 portal 仍连接时**复用旧 portal**——挂载态下切换 docPath（willUpdate:300 触发新 `_loadDocument`）在同一 host 上叠加 touchstart/touchmove/touchend/wheel/scroll 匿名监听，无摘除路径；每次换 PDF 多发一份 composed "scroll" 事件（651），下游 scroll 记忆/滚动锚点被多余触发。
 - **风险**：反复切换 PDF 的会话中监听份数线性增长 → 缩放一次触发 N 次、scroll 记忆多余 flush；内存泄漏温和。
 - **修复方案**：_bindPinch/_bindWheel/scroll 绑定前先摘旧（或挂到 portal 节点随 _destroyPortal 一起消失）。
 - **回归验证**：`npm run test -- tests/pdf-viewer.spec.ts` + 手工连续切换两个 PDF 验证缩放/滚动。
 
-### AP-9 pdf-viewer `_applyKeyword` 400ms setTimeout 无代数守卫（Race Hazard） [P2] [status: pending]
+### AP-9 pdf-viewer `_applyKeyword` 400ms setTimeout 无代数守卫（Race Hazard） [P2] [status: done(批5a 提交待填)]
 - **形态**：Race Hazard（功能层）
 - **证据**：`pdf-viewer.ts:885-887` `setTimeout(400ms)` 夺回滚动权，未做 `_loadSeq` 代数检查——同函数其余异步路径均有 seq 守卫（316/617/659/730/738/751/783），独此处缺失。400ms 内切换文档会在新文档上执行旧定位。
 - **风险**：快速连续切换 PDF + 带关键词命中时定位错乱（偶发、难复现类 bug）。
 - **修复方案**：回调入口比对 `_loadSeq` 快照，不等则丢弃。
 - **回归验证**：`npm run test -- tests/pdf-viewer.spec.ts`
 
-### AP-10 ask-card 超时 vs 在途提交双派发 `ask-done`（Race Hazard） [P2] [status: pending]
+### AP-10 ask-card 超时 vs 在途提交双派发 `ask-done`（Race Hazard） [P2] [status: done(批5a 提交待填)]
 - **形态**：Race Hazard
 - **证据**：`ask-card.ts:243-259` guard 超时回调只检查 `_status !== "pending"`（248），不检查 `_submitting`；`respondAsk` 在途超 122s 时：timeout 先置 `_status="expired"` 并派发 `ask-done` → respond 返回后置 `_status="answered"` 覆盖并**再次**派发 `ask-done`（330）。`_submitting` 仅防重入（301），不参与竞态判定。
 - **风险**：宿主 chat-view `_onAskDone` 被双调用（幂等性未验证），状态在 expired↔answered 间翻转。
 - **修复方案**：派发前检查 `_status === "pending"`（或引入单调代数）；respond 返回时若已 expired 则不再派发。
 - **回归验证**：`npm run test -- tests/ask-card.spec.ts`（如无则补单测：模拟超时后 resolve）
 
-### AP-11 input-box document 级监听无 disconnectedCallback 清理（泄漏） [P2] [status: pending]
+### AP-11 input-box document 级监听无 disconnectedCallback 清理（泄漏） [P2] [status: done(批5a 提交待填)]
 - **形态**：监听挂/卸不对称
 - **证据**：`input-box.ts:588/569/580/597/602/764` `_toggleMenu`/`_onAttachClick` 向 document 挂 `_onDocClick`，但 InputBox **无 disconnectedCallback**。对照组：chat-message（395-401）、chat-stream（177-181）、ask-card（237-240）均有对称清理。
 - **风险**：菜单开着时组件被卸载（视图切换）→ document 回调泄漏 + 残留回调写已卸载组件的 `_menuOpen`。
@@ -139,13 +139,13 @@
 - **修复方案**：与 AP-17 一并清理 welcome-pane。
 - **回归验证**：`npm run build`
 
-### AP-20 history-item `copy-failed` 事件半死（search 侧无监听） [P3] [status: pending]
+### AP-20 history-item `copy-failed` 事件半死（search 侧无监听） [P3] [status: done(批5a 提交待填)]
 - **形态**：Dead Events（按宿主分支失效）
 - **证据**：`history-item.ts:201-204` 派发 `copy-failed`；监听仅 chat-view（1078、2440）。search-view 的 history-list（629-641）未监听 → search 侧复制标题失败静默无反馈。
 - **修复方案**：search-view 补监听 toast（对齐 chat 侧）。
 - **回归验证**：`npm run test -- tests/search-highlight-units.spec.ts` + 手工 search 页复制失败场景。
 
-### AP-21 mcp-servers-section `_toggleTools` 把失败缓存成「暂无工具」（Error Hiding + Caching Failure） [P2] [status: pending]
+### AP-21 mcp-servers-section `_toggleTools` 把失败缓存成「暂无工具」（Error Hiding + Caching Failure） [P2] [status: done(批5a 提交待填)]
 - **形态**：Error Hiding / Caching Failure
 - **证据**：`mcp-servers-section.ts:585-587` catch 吞错并缓存 `[]`；cache 判断在 581——重展开也不重试，真实错误（网络/后端）对用户永久呈现为「暂无工具」。
 - **风险**：MCP 工具列表故障不可诊断；与同文件 `_pollStatus` 的「失败不打扰」（401，有注释声明、每次轮询重试）形成对比——后者合理，前者把失败钉死。
@@ -291,7 +291,7 @@
 - **修复方案**：抽 `_renderActions(role)`；分派表驱动（与 AP-4 拆分方向一致，可后行）。
 - **回归验证**：`npm run build`
 
-### AP-41 chat-tool-trace setTimeout 未清理（对照组有清理） [P3] [status: pending]
+### AP-41 chat-tool-trace setTimeout 未清理（对照组有清理） [P3] [status: done(批5a 提交待填)]
 - **形态**：监听/定时器不对称
 - **证据**：`chat-tool-trace.ts:403、416` 主/降级复制路径各一份 setTimeout 复位，无 disconnectedCallback 清理（对照 chat-message `_copyTimer` :400 有清理）。
 - **风险**：低危：回调操作已卸载 @state（Lit 告警级）；与 AP-11 同型。
@@ -349,6 +349,7 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-11-15 | 批 1（P1） | AP-1、AP-2 | AP-1：提交键统一加 `class="submit"`（含分裂按钮 primary），两处 querySelector 改 `button.submit:not(.caret)` 精确命中（input-box.ts:405-407/437-438 → 620/633/643 + selector 修正）；AP-2：icon.ts 补注册 `file-x`/`loader`（lucide-static 实有此二文件）。回归：input-box.test.ts 13 绿 + pdf-viewer.test.ts 7 绿 + `npm run build` 通过（tsc --noEmit 含内） |
+| 2026-11-15 | 批 5a（小修快赢） | AP-8、9、10、11、20、21、41 | AP-8：pdf-viewer 交互监听句柄化（_portalHandlers 数组）+ 换文档先 _unbindPortalInteractions 再挂 + _destroyPortal 一并摘除；AP-9：_applyKeyword 400ms setTimeout 补 _loadSeq 代数守卫；AP-10：ask-card 加 _doneDispatched 单次派发守卫（超时与在途 respond 的先到者独占 ask-done，新 requestId 复位）；AP-11：input-box 补 disconnectedCallback 摘 document _onDocClick；AP-20：search-view history-list 补 @copy-failed toast（对齐 chat 侧）；AP-21：mcp _toggleTools 失败不再缓存空数组（cache 判据 id in cache，缺失保持加载中、重展开重试）；AP-41：chat-tool-trace 复制复位 timer 句柄化 + disconnectedCallback 清理。回归：7 spec 100 测试全绿 + build 通过 |
 | 2026-11-15 | 批 4（对话框抽公共层） | AP-27、28、29、30、31、35（部分）、36 | AP-31：新建 utils/nav.ts（NAV_ITEMS/navItems/emitNavigate），tab-bar/activity-bar 各删本地 _items+_select 副本；AP-30：新建 utils/side-drawer.ts（sideDrawerStyles+renderSideDrawer 骨架），bookmark-drawer/toc-drawer 重写为薄壳（仅留条目渲染与专属事件，keyframes 前缀改名痕迹一并归一）；AP-28：新建 components/input-dialog-base.ts（InputDialogBase：样式 60 行 + _onInput/_submit/_cancel/Enter/invalid 骨架 + prefill 预填即校验），mkdir/new-file/rename/session-rename 四件套变 ~40 行配置子类（validator/label/prefill/submitDetail）；AP-27/29：新建 utils/dialog-styles.ts（dialogSlotStyles：.note/.buttons/button.primary/移动端断点），fork-confirm/compact-confirm/import-confirm 三件迁移（fork 保留静态单态不并入 compact 四态机——反证防 DRY Misuse）；AP-35（部分）：rewind/turn-delete 样式经核对仅近似非逐字同（.anchor 边色/.warn 配色有真实差异），不做强行归一，ANCHOR_EXCERPT_LEN 已在批 3 常量化——本条按实际差异降档关闭；AP-36：删 turn-delete _submittingLocal 双真相源（dispatchEvent 同步性核实：confirm 派发后宿主随即置 submitting=true 回传，无覆盖窗口），统一为宿主单源。回归：12 spec 183 测试全绿 + npm run build 通过 |
 | 2026-11-15 | 批 3（单源清剿） | AP-25、AP-26、AP-38、AP-39 | AP-25：六份 formatSize 副本全部改 import utils/format.ts formatBytes（file-row/delete-dialog/backup-dialog/preview-pane/file-search-results/git-changes-list；>1GB 显示 GB 档自动修复，git-changes-list 的 null→"—" 特判留在本地薄包装）；AP-26：新建 utils/filename-rules.ts（FILENAME_ILLEGAL_RE/FILENAME_RESERVED_RE/validateFilename），mkdir/new-file/rename 三处 _validate 改调公共函数（校验顺序微调：RESERVED 并入 validateFilename 在空白判定前，空白名不在保留集内，行为等价）；AP-38：新建 utils/events.ts（WORKDIR_SWAP_FAILED_EVENT），workdir-switch-dialog/watch-stream/app.ts 四处手写字符串改常量；rewind/turn-delete 的 slice(0,160) 提为各自文件头 ANCHOR_EXCERPT_LEN=160（同口径注释互指）；AP-39：新建 utils/toast.ts（pushLocalToast/pushToast 双通道），app-bar/search-view/chat-view/settings-view/reindex-dialog 五处本地实例 _pushToast 改薄包装（视觉位置不变），translate-dialog 跨 shadow 抓取改全局 pushToast 通道。回归：12 spec 文件 195 测试通过（settings-view.spec.ts 1 失败为基线既有，stash 验证）；npm run build 通过 |
 | 2026-11-15 | 批 2（死代码清扫） | AP-3、AP-13~18、AP-24 | AP-3：删 634-636 未闭合 JSDoc 残留三行（保留 710 行生效声明）；AP-13：删 chat-message error prop + 两处死模板分支 + .error 样式；AP-14：删 input-box iconAfter prop（模板简化为 icon/label 单渲染）+ 修正 images-restored 幻影注释为真实受控往返描述；AP-15：删 file-row hideCheckbox prop 及分支；AP-16：删 tree-node loading prop + 永假分支 + file-tree 恒空传值；AP-17：删 search-results `?expanded=${false}` 恒假绑定、删 welcome-pane suffix prop + .sep 样式（heroIcon **反证保留**——宿主以 heroicon attribute 传值，AP-19 关闭为误报）；AP-18：删 app-bar activeView prop + app.ts 传值 + ViewId import；AP-24：删 search-presets .head/.badge 死样式。回归：8 spec 文件 162 测试全绿 + `npm run build` 通过；chat-view-preview.spec.ts 1 失败为基线既有失败（stash 验证），非本批引入 |

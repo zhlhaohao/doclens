@@ -637,7 +637,8 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
             @toggle-star=${this._onToggleStar}
             @page-change=${this._onHistoryPage}
             @star-pin-change=${this._onStarPinChange}
-            @clear=${this._onClearHistory}>
+            @clear=${this._onClearHistory}
+            @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
           </history-list>
           <div class="input-row">
             <input-box

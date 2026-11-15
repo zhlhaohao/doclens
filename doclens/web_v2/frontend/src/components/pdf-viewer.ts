@@ -465,6 +465,7 @@ export class PdfViewer extends LitElement {
     cancelAnimationFrame(this._portalRaf);
     this._portalRaf = 0;
     this._portalLastRect = "";
+    this._unbindPortalInteractions(); // AP-8：portal 销毁一并摘交互监听
     this._portal?.remove();
     this._portal = null;
     this._fabs = null;
@@ -644,12 +645,16 @@ export class PdfViewer extends LitElement {
     const viewerEl = this._portalViewerEl();
     if (!host || !viewerEl) return; // portal 构建异常（守卫）
 
-    // portal 内滚动容器的交互绑定（每次重建 portal 后重挂）
+    // portal 内滚动容器的交互绑定（挂/卸对称，AP-8）：监听器存句柄，
+    // 重复 _loadDocument（portal 复用时换文档）先摘旧再挂新——原先每次
+    // 换文档在同一 host 上叠加 touch/wheel/scroll 份数（缩放一次触发 N 次）。
+    this._unbindPortalInteractions();
     this._bindPinch(host);
     this._bindWheel(host);
-    host.addEventListener("scroll", () => {
+    this._portalScrollHandler = () => {
       this.dispatchEvent(new CustomEvent("scroll", { bubbles: true, composed: true }));
-    }, { passive: true });
+    };
+    host.addEventListener("scroll", this._portalScrollHandler, { passive: true });
 
     try {
       const pdfjs = await import("pdfjs-dist");
@@ -882,15 +887,36 @@ export class PdfViewer extends LitElement {
     // find 初查（type 省略）会自动滚到**文档首个匹配**——当首个字面匹配
     // 不在 locateLine 换算的定位页（如 arxiv 正文页码 ≠ 物理页码）时，
     // 抢走搜索命中的定位。debounce 后把滚动权夺回定位页（高亮保留）。
+    // 代数守卫（AP-9）：400ms 内换文档时放弃旧定位——避免在新文档上执行
+    // 旧文档的 locateToLine（同函数其余异步路径均有 _loadSeq 守卫）。
     if (this.locateLine != null) {
-      setTimeout(() => this.locateToLine(this.locateLine!), 400);
+      const seq = this._loadSeq;
+      setTimeout(() => {
+        if (seq !== this._loadSeq) return;
+        this.locateToLine(this.locateLine!);
+      }, 400);
     }
   }
 
   // ---------------------------------------------------------------- 缩放交互
 
+  /** portal 交互监听句柄（AP-8：挂/卸对称——换文档先摘旧再挂新）。 */
+  private _portalHandlers: Array<[HTMLElement, string, EventListener]> = [];
+  private _portalScrollHandler: (() => void) | null = null;
+
+  private _unbindPortalInteractions(): void {
+    for (const [el, type, fn] of this._portalHandlers) {
+      el.removeEventListener(type, fn);
+    }
+    this._portalHandlers = [];
+    if (this._portalScrollHandler) {
+      this._portalHost()?.removeEventListener("scroll", this._portalScrollHandler);
+      this._portalScrollHandler = null;
+    }
+  }
+
   private _bindPinch(host: HTMLElement): void {
-    host.addEventListener("touchstart", (e: TouchEvent) => {
+    const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
         const [a, b] = [e.touches[0], e.touches[1]];
         this._pinchBase = {
@@ -898,8 +924,8 @@ export class PdfViewer extends LitElement {
           scale: this._viewer?.currentScale ?? 1,
         };
       }
-    }, { passive: true });
-    host.addEventListener("touchmove", (e: TouchEvent) => {
+    };
+    const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 2 || !this._pinchBase || !this._viewer) return;
       e.preventDefault();
       const [a, b] = [e.touches[0], e.touches[1]];
@@ -909,21 +935,31 @@ export class PdfViewer extends LitElement {
       this._viewer.currentScale = Math.min(
         SCALE_MAX, Math.max(SCALE_MIN, this._pinchBase.scale * ratio),
       );
-    }, { passive: false });
-    host.addEventListener("touchend", () => {
+    };
+    const onTouchEnd = () => {
       this._pinchBase = null;
-    }, { passive: true });
+    };
+    host.addEventListener("touchstart", onTouchStart, { passive: true });
+    host.addEventListener("touchmove", onTouchMove, { passive: false });
+    host.addEventListener("touchend", onTouchEnd, { passive: true });
+    this._portalHandlers.push(
+      [host, "touchstart", onTouchStart as EventListener],
+      [host, "touchmove", onTouchMove as EventListener],
+      [host, "touchend", onTouchEnd as EventListener],
+    );
   }
 
   private _bindWheel(host: HTMLElement): void {
-    host.addEventListener("wheel", (e: WheelEvent) => {
+    const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey || !this._viewer) return;
       e.preventDefault();
       const cur = this._viewer.currentScale ?? 1;
       const next = e.deltaY < 0 ? cur * 1.1 : cur / 1.1;
       this._fitWidthMode = false;
       this._viewer.currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, next));
-    }, { passive: false });
+    };
+    host.addEventListener("wheel", onWheel, { passive: false });
+    this._portalHandlers.push([host, "wheel", onWheel as EventListener]);
   }
 
   private _bindKeys(): void {

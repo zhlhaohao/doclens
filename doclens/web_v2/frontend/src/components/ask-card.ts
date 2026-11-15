@@ -225,6 +225,7 @@ export class AskCard extends LitElement {
         this._others = this.ask.questions.map(() => null);
         this._status = "pending";
         this._answers = [];
+        this._doneDispatched = false; // 新问题：重置单次派发守卫（AP-10）
         this._armGuardTimeout();
       }
     }
@@ -326,12 +327,19 @@ export class AskCard extends LitElement {
       this._answers = answers;
     } finally {
       this._submitting = false;
-      // 事件派发放到状态落定之后，且只派一次（避免 catch/finally 重入）
+      // 事件派发放到状态落定之后，且只派一次（避免 catch/finally 重入）。
+      // 竞态守卫（AP-10）：超时回调若已派发过 ask-done（_status 已离开
+      // pending），在途 respond 的落定不再二次派发、不覆盖已展示的超时摘要。
+      if (this._doneDispatched) return;
       this._dispatchDone(toast);
     }
   }
 
+  /** ask-done 是否已派发（超时与在途提交的先到者独占，AP-10 单次派发守卫）。 */
+  private _doneDispatched = false;
+
   private _dispatchDone(toast: string | null = null) {
+    this._doneDispatched = true;
     this.dispatchEvent(
       new CustomEvent("ask-done", {
         detail: { requestId: this.ask?.requestId ?? "", toast },

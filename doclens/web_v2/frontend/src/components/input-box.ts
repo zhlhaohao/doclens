@@ -49,6 +49,13 @@ async function compressImage(file: Blob): Promise<ChatImage | null> {
 
 @customElement("input-box")
 export class InputBox extends LitElement {
+  /** 卸载清理（AP-11）：菜单开着时组件被移除（视图切换）→ document 上的
+   *  _onDocClick 必须摘除，否则泄漏 + 残留回调写已卸载组件状态。 */
+  disconnectedCallback(): void {
+    document.removeEventListener("click", this._onDocClick);
+    super.disconnectedCallback();
+  }
+
   static styles = css`
     :host {
       display: block;
