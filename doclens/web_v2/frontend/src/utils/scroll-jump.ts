@@ -19,6 +19,11 @@ import type { ReactiveController, ReactiveControllerHost } from "lit";
 /** 距顶/底超过该值（px）才显示对应按钮；短文档（无需滚动）两个都不显示 */
 export const SCROLL_JUMP_THRESHOLD = 300;
 
+/** 「内容可滚动」的判定余量（px）：scrollHeight-clientHeight 超过此值
+ *  才认为内容超出视口（AP-7 命名常量，原裸数字 8——消除亚像素/边框
+ *  误差的容差）。 */
+const SCROLLABLE_EPS_PX = 8;
+
 export interface ScrollJumpOptions {
   /** 滚动动画：预览用 smooth（有位置感）；编辑器用 auto 瞬跳（对齐 Ctrl+Home 手感） */
   behavior?: ScrollBehavior;
@@ -80,7 +85,7 @@ export class ScrollJumpController implements ReactiveController {
     const el = this._scroller;
     if (!el) return;
     const threshold = this._opts.threshold ?? SCROLL_JUMP_THRESHOLD;
-    const canScroll = el.scrollHeight - el.clientHeight > 8;
+    const canScroll = el.scrollHeight - el.clientHeight > SCROLLABLE_EPS_PX;
     let nextTop = canScroll && el.scrollTop > threshold;
     let nextBottom =
       canScroll &&

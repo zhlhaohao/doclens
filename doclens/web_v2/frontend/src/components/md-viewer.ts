@@ -266,6 +266,11 @@ function ensureMdConfigured(): void {
 /** 匹配导航粗跳阈值（px）：目标距离超过此值时第一段用瞬跳（auto）粗定位，
  *  避免 smooth 全程滚动期间懒渲染页密集插入导致的高度持续塌变压垮收敛。 */
 const MATCH_NAV_ROUGH_JUMP_PX = 50000;
+/** 收敛循环参数（AP-7 命名常量，原 300/5/1 裸数字）：超时帧上限（~5s
+ *  @60fps）、判定「稳定」的连续帧数、位置比较容差（px）。 */
+const SETTLE_MAX_FRAMES = 300;
+const SETTLE_STABLE_FRAMES = 5;
+const SETTLE_EPS_PX = 1;
 
 /** 匹配导航的源文本索引：逐行跑与 _highlightKeyword 相同口径的正则
  *  （空格分词 + escape + join("|")，大小写不敏感），返回每个匹配起始所在的
@@ -1250,29 +1255,29 @@ export class MdViewer extends LitElement {
     this._settleTo(gen, scrollOnce, flash);
   }
 
-  /** 等 scrollTop 稳定（连续 5 帧不动）后校准，**循环至收敛**再重放闪烁。
-   *  远距离跳转：途经懒渲染页陆续插入 + content-visibility 估高塌变，
-   *  单轮校准本身又引起新滚动、滚动又触发页插入——高度持续变，一次性
-   *  校准不够（症状：连点/大跨度跳转后页面"看似无高亮"，回退再进——
+  /** 等 scrollTop 稳定（连续 SETTLE_STABLE_FRAMES 帧不动）后校准，**循环至收敛**
+   *  再重放闪烁。远距离跳转：途经懒渲染页陆续插入 + content-visibility
+   *  估高塌变，单轮校准本身又引起新滚动、滚动又触发页插入——高度持续变，
+   *  一次性校准不够（症状：连点/大跨度跳转后页面"看似无高亮"，回退再进——
    *  那时页已渲染、高度稳定——才正确）。收敛判据 = 稳定后的修正量
-   *  ≤1px（此时落点已精确）。gen 不匹配（被更新的导航取代）立即退出；
-   *  300 帧（~5s）超时兜底。 */
+   *  ≤SETTLE_EPS_PX（此时落点已精确）。gen 不匹配（被更新的导航取代）
+   *  立即退出；SETTLE_MAX_FRAMES 帧（~5s）超时兜底。 */
   private _settleTo(gen: number, scrollOnce: () => number, flash: () => void) {
     let last = -1;
     let stable = 0;
     let frames = 0;
     const check = () => {
       if (gen !== this._settleGen || !this.isConnected) return;
-      if (frames++ > 300) {
+      if (frames++ > SETTLE_MAX_FRAMES) {
         flash();
         return;
       }
       const cur = this.scrollTop;
-      if (Math.abs(cur - last) <= 1) {
+      if (Math.abs(cur - last) <= SETTLE_EPS_PX) {
         stable++;
-        if (stable >= 5) {
+        if (stable >= SETTLE_STABLE_FRAMES) {
           const delta = scrollOnce();
-          if (delta <= 1) {
+          if (delta <= SETTLE_EPS_PX) {
             flash(); // 落点已精确，重放闪烁
             return;
           }
