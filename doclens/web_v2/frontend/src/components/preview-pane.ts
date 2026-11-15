@@ -1823,7 +1823,7 @@ export class PreviewPane extends LitElement {
     return html`<button
       class="toc-btn"
       title="技能工具箱（对当前文件运行 AI 技能）"
-      @click={() => void this._toolbox.open_()}
+      @click=${() => void this._toolbox.open_()}
     ><doclens-icon name="sparkles"></doclens-icon><span class="btn-label">工具箱</span></button>`;
   }
 
