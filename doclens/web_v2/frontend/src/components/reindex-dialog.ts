@@ -17,7 +17,7 @@ export class ReindexDialog extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: var(--cortex-z-toast);
       pointer-events: none;
     }
     /* 仅在 dialog 打开时显示 scrim 并捕获点击（modal 行为） */

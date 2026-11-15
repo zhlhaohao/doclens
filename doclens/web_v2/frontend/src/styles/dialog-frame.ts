@@ -22,7 +22,7 @@ export const dialogFrameStyles = css`
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--cortex-z-toast);
     pointer-events: none;
   }
   /* 仅在 open 时显示遮罩并捕获点击（modal 行为） */

@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index.D8qc3tcT.js","assets/index.DM6vfrH2.js","assets/index.DxclzAEI.js","assets/index.Dlb8HZ3x.js","assets/index.mgU8uCQW.js","assets/index.BLN2MqrA.js","assets/index.uREPqZDF.js","assets/index.C68yp2NH.js","assets/index.pTN8W0Lr.js","assets/index.CxrvKQuH.js","assets/index.BNA_g1Jm.js","assets/index.Bm9j8sd8.js","assets/dockerfile.BNmZX-Cu.js","assets/simple-mode.GW_nhZxv.js","assets/factor.XCvu78D9.js","assets/cm-core.vSsTCzmK.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index.D8qc3tcT.js","assets/index.DM6vfrH2.js","assets/index.DxclzAEI.js","assets/index.Dlb8HZ3x.js","assets/index.mgU8uCQW.js","assets/index.BLN2MqrA.js","assets/index.uREPqZDF.js","assets/index.C68yp2NH.js","assets/index.pTN8W0Lr.js","assets/index.CxrvKQuH.js","assets/index.BNA_g1Jm.js","assets/index.Bm9j8sd8.js","assets/dockerfile.BNmZX-Cu.js","assets/simple-mode.GW_nhZxv.js","assets/factor.XCvu78D9.js","assets/cm-core.ycFrzM3V.js"])))=>i.map(i=>d[i]);
 var Qv=Object.defineProperty;var eg=(e,t,r)=>t in e?Qv(e,t,{enumerable:!0,configurable:!0,writable:!0,value:r}):e[t]=r;var Ee=(e,t,r)=>eg(e,typeof t!="symbol"?t+"":t,r);(function(){const t=document.createElement("link").relList;if(t&&t.supports&&t.supports("modulepreload"))return;for(const s of document.querySelectorAll('link[rel="modulepreload"]'))i(s);new MutationObserver(s=>{for(const o of s)if(o.type==="childList")for(const a of o.addedNodes)a.tagName==="LINK"&&a.rel==="modulepreload"&&i(a)}).observe(document,{childList:!0,subtree:!0});function r(s){const o={};return s.integrity&&(o.integrity=s.integrity),s.referrerPolicy&&(o.referrerPolicy=s.referrerPolicy),s.crossOrigin==="use-credentials"?o.credentials="include":s.crossOrigin==="anonymous"?o.credentials="omit":o.credentials="same-origin",o}function i(s){if(s.ep)return;s.ep=!0;const o=r(s);fetch(s.href,o)}})();/**
  * @license
  * Copyright 2019 Google LLC
@@ -4232,9 +4232,9 @@ var Qv=Object.defineProperty;var eg=(e,t,r)=>t in e?Qv(e,t,{enumerable:!0,config
       /* backdrop-filter 使 :host 成为层叠上下文；须显式给 z-index，
          否则层叠级别为 0，会被 DOM 序靠后的 position:relative 兄弟
          （如 detail-overlay 里的 preview-pane）整体盖住——more 菜单
-         即便内部 z-index:60 也抬不出本上下文。 */
+         即便内部 z-index: var(--cortex-z-raised) 也抬不出本上下文。 */
       position: relative;
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
     }
     .back {
       background: var(--cortex-surface);
@@ -4321,7 +4321,7 @@ var Qv=Object.defineProperty;var eg=(e,t,r)=>t in e?Qv(e,t,{enumerable:!0,config
       box-shadow: 0 8px 24px rgba(0,0,0,0.10);
       padding: var(--cortex-space-2);
       display: none;
-      z-index: 60;
+      z-index: var(--cortex-z-raised);
     }
     .menu.open { display: block; }
     .menu-item {
@@ -5065,7 +5065,7 @@ var Qv=Object.defineProperty;var eg=(e,t,r)=>t in e?Qv(e,t,{enumerable:!0,config
          向下展开会落到视口之外不可见。 */
       bottom: calc(100% + 4px);
       right: 6px;
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
@@ -5647,7 +5647,7 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
     :host {
       position: fixed;
       inset: 0;
-      z-index: 9999;
+      z-index: var(--cortex-z-modal);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -5661,7 +5661,7 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
       position: fixed;
       top: calc(16px + env(safe-area-inset-top));
       right: 16px;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
       width: 44px;
       height: 44px;
       border: none;
@@ -5679,7 +5679,7 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
       position: fixed;
       top: calc(16px + env(safe-area-inset-top));
       right: 68px;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
       width: 44px;
       height: 44px;
       border: none;
@@ -5716,7 +5716,7 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
     display: flex;
     justify-content: flex-end;
     align-items: flex-start;  /* height:0 容器防止 stretch 压扁按钮组 */
-    z-index: 2;
+    z-index: var(--cortex-z-base);
   }
   .scroll-jump-anchor .scroll-jump-fabs {
     /* height:0 锚点：把按钮组整体上移到锚点线之上（translate 不影响滚动范围） */
@@ -6036,7 +6036,7 @@ ${s}</table>
       position: absolute;
       top: 8px;
       right: 12px;
-      z-index: 5;
+      z-index: var(--cortex-z-base);
     }
     .doc-copy {
       position: relative;
@@ -6072,7 +6072,7 @@ ${s}</table>
       line-height: 1.4;
       padding: 2px 10px;
       border-radius: var(--cortex-radius-pill);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       pointer-events: none;
     }
     /* 定位块的闪烁动画（"你滚到这里了"指示）
@@ -6312,7 +6312,7 @@ ${s}</table>
 `,0),this._onTable=()=>{const t=`| ${Array.from({length:3},(s,o)=>`列${o+1}`).join(" | ")} |
 `,r=`| ${Array.from({length:3},()=>"---").join(" | ")} |
 `,i=Array.from({length:5},()=>`| ${Array.from({length:3},()=>"").join(" | ")} |
-`).join("");this._blockInsert(t+r+i,t.length+r.length+2)},this._onLink=()=>this._wrapAction("[","](https://)","链接文字"),this._onSaveClick=()=>{this._dirty&&this._emitSave()},this._onCancelClick=()=>{this.discard()}}async firstUpdated(){this._original=this.originalContent,this._offAppThemeChange=kh(e=>{this._appTheme=e,this._applyTheme()}),this._offCodeThemeChange=u4(e=>{this._codeTheme=e,this._applyTheme()}),this._coreReady=this._loadCore(),await this._coreReady}disconnectedCallback(){var e,t,r,i;super.disconnectedCallback(),(e=this._offAppThemeChange)==null||e.call(this),this._offAppThemeChange=null,(t=this._offCodeThemeChange)==null||t.call(this),this._offCodeThemeChange=null,(i=(r=this._view)==null?void 0:r.destroy)==null||i.call(r),this._view=null}async _loadCore(){try{const e=await M(()=>import("./cm-core.vSsTCzmK.js"),__vite__mapDeps([15,1,2]));this._core=e,this._langCompartment=new e.Compartment,this._themeCompartment=new e.Compartment;const t=this.shadowRoot.querySelector(".cm-host");if(!t)return;this._view=new e.EditorView({state:e.EditorState.create({doc:this.originalContent,extensions:e.buildBaseExtensions({onDocChanged:()=>this._onDocChanged(),onSave:()=>this._emitSave(),langCompartment:this._langCompartment,themeCompartment:this._themeCompartment})}),parent:t}),this._ready=!0,await this.updateComplete,this._loadLang(),this._applyTheme()}catch(e){console.error("[cm-editor] 编辑器内核加载失败",e),this._loadError="编辑器加载失败，请刷新重试",this._error=this._loadError}}willUpdate(e){if(e.has("originalContent")){this._original=this.originalContent,this._dirty=!1,this._error=null;const t=this._view;t&&t.state.doc.toString()!==this.originalContent&&(this._updating=!0,t.dispatch({changes:{from:0,to:t.state.doc.length,insert:this.originalContent}}),this._updating=!1)}}async _loadLang(){if(!this._view)return;const t=$4(this.path||"");if(t)try{const r=await t(),i=this._view,s=this._langCompartment;if(!i||!s||!this._core)return;const o=this._core.toExtension(r);i.dispatch({effects:s.reconfigure([o,this._highlightExt()])})}catch(r){console.warn("[cm-editor] 语言包加载失败",r)}}get _codeDark(){return this.markdown?this._appTheme==="dark":this._codeTheme==="dark"?!0:this._codeTheme==="light"?!1:this._appTheme==="dark"}_highlightExt(){return this._core?[this._core.buildHighlightExt(this._codeDark)]:[]}_applyTheme(){const e=this._view;if(!e||!this._core)return;const r=this._codeDark&&!this.markdown?dr:cr;e.dom.style.background=r.canvas,e.dom.style.color=r.ink;const i=this._themeCompartment;i&&e.dispatch({effects:i.reconfigure(this._highlightExt())})}_onDocChanged(){if(this._updating)return;const e=this._view;if(!e)return;const t=e.state.doc.toString()!==this._original;t!==this._dirty&&(this._dirty=t,this.dispatchEvent(new CustomEvent("dirty-change",{detail:{dirty:t}}))),this._error&&(this._error=null)}async whenReady(){await this._coreReady}topLine(){const e=this._view;return e?e.state.doc.lineAt(e.viewport.from).number:1}scrollToLine(e){const t=this._view;if(!t||!this._core)return;const r=t.state.doc.line(Math.max(1,Math.min(e,t.state.doc.lines)));t.dispatch({selection:this._core.EditorSelection.cursor(r.from),effects:this._core.EditorView.scrollIntoView(r.from,{y:"start"})})}selectionOffsets(){const e=this._view;if(!e)return null;const t=e.state.selection.main;return t.empty?null:{start:t.from,end:t.to}}selectOffsets(e,t){const r=this._view;if(!r||!this._core)return;const i=r.state.doc.length,s=Math.max(0,Math.min(e,t,i)),o=Math.max(0,Math.min(Math.max(e,t),i));r.dispatch({selection:this._core.EditorSelection.range(s,o)}),r.focus()}isAtBottom(){const e=this._view;if(!e)return!1;const{viewport:t}=e,r=e.state.doc.lines;return t.to-t.from+1>=r?!1:t.to>=r}scrollToBottom(){const e=this._view;!e||!this._core||e.dispatch({effects:this._core.EditorView.scrollIntoView(e.state.doc.length,{y:"end"})})}discard(){const e=this._view;e&&(this._updating=!0,e.dispatch({changes:{from:0,to:e.state.doc.length,insert:this._original}}),this._updating=!1),this._dirty=!1,this._error=null,this.dispatchEvent(new CustomEvent("cancel",{}))}setError(e){this._error=e}_applyEdit(e,t,r,i,s){const o=this._view;!o||!this._core||(o.dispatch({changes:{from:e,to:t,insert:r},selection:this._core.EditorSelection.range(i,s)}),o.focus())}_selectedLineRange(){const e=this._view,t=e.state.selection.main,r=e.state.doc,i=r.lineAt(t.from).from,s=r.lineAt(t.to).to;return{lineStart:i,lineEnd:s}}_linePrefixAction(e){const t=this._view;if(!t)return;const{lineStart:r,lineEnd:i}=this._selectedLineRange(),o=t.state.doc.sliceString(r,i).split(`
+`).join("");this._blockInsert(t+r+i,t.length+r.length+2)},this._onLink=()=>this._wrapAction("[","](https://)","链接文字"),this._onSaveClick=()=>{this._dirty&&this._emitSave()},this._onCancelClick=()=>{this.discard()}}async firstUpdated(){this._original=this.originalContent,this._offAppThemeChange=kh(e=>{this._appTheme=e,this._applyTheme()}),this._offCodeThemeChange=u4(e=>{this._codeTheme=e,this._applyTheme()}),this._coreReady=this._loadCore(),await this._coreReady}disconnectedCallback(){var e,t,r,i;super.disconnectedCallback(),(e=this._offAppThemeChange)==null||e.call(this),this._offAppThemeChange=null,(t=this._offCodeThemeChange)==null||t.call(this),this._offCodeThemeChange=null,(i=(r=this._view)==null?void 0:r.destroy)==null||i.call(r),this._view=null}async _loadCore(){try{const e=await M(()=>import("./cm-core.ycFrzM3V.js"),__vite__mapDeps([15,1,2]));this._core=e,this._langCompartment=new e.Compartment,this._themeCompartment=new e.Compartment;const t=this.shadowRoot.querySelector(".cm-host");if(!t)return;this._view=new e.EditorView({state:e.EditorState.create({doc:this.originalContent,extensions:e.buildBaseExtensions({onDocChanged:()=>this._onDocChanged(),onSave:()=>this._emitSave(),langCompartment:this._langCompartment,themeCompartment:this._themeCompartment})}),parent:t}),this._ready=!0,await this.updateComplete,this._loadLang(),this._applyTheme()}catch(e){console.error("[cm-editor] 编辑器内核加载失败",e),this._loadError="编辑器加载失败，请刷新重试",this._error=this._loadError}}willUpdate(e){if(e.has("originalContent")){this._original=this.originalContent,this._dirty=!1,this._error=null;const t=this._view;t&&t.state.doc.toString()!==this.originalContent&&(this._updating=!0,t.dispatch({changes:{from:0,to:t.state.doc.length,insert:this.originalContent}}),this._updating=!1)}}async _loadLang(){if(!this._view)return;const t=$4(this.path||"");if(t)try{const r=await t(),i=this._view,s=this._langCompartment;if(!i||!s||!this._core)return;const o=this._core.toExtension(r);i.dispatch({effects:s.reconfigure([o,this._highlightExt()])})}catch(r){console.warn("[cm-editor] 语言包加载失败",r)}}get _codeDark(){return this.markdown?this._appTheme==="dark":this._codeTheme==="dark"?!0:this._codeTheme==="light"?!1:this._appTheme==="dark"}_highlightExt(){return this._core?[this._core.buildHighlightExt(this._codeDark)]:[]}_applyTheme(){const e=this._view;if(!e||!this._core)return;const r=this._codeDark&&!this.markdown?dr:cr;e.dom.style.background=r.canvas,e.dom.style.color=r.ink;const i=this._themeCompartment;i&&e.dispatch({effects:i.reconfigure(this._highlightExt())})}_onDocChanged(){if(this._updating)return;const e=this._view;if(!e)return;const t=e.state.doc.toString()!==this._original;t!==this._dirty&&(this._dirty=t,this.dispatchEvent(new CustomEvent("dirty-change",{detail:{dirty:t}}))),this._error&&(this._error=null)}async whenReady(){await this._coreReady}topLine(){const e=this._view;return e?e.state.doc.lineAt(e.viewport.from).number:1}scrollToLine(e){const t=this._view;if(!t||!this._core)return;const r=t.state.doc.line(Math.max(1,Math.min(e,t.state.doc.lines)));t.dispatch({selection:this._core.EditorSelection.cursor(r.from),effects:this._core.EditorView.scrollIntoView(r.from,{y:"start"})})}selectionOffsets(){const e=this._view;if(!e)return null;const t=e.state.selection.main;return t.empty?null:{start:t.from,end:t.to}}selectOffsets(e,t){const r=this._view;if(!r||!this._core)return;const i=r.state.doc.length,s=Math.max(0,Math.min(e,t,i)),o=Math.max(0,Math.min(Math.max(e,t),i));r.dispatch({selection:this._core.EditorSelection.range(s,o)}),r.focus()}isAtBottom(){const e=this._view;if(!e)return!1;const{viewport:t}=e,r=e.state.doc.lines;return t.to-t.from+1>=r?!1:t.to>=r}scrollToBottom(){const e=this._view;!e||!this._core||e.dispatch({effects:this._core.EditorView.scrollIntoView(e.state.doc.length,{y:"end"})})}discard(){const e=this._view;e&&(this._updating=!0,e.dispatch({changes:{from:0,to:e.state.doc.length,insert:this._original}}),this._updating=!1),this._dirty=!1,this._error=null,this.dispatchEvent(new CustomEvent("cancel",{}))}setError(e){this._error=e}_applyEdit(e,t,r,i,s){const o=this._view;!o||!this._core||(o.dispatch({changes:{from:e,to:t,insert:r},selection:this._core.EditorSelection.range(i,s)}),o.focus())}_selectedLineRange(){const e=this._view,t=e.state.selection.main,r=e.state.doc,i=r.lineAt(t.from).from,s=r.lineAt(t.to).to;return{lineStart:i,lineEnd:s}}_linePrefixAction(e){const t=this._view;if(!t)return;const{lineStart:r,lineEnd:i}=this._selectedLineRange(),o=t.state.doc.sliceString(r,i).split(`
 `),a=o.every(l=>l.startsWith(e)),n=o.map(l=>a?l.slice(e.length):e+l).join(`
 `);this._applyEdit(r,i,n,r,r+n.length)}_toggleHeading(){const e=this._view;if(!e)return;const{lineStart:t,lineEnd:r}=this._selectedLineRange(),s=e.state.doc.sliceString(t,r).split(`
 `),o=s[0].match(/^(#{1,6})\s+/),a=o?o[1].length:0,n=a>=6?0:a+1,l=p=>p.replace(/^#{1,6}\s+/,""),h=s.map(p=>n===0?l(p):"#".repeat(n)+" "+l(p)).join(`
@@ -6524,7 +6524,7 @@ ${s}</table>
   :host {
     position: absolute;
     inset: 0;
-    z-index: 30;
+    z-index: var(--cortex-z-raised);
     display: flex;
     font-family: var(--cortex-font);
   }
@@ -6653,7 +6653,7 @@ ${s}</table>
 .cortex-pdf-portal {
   position: fixed;
   /* 尺寸/位置由组件按占位 rect 同步（left/top/width/height 内联） */
-  z-index: 1;
+  z-index: var(--cortex-z-base);
   overflow: hidden;
   background: var(--cortex-surface-muted);
 }
@@ -6661,7 +6661,7 @@ ${s}</table>
    （低于页面组件，允许 app-bar 等覆盖），全屏时提到 101——恰好压在
    preview-pane 覆盖层（z-index 100）之上、toast（1000）之下 */
 body.cortex-preview-fs .cortex-pdf-portal {
-  z-index: 101;
+  z-index: var(--cortex-z-overlay);
 }
 .cortex-pdf-wrap {
   position: relative;
@@ -6689,7 +6689,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
   position: absolute;
   right: 16px;
   bottom: 72px;
-  z-index: 6;
+  z-index: var(--cortex-z-base);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -7160,7 +7160,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       gap: var(--cortex-space-4);
       background: color-mix(in srgb, var(--cortex-bg) 72%, transparent);
       backdrop-filter: blur(2px);
-      z-index: 9999;
+      z-index: var(--cortex-z-modal);
     }
     .ring {
       width: 40px; height: 40px;
@@ -7950,12 +7950,12 @@ body.cortex-preview-fs .cortex-pdf-portal {
     /* 预览全屏（类视频全屏）：host 变 fixed 覆盖层盖满视口，脱离分栏布局。
        z-index 介于 app-bar(60) 与 toast(1000) 之间——盖过页面 UI，
        toast/下载遮罩仍浮于其上。注意 pdf-viewer 的 portal 挂 document.body
-       且 z-index:1——全屏时由组件把 portal 提到同级覆盖（见 _applyFullscreen
+       且 z-index: var(--cortex-z-base)——全屏时由组件把 portal 提到同级覆盖（见 _applyFullscreen
        的 body class 联动），否则 PDF 分支全屏会白屏。 */
     :host(.preview-fullscreen) {
       position: fixed;
       inset: 0;
-      z-index: 100;
+      z-index: var(--cortex-z-overlay);
       background: var(--cortex-bg);
       border-left: none;
     }
@@ -8081,7 +8081,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       line-height: 1.4;
       padding: 2px 10px;
       border-radius: var(--cortex-radius-pill);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       pointer-events: none;
     }
     button.download-btn:hover,
@@ -8282,7 +8282,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
       box-shadow: var(--cortex-shadow-lg);
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
       padding: var(--cortex-space-1) 0;
     }
     .mobile-header .mobile-menu button {
@@ -9434,7 +9434,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       position: fixed;
       right: 16px;
       bottom: 16px;
-      z-index: 1000;
+      z-index: var(--cortex-z-toast);
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -9649,7 +9649,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
     @media (max-width: 1023px) {
       .focus-body.is-covered { pointer-events: none; }
       /* 预览 overlay 打开时隐藏搜索顶栏（chat-view 同款）：focus-header
-         因 backdrop-filter 带 z-index:10，detail-overlay 去掉 z-index 后
+         因 backdrop-filter 带 z-index: var(--cortex-z-raised)，detail-overlay 去掉 z-index 后
          （2026-10-19 PDF portal 修复）会浮在 overlay 之上露出搜索头部；
          预览层的返回由 preview-pane 自带 mobile-header 承担。 */
       .focus-body.is-covered > focus-header { display: none; }
@@ -9698,7 +9698,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
     }
     /* 移动端：详情整页推入覆盖。**不得设 z-index**（2026-10-19 修复：移动端
        点搜索结果开 PDF 预览白屏——只剩 portal 灰底、无文字）——z-index 会
-       创建层叠上下文，把 document.body 下 z-index:1 的 pdf-viewer portal
+       创建层叠上下文，把 document.body 下 z-index: var(--cortex-z-base) 的 pdf-viewer portal
        整个压在下面（canvas 已画好但被 overlay 挡死）。去掉后：overlay
        （absolute 定位）仍画在静态结果列表之上（覆盖语义不变），而 portal
        （fixed + z:1）反超 overlay（z:auto）显露 canvas；preview-pane 内
@@ -10835,7 +10835,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       position: absolute;
       top: 6px;
       right: 8px;
-      z-index: 2;
+      z-index: var(--cortex-z-base);
       width: 26px;
       height: 26px;
       border: 1px solid var(--cortex-border);
@@ -10903,7 +10903,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
     dialog > * { display: block; padding: var(--cortex-space-6); }
     /* 移动端预览 overlay。**不得设 z-index**（2026-09-29 修复：对话页
        参考资料 PDF 在移动浏览器灰屏的真根因）——z-index 会创建层叠
-       上下文，把 document.body 下 z-index:1 的 pdf-viewer portal 整个
+       上下文，把 document.body 下 z-index: var(--cortex-z-base) 的 pdf-viewer portal 整个
        压在下面（canvas 画好但被挡死）。去掉后：overlay（absolute 定位）
        仍画在静态消息流之上（背景遮罩语义不变），而 portal（定位 + z:1）
        反超 overlay（z:auto）显露 canvas；toc-drawer（z:30）等内部浮层
@@ -10916,7 +10916,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       flex-direction: column;
     }
     /* 移动端预览打开时隐藏对话顶栏：focus-header 因 backdrop-filter 需
-       z-index:10，会浮在 z:auto 的 preview-overlay 之上（预览界面露出
+       z-index: var(--cortex-z-raised)，会浮在 z:auto 的 preview-overlay 之上（预览界面露出
        顶栏的「新会话」返回钮——点了回 initial 而非关闭预览，2026-09-29
        修复）。预览层的返回由 preview-pane 自带 mobile-header 承担。 */
     @media (max-width: 1023px) {
@@ -12269,7 +12269,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: var(--cortex-z-toast);
       padding: var(--cortex-space-4);
       box-sizing: border-box;
     }
@@ -13020,7 +13020,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
         left: 0;
         right: 0;
         bottom: 0;
-        z-index: 20;
+        z-index: var(--cortex-z-raised);
         margin: 0;
         border-radius: 0;
         padding: var(--cortex-space-2) var(--cortex-space-3);
@@ -13194,7 +13194,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       position: sticky; top: 0;
       background: var(--cortex-surface);
       border-bottom: 1px solid var(--cortex-border-muted);
-      z-index: 1;
+      z-index: var(--cortex-z-base);
     }
   `;zd=W6([K("file-tree")],zd);var K6=Object.defineProperty,G6=Object.getOwnPropertyDescriptor,Na=(e,t,r,i)=>{for(var s=i>1?void 0:i?G6(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&K6(t,r,s),s};let Os=class extends V{constructor(){super(...arguments),this.selected=!1,this.active=!1,this.mobile=!1}_fmtTime(e){if(!e)return"";try{if(this.mobile){const t=new Date(e);if(Number.isNaN(t.getTime()))return"";const r=i=>String(i).padStart(2,"0");return`${r(t.getMonth()+1)}-${r(t.getDate())} ${r(t.getHours())}:${r(t.getMinutes())}`}return new Date(e).toLocaleString(void 0,{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})}catch{return""}}_onRowClick(){this.dispatchEvent(new CustomEvent("activated",{detail:{path:this.entry.path,is_dir:this.entry.is_dir},bubbles:!0,composed:!0}))}_onCheckboxClick(e){e.stopPropagation(),this.dispatchEvent(new CustomEvent("checked",{detail:{path:this.entry.path,ctrl:e.ctrlKey||e.metaKey,shift:e.shiftKey},bubbles:!0,composed:!0}))}render(){const e=pv(this.entry.name,this.entry.is_dir);return c`
       <div
@@ -13669,7 +13669,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       line-height: 1.4;
       padding: 2px 10px;
       border-radius: var(--cortex-radius-pill);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       pointer-events: none;
     }
     .mobile-header {
@@ -13723,7 +13723,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
       box-shadow: var(--cortex-shadow-lg);
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
       padding: 4px 0;
     }
     .mobile-header .mobile-menu button {
@@ -13834,7 +13834,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       width: 8px;
       height: 100%;
       cursor: col-resize;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
       user-select: none;
       background: transparent;
     }
@@ -13976,7 +13976,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       font-size: var(--cortex-fs-xs);
       position: sticky;
       top: 0;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
     }
     tr.skip td {
       color: var(--cortex-text-subtle);
@@ -14588,7 +14588,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       flex-direction: column;
       gap: var(--cortex-space-2);
       pointer-events: none;
-      z-index: 1000;
+      z-index: var(--cortex-z-toast);
       font-size: var(--cortex-fs-lg);
       color: var(--cortex-primary);
       font-weight: 600;
@@ -14808,7 +14808,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--cortex-z-toast);
     pointer-events: none;
   }
   /* 仅在 open 时显示遮罩并捕获点击（modal 行为） */
@@ -15437,7 +15437,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       border-radius: var(--cortex-radius-md);
       font-size: var(--cortex-fs-sm);
       box-shadow: var(--cortex-shadow-lg);
-      z-index: 10000;
+      z-index: var(--cortex-z-modal);
       cursor: pointer;
     }
     /* 上传中：屏幕中心遮罩（大转圈 + 文案），两条上传路径共用 */
@@ -15448,7 +15448,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       gap: var(--cortex-space-4);
       background: color-mix(in srgb, var(--cortex-bg) 72%, transparent);
       backdrop-filter: blur(2px);
-      z-index: 9999;
+      z-index: var(--cortex-z-modal);
     }
     .upload-overlay .ring {
       width: 40px; height: 40px;
@@ -15472,7 +15472,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       background: var(--cortex-surface);
       border-radius: var(--cortex-radius-sm);
       cursor: pointer;
-      z-index: 5;
+      z-index: var(--cortex-z-base);
       font-size: var(--cortex-fs-sm);
     }
     /* 改动模式预览栏（diff header / 二进制占位卡片 / 预览按钮） */
@@ -15788,7 +15788,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       border-radius: 50%;
       background: var(--cortex-primary);
       position: relative;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
     }
     .frag-content {
       grid-column: 2;
@@ -16019,7 +16019,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       top: 52px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       width: min(340px, 92vw);
     }
     .content.loading {
@@ -16608,7 +16608,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
     }
     .confirm-card {
       background: var(--cortex-surface);
@@ -16710,7 +16710,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       font-size: var(--cortex-fs-sm);
       font-family: var(--cortex-font);
     }
-  `;Ov([g({type:Boolean,reflect:!0})],rl.prototype,"open",2);rl=Ov([K("watch-changes-dialog")],rl);var p7=Object.defineProperty,m7=Object.getOwnPropertyDescriptor,Il=(e,t,r,i)=>{for(var s=i>1?void 0:i?m7(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&p7(t,r,s),s};let To=class extends V{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var o;return((o=r.find(a=>a.type===s))==null?void 0:o.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 a5db3e45 · 2026-11-15 16:21 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),i=Math.floor(e%3600/60),s=e%60,o=a=>String(a).padStart(2,"0");return t>0?`${t}天 ${o(r)}:${o(i)}:${o(s)}`:`${o(r)}:${o(i)}:${o(s)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return c``;const e=this._runtime();return c`
+  `;Ov([g({type:Boolean,reflect:!0})],rl.prototype,"open",2);rl=Ov([K("watch-changes-dialog")],rl);var p7=Object.defineProperty,m7=Object.getOwnPropertyDescriptor,Il=(e,t,r,i)=>{for(var s=i>1?void 0:i?m7(t,r):t,o=e.length-1,a;o>=0;o--)(a=e[o])&&(s=(i?a(t,r,s):a(s))||s);return i&&s&&p7(t,r,s),s};let To=class extends V{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),i=s=>{var o;return((o=r.find(a=>a.type===s))==null?void 0:o.value)??""};return`${i("year")}-${i("month")}-${i("day")} ${i("hour")}:${i("minute")}:${i("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 7e8029dc · 2026-11-15 16:25 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),i=Math.floor(e%3600/60),s=e%60,o=a=>String(a).padStart(2,"0");return t>0?`${t}天 ${o(r)}:${o(i)}:${o(s)}`:`${o(r)}:${o(i)}:${o(s)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return c``;const e=this._runtime();return c`
       <div class="scrim" @click=${this._close}></div>
       <dialog>
         <div class="head">
@@ -16754,7 +16754,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
           ${(t=this._health)!=null&&t.dev?c`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"a5db3e45 · 2026-11-15 16:21"}</span>
+            <span class="value">${"7e8029dc · 2026-11-15 16:25"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>
@@ -16977,7 +16977,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       border-bottom: 1px solid var(--cortex-border);
       flex-shrink: 0;
       position: relative;
-      z-index: 50;
+      z-index: var(--cortex-z-raised);
       font-family: var(--cortex-font);
     }
     .brand {
@@ -17176,7 +17176,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       box-shadow: var(--cortex-shadow-md);
       padding: var(--cortex-space-2);
       display: none;
-      z-index: 60;
+      z-index: var(--cortex-z-raised);
     }
     .user-menu.open { display: block; }
     .menu-item {
@@ -17255,7 +17255,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: var(--cortex-z-toast);
       pointer-events: none;
     }
     /* 仅在 dialog 打开时显示 scrim 并捕获点击（modal 行为） */
@@ -17309,7 +17309,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       position: absolute;
       top: 0;
       left: 50%;
-      z-index: 40; /* 低于 app-bar 的 50：初始位置藏在其后 */
+      z-index: var(--cortex-z-raised); /* 低于 app-bar 的 50：初始位置藏在其后 */
       transform: translate(-50%, -110%);
       transition: none; /* 跟手阶段由 JS 直写 transform，无过渡 */
       pointer-events: none;
@@ -17427,7 +17427,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
     .swap-overlay {
       position: fixed;
       inset: 0;
-      z-index: 2000;
+      z-index: var(--cortex-z-modal);
       display: flex;
       flex-direction: column;
       align-items: center;

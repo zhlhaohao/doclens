@@ -478,7 +478,7 @@ export class MdViewer extends LitElement {
       position: absolute;
       top: 8px;
       right: 12px;
-      z-index: 5;
+      z-index: var(--cortex-z-base);
     }
     .doc-copy {
       position: relative;
@@ -514,7 +514,7 @@ export class MdViewer extends LitElement {
       line-height: 1.4;
       padding: 2px 10px;
       border-radius: var(--cortex-radius-pill);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       pointer-events: none;
     }
     /* 定位块的闪烁动画（"你滚到这里了"指示）

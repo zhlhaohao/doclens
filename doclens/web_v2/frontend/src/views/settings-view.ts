@@ -503,7 +503,7 @@ export class SettingsView extends LitElement {
         left: 0;
         right: 0;
         bottom: 0;
-        z-index: 20;
+        z-index: var(--cortex-z-raised);
         margin: 0;
         border-radius: 0;
         padding: var(--cortex-space-2) var(--cortex-space-3);

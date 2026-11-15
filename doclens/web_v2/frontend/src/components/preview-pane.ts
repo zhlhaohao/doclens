@@ -171,12 +171,12 @@ export class PreviewPane extends LitElement {
     /* 预览全屏（类视频全屏）：host 变 fixed 覆盖层盖满视口，脱离分栏布局。
        z-index 介于 app-bar(60) 与 toast(1000) 之间——盖过页面 UI，
        toast/下载遮罩仍浮于其上。注意 pdf-viewer 的 portal 挂 document.body
-       且 z-index:1——全屏时由组件把 portal 提到同级覆盖（见 _applyFullscreen
+       且 z-index: var(--cortex-z-base)——全屏时由组件把 portal 提到同级覆盖（见 _applyFullscreen
        的 body class 联动），否则 PDF 分支全屏会白屏。 */
     :host(.preview-fullscreen) {
       position: fixed;
       inset: 0;
-      z-index: 100;
+      z-index: var(--cortex-z-overlay);
       background: var(--cortex-bg);
       border-left: none;
     }
@@ -302,7 +302,7 @@ export class PreviewPane extends LitElement {
       line-height: 1.4;
       padding: 2px 10px;
       border-radius: var(--cortex-radius-pill);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       pointer-events: none;
     }
     button.download-btn:hover,
@@ -503,7 +503,7 @@ export class PreviewPane extends LitElement {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
       box-shadow: var(--cortex-shadow-lg);
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
       padding: var(--cortex-space-1) 0;
     }
     .mobile-header .mobile-menu button {

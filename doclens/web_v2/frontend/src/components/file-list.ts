@@ -161,7 +161,7 @@ export class FileList extends LitElement {
       line-height: 1.4;
       padding: 2px 10px;
       border-radius: var(--cortex-radius-pill);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       pointer-events: none;
     }
     .mobile-header {
@@ -215,7 +215,7 @@ export class FileList extends LitElement {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
       box-shadow: var(--cortex-shadow-lg);
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
       padding: 4px 0;
     }
     .mobile-header .mobile-menu button {
@@ -326,7 +326,7 @@ export class FileList extends LitElement {
       width: 8px;
       height: 100%;
       cursor: col-resize;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
       user-select: none;
       background: transparent;
     }

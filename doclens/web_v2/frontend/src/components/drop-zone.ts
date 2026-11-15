@@ -16,7 +16,7 @@ export class DropZone extends LitElement {
       flex-direction: column;
       gap: var(--cortex-space-2);
       pointer-events: none;
-      z-index: 1000;
+      z-index: var(--cortex-z-toast);
       font-size: var(--cortex-fs-lg);
       color: var(--cortex-primary);
       font-weight: 600;

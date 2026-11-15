@@ -70,7 +70,7 @@ export class SearchView extends LitElement {
     @media (max-width: 1023px) {
       .focus-body.is-covered { pointer-events: none; }
       /* 预览 overlay 打开时隐藏搜索顶栏（chat-view 同款）：focus-header
-         因 backdrop-filter 带 z-index:10，detail-overlay 去掉 z-index 后
+         因 backdrop-filter 带 z-index: var(--cortex-z-raised)，detail-overlay 去掉 z-index 后
          （2026-10-19 PDF portal 修复）会浮在 overlay 之上露出搜索头部；
          预览层的返回由 preview-pane 自带 mobile-header 承担。 */
       .focus-body.is-covered > focus-header { display: none; }
@@ -119,7 +119,7 @@ export class SearchView extends LitElement {
     }
     /* 移动端：详情整页推入覆盖。**不得设 z-index**（2026-10-19 修复：移动端
        点搜索结果开 PDF 预览白屏——只剩 portal 灰底、无文字）——z-index 会
-       创建层叠上下文，把 document.body 下 z-index:1 的 pdf-viewer portal
+       创建层叠上下文，把 document.body 下 z-index: var(--cortex-z-base) 的 pdf-viewer portal
        整个压在下面（canvas 已画好但被 overlay 挡死）。去掉后：overlay
        （absolute 定位）仍画在静态结果列表之上（覆盖语义不变），而 portal
        （fixed + z:1）反超 overlay（z:auto）显露 canvas；preview-pane 内

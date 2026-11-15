@@ -289,7 +289,7 @@ export class InputBox extends LitElement {
          向下展开会落到视口之外不可见。 */
       bottom: calc(100% + 4px);
       right: 6px;
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);

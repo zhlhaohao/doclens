@@ -58,7 +58,7 @@ export class ImageViewer extends LitElement {
     :host {
       position: fixed;
       inset: 0;
-      z-index: 9999;
+      z-index: var(--cortex-z-modal);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -72,7 +72,7 @@ export class ImageViewer extends LitElement {
       position: fixed;
       top: calc(16px + env(safe-area-inset-top));
       right: 16px;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
       width: 44px;
       height: 44px;
       border: none;
@@ -90,7 +90,7 @@ export class ImageViewer extends LitElement {
       position: fixed;
       top: calc(16px + env(safe-area-inset-top));
       right: 68px;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
       width: 44px;
       height: 44px;
       border: none;

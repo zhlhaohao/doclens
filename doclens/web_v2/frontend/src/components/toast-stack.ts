@@ -18,7 +18,7 @@ export class ToastStack extends LitElement {
       position: fixed;
       right: 16px;
       bottom: 16px;
-      z-index: 1000;
+      z-index: var(--cortex-z-toast);
       display: flex;
       flex-direction: column;
       gap: 8px;

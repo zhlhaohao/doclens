@@ -19,7 +19,7 @@ export class DownloadOverlay extends LitElement {
       gap: var(--cortex-space-4);
       background: color-mix(in srgb, var(--cortex-bg) 72%, transparent);
       backdrop-filter: blur(2px);
-      z-index: 9999;
+      z-index: var(--cortex-z-modal);
     }
     .ring {
       width: 40px; height: 40px;

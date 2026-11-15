@@ -40,7 +40,7 @@ export class AppBar extends LitElement {
       border-bottom: 1px solid var(--cortex-border);
       flex-shrink: 0;
       position: relative;
-      z-index: 50;
+      z-index: var(--cortex-z-raised);
       font-family: var(--cortex-font);
     }
     .brand {
@@ -239,7 +239,7 @@ export class AppBar extends LitElement {
       box-shadow: var(--cortex-shadow-md);
       padding: var(--cortex-space-2);
       display: none;
-      z-index: 60;
+      z-index: var(--cortex-z-raised);
     }
     .user-menu.open { display: block; }
     .menu-item {

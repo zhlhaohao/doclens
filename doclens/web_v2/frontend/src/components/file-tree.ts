@@ -24,7 +24,7 @@ export class FileTree extends LitElement {
       position: sticky; top: 0;
       background: var(--cortex-surface);
       border-bottom: 1px solid var(--cortex-border-muted);
-      z-index: 1;
+      z-index: var(--cortex-z-base);
     }
   `;
 

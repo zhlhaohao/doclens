@@ -78,7 +78,7 @@ export class DiaryReviewPanel extends LitElement {
       top: 52px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       width: min(340px, 92vw);
     }
     .content.loading {

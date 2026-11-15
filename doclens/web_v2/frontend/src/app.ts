@@ -77,7 +77,7 @@ export class CortexApp extends LitElement {
     .swap-overlay {
       position: fixed;
       inset: 0;
-      z-index: 2000;
+      z-index: var(--cortex-z-modal);
       display: flex;
       flex-direction: column;
       align-items: center;

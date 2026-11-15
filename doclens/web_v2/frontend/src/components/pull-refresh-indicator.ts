@@ -18,7 +18,7 @@ export class PullRefreshIndicator extends LitElement {
       position: absolute;
       top: 0;
       left: 50%;
-      z-index: 40; /* 低于 app-bar 的 50：初始位置藏在其后 */
+      z-index: var(--cortex-z-raised); /* 低于 app-bar 的 50：初始位置藏在其后 */
       transform: translate(-50%, -110%);
       transition: none; /* 跟手阶段由 JS 直写 transform，无过渡 */
       pointer-events: none;

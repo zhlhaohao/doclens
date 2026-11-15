@@ -140,7 +140,7 @@ export const scrollJumpFabStyles = css`
     display: flex;
     justify-content: flex-end;
     align-items: flex-start;  /* height:0 容器防止 stretch 压扁按钮组 */
-    z-index: 2;
+    z-index: var(--cortex-z-base);
   }
   .scroll-jump-anchor .scroll-jump-fabs {
     /* height:0 锚点：把按钮组整体上移到锚点线之上（translate 不影响滚动范围） */

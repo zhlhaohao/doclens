@@ -131,7 +131,7 @@ export class DiffViewer extends LitElement {
       font-size: var(--cortex-fs-xs);
       position: sticky;
       top: 0;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
     }
     tr.skip td {
       color: var(--cortex-text-subtle);

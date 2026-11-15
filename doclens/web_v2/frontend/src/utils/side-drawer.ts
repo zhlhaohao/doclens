@@ -10,7 +10,7 @@ export const sideDrawerStyles = css`
   :host {
     position: absolute;
     inset: 0;
-    z-index: 30;
+    z-index: var(--cortex-z-raised);
     display: flex;
     font-family: var(--cortex-font);
   }

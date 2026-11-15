@@ -27,9 +27,9 @@ export class FocusHeader extends LitElement {
       /* backdrop-filter 使 :host 成为层叠上下文；须显式给 z-index，
          否则层叠级别为 0，会被 DOM 序靠后的 position:relative 兄弟
          （如 detail-overlay 里的 preview-pane）整体盖住——more 菜单
-         即便内部 z-index:60 也抬不出本上下文。 */
+         即便内部 z-index: var(--cortex-z-raised) 也抬不出本上下文。 */
       position: relative;
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
     }
     .back {
       background: var(--cortex-surface);
@@ -116,7 +116,7 @@ export class FocusHeader extends LitElement {
       box-shadow: 0 8px 24px rgba(0,0,0,0.10);
       padding: var(--cortex-space-2);
       display: none;
-      z-index: 60;
+      z-index: var(--cortex-z-raised);
     }
     .menu.open { display: block; }
     .menu-item {

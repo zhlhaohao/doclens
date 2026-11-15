@@ -91,7 +91,7 @@ export class BackupDialog extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
     }
     .confirm-card {
       background: var(--cortex-surface);

@@ -264,7 +264,7 @@ export class FilesView extends LitElement {
       border-radius: var(--cortex-radius-md);
       font-size: var(--cortex-fs-sm);
       box-shadow: var(--cortex-shadow-lg);
-      z-index: 10000;
+      z-index: var(--cortex-z-modal);
       cursor: pointer;
     }
     /* 上传中：屏幕中心遮罩（大转圈 + 文案），两条上传路径共用 */
@@ -275,7 +275,7 @@ export class FilesView extends LitElement {
       gap: var(--cortex-space-4);
       background: color-mix(in srgb, var(--cortex-bg) 72%, transparent);
       backdrop-filter: blur(2px);
-      z-index: 9999;
+      z-index: var(--cortex-z-modal);
     }
     .upload-overlay .ring {
       width: 40px; height: 40px;
@@ -299,7 +299,7 @@ export class FilesView extends LitElement {
       background: var(--cortex-surface);
       border-radius: var(--cortex-radius-sm);
       cursor: pointer;
-      z-index: 5;
+      z-index: var(--cortex-z-base);
       font-size: var(--cortex-fs-sm);
     }
     /* 改动模式预览栏（diff header / 二进制占位卡片 / 预览按钮） */
@@ -873,7 +873,7 @@ export class FilesView extends LitElement {
     // preview 由 _onFileListActivated 主动驱动，无需在 update 中被动触发
     // 所有对话框用 showModal（top-layer + backdrop + ESC 关闭）：<dialog open>
     // 是非模态 inline 元素，不进 top layer，列表内带 z-index 的元素（如表头
-    // 列分隔线 .col-resize z-index:1）会穿透压在对话框之上
+    // 列分隔线 .col-resize z-index: var(--cortex-z-base)）会穿透压在对话框之上
     const dlg = this.shadowRoot?.querySelector("dialog");
     if (dlg && !dlg.open) dlg.showModal();
   }

@@ -133,7 +133,7 @@ const COMPONENT_CSS = `
 .cortex-pdf-portal {
   position: fixed;
   /* 尺寸/位置由组件按占位 rect 同步（left/top/width/height 内联） */
-  z-index: 1;
+  z-index: var(--cortex-z-base);
   overflow: hidden;
   background: var(--cortex-surface-muted);
 }
@@ -141,7 +141,7 @@ const COMPONENT_CSS = `
    （低于页面组件，允许 app-bar 等覆盖），全屏时提到 101——恰好压在
    preview-pane 覆盖层（z-index 100）之上、toast（1000）之下 */
 body.cortex-preview-fs .cortex-pdf-portal {
-  z-index: 101;
+  z-index: var(--cortex-z-overlay);
 }
 .cortex-pdf-wrap {
   position: relative;
@@ -169,7 +169,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
   position: absolute;
   right: 16px;
   bottom: 72px;
-  z-index: 6;
+  z-index: var(--cortex-z-base);
   display: flex;
   flex-direction: column;
   align-items: flex-end;

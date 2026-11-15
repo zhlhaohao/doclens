@@ -21,6 +21,21 @@
   --cortex-space-8: 32px;  /* xxl */
   --cortex-space-10: 40px; /* xxxl */
 
+  /* ── 层叠（z-index）分层规范（AP-4）──
+   * 裸数字散布史：10→10000 无谱系，两个 9999 互不知晓，PDF portal 曾被
+   * 意外压死（灰底实证）。约定五档，新浮层对号入座，禁止再造裸数字：
+   *   base      组件内局部微调（sticky 头部/徽章/FAB 等，不跨组件比较）
+   *   raised    组件内浮起层（下拉菜单/hover 卡，仍属组件内部）
+   *   overlay   跨组件覆盖层（预览栏覆盖、PDF portal 之上、app-bar 层级带）
+   *   toast     通知/抽屉/拖放指示层（用户操作反馈，须盖过一切内容层）
+   *   modal     全屏模态/遮罩（图片查看器/下载遮罩/换库遮罩——最顶层）
+   * top-layer 原生 <dialog> 不走 z-index（showModal 自带 top-layer）。 */
+  --cortex-z-base: 1;
+  --cortex-z-raised: 10;
+  --cortex-z-overlay: 100;
+  --cortex-z-toast: 1000;
+  --cortex-z-modal: 9999;
+
   /* ── 圆角 · Meta 阶梯 ──
    * 保留 sm/md/lg 语义：lg=16 仍是标准卡片（原用 radius-lg 的卡片无需逐站迁移）；
    * md=8 对齐 Meta text-input；新增 xl/2xl 给大卡与对话框，pill 给按钮/徽章/导航。 */

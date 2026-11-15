@@ -374,7 +374,7 @@ export class ChatView extends LitElement {
       position: absolute;
       top: 6px;
       right: 8px;
-      z-index: 2;
+      z-index: var(--cortex-z-base);
       width: 26px;
       height: 26px;
       border: 1px solid var(--cortex-border);
@@ -442,7 +442,7 @@ export class ChatView extends LitElement {
     dialog > * { display: block; padding: var(--cortex-space-6); }
     /* 移动端预览 overlay。**不得设 z-index**（2026-09-29 修复：对话页
        参考资料 PDF 在移动浏览器灰屏的真根因）——z-index 会创建层叠
-       上下文，把 document.body 下 z-index:1 的 pdf-viewer portal 整个
+       上下文，把 document.body 下 z-index: var(--cortex-z-base) 的 pdf-viewer portal 整个
        压在下面（canvas 画好但被挡死）。去掉后：overlay（absolute 定位）
        仍画在静态消息流之上（背景遮罩语义不变），而 portal（定位 + z:1）
        反超 overlay（z:auto）显露 canvas；toc-drawer（z:30）等内部浮层
@@ -455,7 +455,7 @@ export class ChatView extends LitElement {
       flex-direction: column;
     }
     /* 移动端预览打开时隐藏对话顶栏：focus-header 因 backdrop-filter 需
-       z-index:10，会浮在 z:auto 的 preview-overlay 之上（预览界面露出
+       z-index: var(--cortex-z-raised)，会浮在 z:auto 的 preview-overlay 之上（预览界面露出
        顶栏的「新会话」返回钮——点了回 initial 而非关闭预览，2026-09-29
        修复）。预览层的返回由 preview-pane 自带 mobile-header 承担。 */
     @media (max-width: 1023px) {

@@ -181,7 +181,7 @@ export class DiaryRecordPanel extends LitElement {
       border-radius: 50%;
       background: var(--cortex-primary);
       position: relative;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
     }
     .frag-content {
       grid-column: 2;
