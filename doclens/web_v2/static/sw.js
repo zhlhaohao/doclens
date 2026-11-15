@@ -4,7 +4,7 @@
 //   - HTML：network-first，失败回退缓存
 //   - /api/*：不拦截（永远走网络）
 //   - manifest / sw 自身：network-first
-const CACHE_VERSION = "doclens-473ea749-mwhhzoy6";
+const CACHE_VERSION = "doclens-234a44ee-mwhiw87h";
 const CACHE_NAME = `doclens-static-${CACHE_VERSION}`;
 
 self.addEventListener("install", (event) => {

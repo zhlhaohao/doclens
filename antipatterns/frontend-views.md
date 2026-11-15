@@ -85,7 +85,8 @@
 |---|---|---|---|
 | 2026-11-15 | 修 AP-1 | AP-1 | done(35ade81f→amend ed2fafbd)：新建 vision-gate-dialog.ts / interject-dialog.ts，chat-view.ts 2396→2335 行；chat 域 136 测试过，build 过；chat-view-preview 1 败 + settings 3 败为预存失败（stash 对照证实）。 |
 | 2026-11-15 | 按你的想法继续修 | AP-8 | done(b24db34e)：断言同步即梦×4 字段（18→22、AI tab 5→9）；根因 = jimeng 两提交加字段未同步测试（测试滞后，非固化错误）；22 测试过，build 过。 |
-| 2026-11-15 | 按你的想法继续修 | AP-2 | done(4014f82f)：preview-pane 新增公共 `reLocate()`（内部转发 md-viewer + 自理 updateComplete），search-view 删双层穿透/`as any`、querySelector 泛型收敛 PreviewPane；130 单测过、build 过、E2E 仅 S7/S8 预存失败（基线对照全同）。 |
+| 2026-11-15 | 按你的想法继续修 | AP-2 | done(4014f82f→amend 234a44ee)：preview-pane 新增公共 `reLocate()`（内部转发 md-viewer + 自理 updateComplete），search-view 删双层穿透/`as any`、querySelector 泛型收敛 PreviewPane；130 单测过、build 过、E2E 仅 S7/S8 预存失败（基线对照全同）。 |
+| 2026-11-15 | 继续修 | AP-9 | done(f0167682)：S7 断言词改「第五」（分词失联）、S8 固定等待改轮询 + 补 shadow 层、markInView 大小写不敏感；4 例全过。修复中暴露 S6 xlsx 定位真回归（-229px 恒偏）→ 记 AP-10。 |
 
 ## 六、修复中新发现（discovered-during-fix）
 
@@ -96,9 +97,15 @@
 - **修复方案**：同步断言到 22 条字段真值；落地 AP-6 的前后端守卫测试防再漂移。
 - **回归验证**：`npx vitest run tests/settings-fields.spec.ts tests/settings-view.spec.ts`。
 
-### AP-9 E2E search-preview-locate S7/S8 全平台失败（预存，与 AP-2 无关） [P2] [status: discovered-during-fix]
+### AP-9 E2E search-preview-locate S7/S8 全平台失败（预存，与 AP-2 无关） [P2] [status: done(f0167682)]
 - **形态**：测试与实现失联（S7 pptx 定位 mark 未入视口；S8 grep 模式 file-card 未出现/点击后 preview-pane 未出现）
 - **证据**：`tests/e2e/search-preview-locate.spec.ts:190,205` 在 AP-2 改动前后 stash 对照均失败（desktop+mobile 共 4 例）；其余用例全过。
-- **风险**：已损——搜索→预览定位旅程的两个格式（pptx/py-grep）回归通道红着，真回归会被噪音淹没。
-- **修复方案**：单独排查（可能涉 pptx 分页表切换收敛循环 / grep 模式结果渲染），不在本批修复范围。
-- **回归验证**：`npm run test:e2e:search -- tests/e2e/search-preview-locate.spec.ts`。
+- **根因（修复时查明）**：S7 = 断言词「第五页含」被后端分词切碎（query_words=["第五"]），前端按词高亮只标「第五」——断言与分词行为失联；S8 = 固定 1.5s 等待抢在 code-viewer 异步渲染前 + 选择器少穿一层 shadow。markInView 顺带改大小写不敏感（语料 Sheet vs 查询 sheet）。
+- **回归**：S7/S8 desktop+mobile 4 例全过；tsc/build 过。
+
+### AP-10 xlsx（S6）定位回归：mark 恒在视口上方 -229px [P1] [status: discovered-during-fix]
+- **形态**：功能真回归（非测试问题）——搜索命中行点击后收敛循环未把 mark 拉进视口，恒定偏差 -229px（非随机漂移）。
+- **证据**：AP-9 修复 markInView 大小写后断言推进到视口判定，暴露该偏差；desktop+mobile 均现。md-viewer 收敛循环（`_settleTo`/`jumpToSourceLine`）在 xlsx 分页（sheet 切换）场景失效。`git log` 显示 md-viewer 近期被批5a/5b/6b（cf5321c6/36f57844/dbebb233）改动——疑似这批引入。
+- **风险**：已损——xlsx 搜索→预览定位功能实际不可用（用户点击命中行看不到高亮）。
+- **修复方案**：二分定位引入提交（批5a/5b/6b），查收敛循环在分页 sheet 切换下的 target 块选取/估高逻辑。
+- **回归验证**：`npx playwright test tests/e2e/search-preview-locate.spec.ts -g S6`。

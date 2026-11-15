@@ -73,7 +73,10 @@ async function markInView(
       mdv.shadowRoot!.querySelectorAll("mark.keyword-hit"),
     ) as HTMLElement[];
     if (!marks.length) return { ok: false, reason: "no keyword-hit marks" };
-    const target = marks.find((m) => m.textContent?.includes(text));
+    // 大小写不敏感：命中行 spans 由后端按词标出（rg --ignore-case 同口径），
+    // 语料原文可能是「Sheet」而查询词是小写「sheet」（S6 实证 mobile 翻车）。
+    const needle = text.toLowerCase();
+    const target = marks.find((m) => m.textContent?.toLowerCase().includes(needle));
     if (!target) {
       return {
         ok: false,
@@ -192,12 +195,13 @@ test.describe("search → preview locate（desktop）", () => {
     const card = await cardByPath(page, "幻灯.pptx");
     expect(card).not.toBeNull();
     await card!.locator(".row").first().click();
-    // keyword = hl（spans 字面「第五页含」整串），不含 kirin。
-    // 分页幻灯切换收敛循环持续校准，轮询等待。
+    // keyword = hl（后端分词 query_words=["第五"]，「第五页含」被切碎——
+    // 前端按词高亮只标「第五」；断言按实际高亮口径查「第五」mark），
+    // 不含 kirin。分页幻灯切换收敛循环持续校准，轮询等待。
     let r: any = { ok: false };
     for (let i = 0; i < 16 && !r.ok; i++) {
       await page.waitForTimeout(500);
-      r = await markInView(page, "第五页含", 80);
+      r = await markInView(page, "第五", 80);
     }
     expect(r.ok, (r as any).reason).toBe(true);
   });
@@ -213,23 +217,28 @@ test.describe("search → preview locate（desktop）", () => {
     const card = await cardByPath(page, "kirin_util.py");
     expect(card).not.toBeNull();
     await card!.locator(".row").first().click();
-    await page.waitForTimeout(1500);
-    const lineView = await page.evaluate(() => {
-      const find = (root: ShadowRoot | Document): Element | null => {
-        const direct = root.querySelector?.("preview-pane");
-        if (direct) return direct;
-        for (const el of Array.from(root.querySelectorAll?.("*") ?? [])) {
-          if ((el as HTMLElement).shadowRoot) {
-            const hit = find((el as HTMLElement).shadowRoot!);
-            if (hit) return hit;
+    // code-viewer 内容经 fetch 异步就位，固定等待偶发抢在渲染前（AP-9 实证）；
+    // 轮询等 .line-no 出现（上限 ~8s）。
+    let lineView: string | null = null;
+    for (let i = 0; i < 16 && !lineView; i++) {
+      await page.waitForTimeout(500);
+      lineView = await page.evaluate(() => {
+        const find = (root: ShadowRoot | Document): Element | null => {
+          const direct = root.querySelector?.("preview-pane");
+          if (direct) return direct;
+          for (const el of Array.from(root.querySelectorAll?.("*") ?? [])) {
+            if ((el as HTMLElement).shadowRoot) {
+              const hit = find((el as HTMLElement).shadowRoot!);
+              if (hit) return hit;
+            }
           }
-        }
-        return null;
-      };
-      const pp: any = find(document);
-      if (!pp) return null;
-      return pp.shadowRoot?.querySelector(".body .line-no")?.textContent ?? null;
-    });
+          return null;
+        };
+        const pp: any = find(document);
+        if (!pp) return null;
+        return pp.shadowRoot?.querySelector("code-viewer")?.shadowRoot?.querySelector(".body .line-no")?.textContent ?? null;
+      });
+    }
     // BUG-G1 已修：grep 相对路径 → 行号视图正常打开
     expect(lineView).toBeTruthy();
   });
