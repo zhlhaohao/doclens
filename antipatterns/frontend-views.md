@@ -12,7 +12,7 @@
 
 ## 二、发现条目
 
-### AP-1 chat-view.ts God Object（2396 行，11 个对话框渲染器集于一身） [P2] [status: done(35ade81f)]
+### AP-1 chat-view.ts God Object（2396 行，11 个对话框渲染器集于一身） [P2] [status: done(ed2fafbd→续做 5d2f0a33/3fb0c392/930b976c/216e30be)]
 - **形态**：God Object（Fowler Bloaters；Divergent Change——会话历史/流式 SSE/技能菜单/vision 闸门/rewind/compact/fork/import/rename/delete-turn/interject 十余种变更原因全落一个文件）
 - **证据**：`views/chat-view.ts:2313` render() 同时挂 9 个 `_render*Dialog()`；`:518-627` 约 30 个 `@state` 字段；`:935-2513` 有 11 个 `_render*Dialog` 私有渲染器。改任何对话框/流式事件/历史列表都要 touch 同一文件。
 - **风险**：将损——合并冲突热点；每加一个会话级对话框该类再长一截；新人定位成本高。
@@ -92,6 +92,9 @@
 | 2026-11-15 | 继续修（除 AP-3） | AP-6 | done(a5db3e45)：新 tests/test_settings_fields_contract.py——前端 envVar ⊆ KNOWN_KEYS 漂移即红 + 高发键反向抽查；3 测试过。 |
 | 2026-11-15 | 继续修（除 AP-3） | AP-5 | done(7e8029dc)：全域取证 16+ 处空 catch 均有正当理由（fallback/注释/事件透出），Error Hiding 嫌疑排除；仅补 client.ts:32 注释。 |
 | 2026-11-15 | 继续修（除 AP-3） | AP-4 | done(114a67fa)：tokens.css 五档 z 变量（base/raised/overlay/toast/modal），26 文件 47 处裸数字归层替换；128 测试过、build 过。 |
+| 2026-11-15 | 用户指出首修不足 | AP-1 续做 | chat-view 2469→1643 行（-33%）：CSS 外迁(5d2f0a33) + 对话框模板域(5d2f0a33) + 会话操作域(3fb0c392) + 会话历史域(930b976c) + 对话技能域(216e30be)，四个 ReactiveController + 模板/样式模块；SSE 回合域经评估不迁（核心职责本身，强拆属 Wrong Abstraction）。 |
+| 2026-11-15 | 做更有价值的事 | AP-11 | done(fa8c0425)：追「预存失败」根因 = 接口异常响应体致整页白屏（chat/search 同源），连带清掉 64 unhandled。 |
+| 2026-11-15 | 同意补安全网 | AP-12 | done(a8b9c265/33d4849c)：16 例流程级测试覆盖三视图核心链路（chat 6/search 5/files 5），全量 1127 过 0 失败。 |
 | 2026-11-15 | 修 AP-3 | AP-3 | done(857c0d36)：新 utils/files-modes-controller.ts（252 行）承载改动/深读模式域（模式互斥/diff 取数/目录守卫/技能探测删除/同步轮次），files-view 删 8 个 @state 与 4 方法只留渲染接线；_onStoreChange 改 subscribeSelector；消 2 处 as any 穿透；新增 controller spec 4 例；46 测试过、全量 1076 过、build 过。 |
 
 ## 六、修复中新发现（discovered-during-fix）
@@ -108,6 +111,17 @@
 - **证据**：`tests/e2e/search-preview-locate.spec.ts:190,205` 在 AP-2 改动前后 stash 对照均失败（desktop+mobile 共 4 例）；其余用例全过。
 - **根因（修复时查明）**：S7 = 断言词「第五页含」被后端分词切碎（query_words=["第五"]），前端按词高亮只标「第五」——断言与分词行为失联；S8 = 固定 1.5s 等待抢在 code-viewer 异步渲染前 + 选择器少穿一层 shadow。markInView 顺带改大小写不敏感（语料 Sheet vs 查询 sheet）。
 - **回归**：S7/S8 desktop+mobile 4 例全过；tsc/build 过。
+
+### AP-11 历史列表接口异常响应体 → 页面崩溃（chat/search 同源） [P1] [status: done(fa8c0425)]
+- **形态**：Error Hiding 的反面——数据入口无防御：接口返回异常响应体（代理错误页/字段缺失）→ sessions=undefined → 渲染读 .length 抛 TypeError → 整页白屏。
+- **证据**：chat-view 从审计第一天起的测试失败（_backToInitial）即此根因，此前被「预存失败」标签掩盖；search-view.ts:632 同源孪生。连带 64 个 unhandled rejection 污染测试输出。
+- **修复**：数据入口兜底空列表（chat-history-controller.load + search-view._loadHistory）；修复后全量 0 失败 0 unhandled。
+- **教训**：长期挂着的「预存失败」值得追根因——它可能是真 bug 的唯一信号。
+
+### AP-12 三视图无流程级测试（对话/搜索/文件核心链路裸奔） [P2] [status: done(a8b9c265/33d4849c)]
+- **形态**：测试金字塔断层——只有纯函数单元测试，组件间协作语义（流式渲染/停止/归属守卫/行定位/模式互斥）无端到端保护，重构最易破坏的部分恰恰无网。
+- **修复**：新增 chat-flow(6)/search-flow(5)/files-flow(5) 共 16 例流程级测试；顺带暴露并记录「子组件由 app.ts 统一注册」的隐式依赖（三视图同坑）。
+- **意义**：SSE 回合域（AP-1 未迁的最后一块）今后动刀有安全网。
 
 ### AP-10 xlsx（S6）定位回归：mark 恒在视口上方 -229px [P1→关闭] [status: done(7ee8221e)——实为断言语义失联，非功能回归]
 - **原判定修正**：调试脚本时间序列采样证实定位机制**完全正确**（Sheet 03 标题块贴顶 b3top=33px）——S6 失败根因是断言找「第一个含 sheet 的 mark」（= Sheet1 标题，视口外），与「跳转锚定节点标题块」的语义失联（命中行是节点标题行，闪烁锚定块起始处）。功能无回归。
