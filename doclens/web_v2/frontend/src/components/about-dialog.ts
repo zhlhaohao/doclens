@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
-import { dialogFrameStyles } from "../styles/dialog-frame";
+import { dialogHeadStyles } from "../styles/dialog-frame";
 import { customElement, property, state } from "lit/decorators.js";
+import "./c-dialog";
 
 /** 运行情况快照（/api/health.runtime，ADR-0037；rss_mb psutil 缺席为 null） */
 interface RuntimeVitals {
@@ -23,7 +24,7 @@ interface RuntimeVitals {
  * Esc / 点遮罩 / 关闭按钮 → 派发 close。 */
 @customElement("about-dialog")
 export class AboutDialog extends LitElement {
-  static styles = css`${dialogFrameStyles} 
+  static styles = css`${dialogHeadStyles} 
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       font-family: var(--cortex-font-mono);
@@ -252,8 +253,7 @@ export class AboutDialog extends LitElement {
     if (!this.open) return html``;
     const rt = this._runtime();
     return html`
-      <div class="scrim" @click=${this._close}></div>
-      <dialog>
+      <c-dialog ?open=${true} @cancel=${this._close}>
         <div class="head">
           <h3>关于</h3>
           <button class="close-btn" aria-label="关闭" @click=${this._close}>✕</button>
@@ -317,7 +317,7 @@ export class AboutDialog extends LitElement {
           </div>`
             : null}
         </div>
-      </dialog>
+      </c-dialog>
     `;
   }
 }

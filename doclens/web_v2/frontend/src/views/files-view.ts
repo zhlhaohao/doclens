@@ -1,4 +1,5 @@
 import { LitElement, html, css } from "lit";
+import "../components/c-dialog";
 import { customElement, state } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import { filesApi } from "../api/files";
@@ -46,6 +47,7 @@ import "../components/spinner";
 import "../components/workdir-switch-dialog";
 import { downloadServerFile } from "../utils/download";
 import { copyText } from "../utils/clipboard";
+import { dialogCardStyles } from "../styles/dialog-frame";
 
 type DialogKind = "mkdir" | "new-file" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
 
@@ -68,7 +70,7 @@ export class FilesView extends LitElement {
   /** 两个 splitter 的总宽度 */
   static readonly SPLITTERS_TOTAL = 8;
 
-  static styles = css`
+  static styles = [dialogCardStyles, css`
     :host {
       display: flex; flex-direction: column;
       flex: 1; min-height: 0;
@@ -201,30 +203,8 @@ export class FilesView extends LitElement {
       /* 与左侧 32px 返回钮对称，保证文件名视觉居中 */
       margin-right: 32px;
     }
-    dialog {
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      /* border-box：移动端 width:100vw 时边框不额外撑出屏幕 */
-      box-sizing: border-box;
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      min-width: 360px;
-      max-width: 90vw;
-    }
-    @media (max-width: 1023px) {
-      dialog {
-        min-width: 0;
-        /* 移动端对话框占满屏幕宽度（2026-08-17 决议） */
-        width: 100vw;
-        max-width: 100vw;
-        max-height: calc(100vh - 16px);
-        border-radius: var(--cortex-radius-md);
-      }
-      dialog > * { padding: var(--cortex-space-4); }
-    }
-    dialog::backdrop { background: rgba(0,0,0,0.3); }
-    dialog > * { display: block; padding: var(--cortex-space-6); }
+    /* 对话框卡片形态走公共块（AP-3）；此处仅保留本视图特有宽度 */
+    dialog { min-width: 360px; }
     /* 深读技能删除确认（内联轻量确认框，非独立组件） */
     .confirm-dialog h3 {
       margin: 0 0 var(--cortex-space-3);
@@ -375,7 +355,7 @@ export class FilesView extends LitElement {
     @media (min-width: 1024px) {
       .mobile-layout { display: none; }
     }
-  `;
+  `];;
 
   @state() private _dialog: DialogKind = null;
   @state() private _reparsePath = ""; // 重新解析目标图像路径
@@ -781,11 +761,6 @@ export class FilesView extends LitElement {
 
   updated() {
     // preview 由 _onFileListActivated 主动驱动，无需在 update 中被动触发
-    // 所有对话框用 showModal（top-layer + backdrop + ESC 关闭）：<dialog open>
-    // 是非模态 inline 元素，不进 top layer，列表内带 z-index 的元素（如表头
-    // 列分隔线 .col-resize z-index: var(--cortex-z-base)）会穿透压在对话框之上
-    const dlg = this.shadowRoot?.querySelector("dialog");
-    if (dlg && !dlg.open) dlg.showModal();
     // 登记模式列表组件句柄（AP-3：controller 经公共 refresh() 调子组件，
     // 消 `as any` 直捣子组件内部）
     this._modes.registerChangesList(
@@ -1704,81 +1679,81 @@ export class FilesView extends LitElement {
 
   private _renderDialogs() {
     if (this._dialog === "mkdir") {
-      return html`<dialog @cancel=${this._cancelDialog}>
+      return html`<c-dialog ?open=${true} minWidth="360" @cancel=${this._cancelDialog}>
         <mkdir-dialog
           @submit=${this._onMkdirSubmit}
           @cancel=${this._cancelDialog}
         ></mkdir-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     if (this._dialog === "new-file") {
-      return html`<dialog @cancel=${this._cancelDialog}>
+      return html`<c-dialog ?open=${true} minWidth="360" @cancel=${this._cancelDialog}>
         <new-file-dialog
           @submit=${this._onNewFileSubmit}
           @cancel=${this._cancelDialog}
         ></new-file-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     if (this._dialog === "rename") {
       const sel = this._state.selectedPaths[0] || "";
       const name = sel.split("/").pop() || "";
-      return html`<dialog @cancel=${this._cancelDialog}>
+      return html`<c-dialog ?open=${true} minWidth="360" @cancel=${this._cancelDialog}>
         <rename-dialog
           .currentName=${name}
           @submit=${this._onRenameSubmit}
           @cancel=${this._cancelDialog}
         ></rename-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     if (this._dialog === "move") {
-      return html`<dialog @cancel=${this._cancelDialog}>
+      return html`<c-dialog ?open=${true} minWidth="360" @cancel=${this._cancelDialog}>
         <move-dialog
           @submit=${this._onMoveSubmit}
           @cancel=${this._cancelDialog}
         ></move-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     if (this._dialog === "delete") {
-      return html`<dialog @cancel=${this._cancelDialog}>
+      return html`<c-dialog ?open=${true} minWidth="360" @cancel=${this._cancelDialog}>
         <delete-dialog
           @submit=${this._onDeleteSubmit}
           @cancel=${this._cancelDialog}
         ></delete-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     if (this._dialog === "reparse") {
-      return html`<dialog @cancel=${this._cancelDialog}>
+      return html`<c-dialog ?open=${true} minWidth="360" @cancel=${this._cancelDialog}>
         <reparse-dialog
           .path=${this._reparsePath}
           @done=${this._onReparseDone}
           @cancel=${this._cancelDialog}
         ></reparse-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     if (this._dialog === "skill-toolbox") {
-      return html`<dialog @cancel=${this._cancelDialog}>
+      return html`<c-dialog ?open=${true} minWidth="360" @cancel=${this._cancelDialog}>
         <skill-toolbox-dialog
           .skills=${this._toolboxSkills}
           .error=${this._toolboxSkillsError}
           @pick=${this._onSkillPick}
           @cancel=${this._cancelDialog}
         ></skill-toolbox-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     if (this._dialog === "skill-run") {
-      return html`<dialog @cancel=${this._cancelDialog}>
+      return html`<c-dialog ?open=${true} minWidth="360" @cancel=${this._cancelDialog}>
         <skill-run-dialog
           .skill=${this._pickedSkill}
           .filePaths=${this._pickedSkill ? this._pathsForSkill(this._pickedSkill) : []}
           @submit=${this._onSkillRunSubmit}
           @cancel=${this._cancelDialog}
         ></skill-run-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     if (this._modes.deleteBook) {
       // 深读技能删除确认（ADR-0041：真删，源书文件不动，可随时重新生成）
       const b = this._modes.deleteBook;
-      return html`<dialog @cancel=${() => { this._modes.deleteBook = null; }}>
+      return html`<c-dialog ?open=${true} @cancel=${() => { this._modes.deleteBook = null; }}>
         <div class="confirm-dialog">
           <h3>删除深读技能</h3>
           <p>将删除「${b.title}」的深读技能（技能目录真删，不可恢复）。源文件不受影响，可随时用 /deep-read 重新生成。</p>
@@ -1787,7 +1762,7 @@ export class FilesView extends LitElement {
             <button class="danger" @click=${() => void this._onBookDeleteConfirm()}>删除</button>
           </div>
         </div>
-      </dialog>`;
+      </c-dialog>`;
     }
     return html``;
   }

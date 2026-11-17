@@ -1,10 +1,11 @@
 import { LitElement, html, css, nothing } from "lit";
-import { dialogFrameStyles } from "../styles/dialog-frame";
+import { dialogHeadStyles } from "../styles/dialog-frame";
 import { customElement, property } from "lit/decorators.js";
 
 import "./icon";
 import { store, actions } from "../state/store";
 import { watchStatusLabel } from "../utils/watch-status";
+import "./c-dialog";
 
 /**
  * 控制面板对话框（系统菜单「控制面板」入口）：收纳低频维护操作，
@@ -23,7 +24,7 @@ import { watchStatusLabel } from "../utils/watch-status";
  */
 @customElement("control-panel-dialog")
 export class ControlPanelDialog extends LitElement {
-  static styles = css`${dialogFrameStyles} 
+  static styles = css`${dialogHeadStyles} 
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -131,8 +132,7 @@ export class ControlPanelDialog extends LitElement {
     const watchHint =
       changeCount > 0 ? `${label} ·近期变化 ${changeCount}` : label;
     return html`
-      <div class="scrim" @click=${this._close}></div>
-      <dialog open>
+      <c-dialog ?open=${true} @cancel=${this._close}>
         <div class="head">
           <h3>控制面板</h3>
           <button class="close-btn" type="button" @click=${this._close} aria-label="关闭">✕</button>
@@ -166,7 +166,7 @@ export class ControlPanelDialog extends LitElement {
             </span>
           </button>
         </div>
-      </dialog>
+      </c-dialog>
     `;
   }
 }

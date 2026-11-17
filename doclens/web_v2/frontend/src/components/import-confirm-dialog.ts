@@ -9,7 +9,7 @@ import { dialogSlotStyles } from "../utils/dialog-styles";
  * 框」开启时 confirm 被静默返回 false——点导入毫无反应且无任何提示；同 id
  * 重复导入时后端 skipped，前端只闪 3 秒 toast，同样像是「没反应」。
  *
- * 三态复用同一个宿主（chat-view 渲染，updated() 里 showModal）：
+ * 三态复用同一个宿主（chat-view 渲染，外壳为 <c-dialog> 公共件，AP-3）：
  *   - confirm：展示文件名 + 标题 + 条目数，确认后冒泡 `import-confirm`
  *     （detail: { asCopy: false }）。
  *   - exists：后端回报同 id 已存在，说明「已导入过」，提供「作为副本导入」

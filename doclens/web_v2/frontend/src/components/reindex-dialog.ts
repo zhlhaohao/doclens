@@ -7,35 +7,14 @@ import type { ReindexState } from "../state/types";
 import { streamSSE } from "../api/client";
 import { pushLocalToast } from "../utils/toast";
 import "./toast-stack";
+import "./c-dialog";
 
 @customElement("reindex-dialog")
 export class ReindexDialog extends LitElement {
   static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
-    :host {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: var(--cortex-z-toast);
-      pointer-events: none;
-    }
-    /* 仅在 dialog 打开时显示 scrim 并捕获点击（modal 行为） */
-    :host(:has(dialog[open])) {
-      background: rgba(0, 0, 0, 0.3);
-      pointer-events: auto;
-    }
-    dialog {
-      pointer-events: auto;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      padding: 0; background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      min-width: 360px; max-width: 90vw;
-    }
-    dialog::backdrop { background: rgba(0,0,0,0.3); }
-    dialog > * { display: block; padding: var(--cortex-space-6); }
-    /* toast-stack 在 closed 态下仍需可点击 */
+    /* AP-3：外壳统一走 <c-dialog> 公共件（原生 <dialog> + showModal
+       top-layer）——本组件不再自管 scrim / 全屏 fixed 外壳。
+       toast-stack 仍在 closed 态下渲染，需保持可点击。 */
     :host > toast-stack { pointer-events: auto; }
     h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .body { font-size: var(--cortex-fs-sm); color: var(--cortex-text); line-height: 1.6; }
@@ -46,8 +25,9 @@ export class ReindexDialog extends LitElement {
     }
     button.warn { background: var(--cortex-danger); color: var(--cortex-on-danger); border: none; border-radius: var(--cortex-radius-lg); }
     @media (max-width: 1023px) {
-      dialog {
-        min-width: 0; width: calc(100vw - 16px); max-width: calc(100vw - 16px);
+      .reindex-body {
+        width: calc(100vw - 16px);
+        max-width: calc(100vw - 16px);
         max-height: calc(100vh - 16px);
       }
     }
@@ -180,7 +160,9 @@ export class ReindexDialog extends LitElement {
     const r = store.getState().reindex;
     if (r.dialog === "closed") return html`<toast-stack></toast-stack>`;
     return html`
-      <dialog open>${this._renderBody(r)}</dialog>
+      <c-dialog ?open=${true} minWidth="360" class="reindex-dialog-shell">
+        <div class="reindex-body">${this._renderBody(r)}</div>
+      </c-dialog>
       <toast-stack></toast-stack>
     `;
   }

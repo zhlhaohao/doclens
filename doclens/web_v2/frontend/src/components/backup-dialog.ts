@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { dialogFrameStyles } from "../styles/dialog-frame";
+import { dialogHeadStyles } from "../styles/dialog-frame";
 import { emptyStateStyles } from "../styles/empty-state-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
@@ -11,6 +11,7 @@ import {
 } from "../api/sessions";
 import { formatBytes } from "../utils/format";
 import "./icon";
+import "./c-dialog";
 
 /**
  * 会话备份对话框（控制面板「会话备份」行入口，ADR-0047）：列出 sessions.db
@@ -22,7 +23,7 @@ import "./icon";
  */
 @customElement("backup-dialog")
 export class BackupDialog extends LitElement {
-  static styles = [dialogFrameStyles, emptyStateStyles, css`
+  static styles = [dialogHeadStyles, emptyStateStyles, css`
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -218,8 +219,7 @@ export class BackupDialog extends LitElement {
   render() {
     if (!this.open) return nothing;
     return html`
-      <div class="scrim" @click=${this._close}></div>
-      <dialog open>
+      <c-dialog ?open=${true} @cancel=${this._close}>
         <div class="head">
           <h3>会话备份</h3>
           <button class="close-btn" type="button" @click=${this._close} aria-label="关闭">✕</button>
@@ -303,7 +303,7 @@ export class BackupDialog extends LitElement {
               </div>
             `
           : nothing}
-      </dialog>
+      </c-dialog>
     `;
   }
 }

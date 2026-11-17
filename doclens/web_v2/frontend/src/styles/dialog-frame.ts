@@ -1,53 +1,62 @@
-/** 原生 <dialog> 对话框外壳公共样式（AP-40 抽取）。
+/** 原生 <dialog> 对话框外壳公共样式（AP-40 抽取 → AP-3 收敛）。
  *
- * about-dialog / backup-dialog / control-panel-dialog / watch-changes-dialog /
- * workdir-switch-dialog 五件此前逐字复制同一段外壳：:host 全屏遮罩定位 +
- * :host([open]) 半透明遮罩 + .scrim + dialog 卡片 + .head 标题行 +
- * .close-btn 关闭钮 + 移动端 dialog 撑满。漂移实证：workdir 的
- * .close-btn 多出 :disabled 分支、backup 的 dialog 用 `width: min(...)`
- * 而其余四家用 min-width，三处各写一遍移动端断点。
+ * 历史：about / backup / control-panel / watch-changes / workdir-switch
+ * 五件逐字复制同一段外壳（:host 全屏遮罩 + .scrim + 自绘 dialog 卡片
+ * + .head + .close-btn）。AP-3 已把那五件迁到 `<c-dialog>` 公共件
+ * （原生 <dialog> + showModal top-layer），**自绘外壳
+ * `dialogFrameStyles` 随之废弃删除**——外壳唯一真相源是
+ * `components/c-dialog.ts`。
  *
- * 归一为**样式层**公共块（组件本体不合并——各对话框内容结构各异）。
- * 用法：`static styles = [dialogFrameStyles, css`…特有样式…`]`，数组后者
- * 覆盖前者（各组件的 dialog 尺寸差异写在后面的片段里）。
+ * 本文件现存两块：
+ * - `dialogCardStyles`：卡片形态（边框/圆角/阴影/背景/backdrop/移动端）
+ * - `dialogHeadStyles`：卡片内标题行 + 关闭钮（迁出后由各组件自渲染）
  */
 
 import { css } from "lit";
 
-/** 对话框外壳：遮罩 + 卡片 + 标题行 + 关闭钮 + 移动端断点。 */
-export const dialogFrameStyles = css`
-  :host {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--cortex-z-toast);
-    pointer-events: none;
-  }
-  /* 仅在 open 时显示遮罩并捕获点击（modal 行为） */
-  :host([open]) {
-    background: rgba(0, 0, 0, 0.3);
-    pointer-events: auto;
-  }
-  .scrim {
-    position: absolute;
-    inset: 0;
-  }
+/** 原生 <dialog> 卡片形态（AP-3）：族 B 三份近似复制的单一真相源。
+ *
+ *  chat-view-styles / files-view / diary-view 此前各写一遍几乎相同的
+ *  规则（border + radius-xl + padding:0 + surface + shadow-lg +
+ *  max-width:90vw + ::backdrop + `dialog > *` padding），仅 min-width 与
+ *  移动端规则略有差异。归一为**样式层**公共块。
+ *
+ *  用法：`static styles = [dialogCardStyles, css`…特有…`]`，或直接
+ *  import 到视图的 styles 组合里。
+ */
+export const dialogCardStyles = css`
   dialog {
-    position: relative;
-    pointer-events: auto;
     border: 1px solid var(--cortex-border);
     border-radius: var(--cortex-radius-xl);
+    box-sizing: border-box;
     padding: 0;
     background: var(--cortex-surface);
     box-shadow: var(--cortex-shadow-lg);
-    min-width: 380px;
     max-width: 90vw;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
   }
+  dialog::backdrop {
+    background: rgba(0, 0, 0, 0.3);
+  }
+  /* 移动端占满屏宽（2026-08-17 决议）——与 files-view 原规格一致 */
+  @media (max-width: 1023px) {
+    dialog {
+      min-width: 0;
+      width: 100vw;
+      max-width: 100vw;
+      max-height: calc(100vh - 16px);
+      border-radius: var(--cortex-radius-md);
+    }
+  }
+`;
+
+/** 对话框卡片内的标题行 + 关闭钮（AP-3）。
+ *
+ *  族 A 五件（about / backup / control-panel / watch-changes /
+ *  workdir-switch）迁到 `<c-dialog>` 后，标题行与关闭钮不再由外壳
+ *  自绘，改由各组件在自己的 shadow 内渲染——样式从 dialogFrameStyles
+ *  拆出为独立公共块，内容组件 import 即可。
+ */
+export const dialogHeadStyles = css`
   .head {
     display: flex;
     align-items: center;
@@ -79,12 +88,5 @@ export const dialogFrameStyles = css`
   .close-btn:disabled {
     opacity: var(--cortex-btn-disabled-opacity);
     cursor: not-allowed;
-  }
-  @media (max-width: 1023px) {
-    dialog {
-      min-width: 0;
-      width: calc(100vw - 16px);
-      max-width: calc(100vw - 16px);
-    }
   }
 `;

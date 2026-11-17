@@ -19,11 +19,9 @@ import { listPresets, type Preset } from "../api/presets";
 import { pushToast } from "../utils/toast";
 import { getConfig } from "../api/config";
 import { formStyles } from "../styles/form-styles";
+import "./c-dialog";
 
 const LANGS = ["en", "zh", "ja", "ko", "de", "fr", "es", "it", "pt", "ru"];
-
-/** 已挂 cancel 监听的 dialog 元素集合（防重复绑定）。 */
-const CANCEL_WIRED = new WeakSet<HTMLDialogElement>();
 
 @customElement("translate-dialog")
 export class TranslateDialog extends LitElement {
@@ -32,25 +30,16 @@ export class TranslateDialog extends LitElement {
        关于对话框范式）——不被 PDF portal（document.body z-index 1）遮挡、
        不受预览栏 overflow 裁剪（2026-10-08 修复：旧 absolute 定位只浮在
        预览列内）。 */
-    dialog {
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      box-sizing: border-box;
-      padding: var(--cortex-space-5);
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
+    /* 翻译对话框内容区：窄卡片 + 纵向流（外壳走 <c-dialog> 公共件，
+       卡片形态见 styles/dialog-frame 的 dialogCardStyles） */
+    .translate-body {
+      display: flex;
+      flex-direction: column;
+      gap: var(--cortex-space-3);
       width: min(440px, calc(100vw - 32px));
       max-height: calc(100vh - 48px);
       color: var(--cortex-text);
       font-family: var(--cortex-font);
-    }
-    dialog::backdrop {
-      background: rgba(0, 0, 0, 0.4);
-    }
-    dialog[open] {
-      display: flex;
-      flex-direction: column;
-      gap: var(--cortex-space-3);
     }
     h3 {
       margin: 0;
@@ -287,7 +276,8 @@ export class TranslateDialog extends LitElement {
         ? Math.min(100, Math.round((this._progressDone / this._progressTotal) * 100))
         : 0;
     return html`
-      <dialog>
+      <c-dialog ?open=${true} @cancel=${this._onCancel}>
+        <div class="translate-body">
         <h3>翻译 PDF</h3>
         <div class="file">${this.path}</div>
         ${this._phase === "form"
@@ -309,26 +299,18 @@ export class TranslateDialog extends LitElement {
               </div>
             `}
         ${this._error ? html`<div class="status-line err">${this._error}</div>` : nothing}
-      </dialog>
+        </div>
+      </c-dialog>
     `;
   }
 
-  /** 每次渲染后确保模态打开（top layer）；Esc（cancel 事件）统一走
-   *  _close 语义（运行中 = 后台继续，只是关弹框）。用 updated 而非
-   *  firstUpdated——条件挂载 + Lit DOM 复用下 firstUpdated 时机不保证
-   *  dialog 已在树中，可能漏 showModal 导致非模态（2026-10-08 修复）。 */
-  protected updated() {
-    const dlg = this.renderRoot.querySelector("dialog");
-    if (!dlg) return;
-    if (!CANCEL_WIRED.has(dlg)) {
-      dlg.addEventListener("cancel", (e) => {
-        e.preventDefault();
-        this._close();
-      });
-      CANCEL_WIRED.add(dlg);
-    }
-    if (!dlg.open) dlg.showModal();
-  }
+  /** Esc（cancel 事件）统一走 _close 语义（运行中 = 后台继续，只是关弹框）。
+   *  AP-3：模态开关（showModal）已收敛到 <c-dialog> 公共件，本组件只需
+   *  处理 Esc 语义。 */
+  private _onCancel = (e: Event): void => {
+    e.preventDefault();
+    this._close();
+  };
 
   private _renderForm() {
     return html`

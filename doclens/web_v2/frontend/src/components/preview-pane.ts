@@ -374,22 +374,9 @@ export class PreviewPane extends LitElement {
       opacity: 0.35;
       cursor: default;
     }
-    /* 技能工具箱对话框（showModal：top layer 全屏居中——不被 PDF portal
-       （document.body z-index 1）遮挡、不受预览栏 overflow 裁剪；
-       样式对齐 files-view 的 dialog） */
-    dialog {
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      box-sizing: border-box;
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      min-width: 360px;
-      max-width: 90vw;
-    }
-    dialog::backdrop {
-      background: rgba(0, 0, 0, 0.4);
-    }
+    /* AP-3：技能工具箱对话框外壳已迁 <c-dialog> 公共件（原生 <dialog>
+       在其 shadow 内，本组件的 dialog 规则不再命中——原先的卡片形态
+       样式随之成为死样式，一并清除）。 */
     /* 高亮输入条/目录抽屉展开中的激活态 */
     button.highlight-btn.active,
     button.toc-btn.active {
@@ -802,7 +789,7 @@ export class PreviewPane extends LitElement {
 
   async updated(changed: Map<string, unknown>) {
     super.updated?.(changed);
-    // 工具箱对话框 showModal 时机已迁 SkillToolboxController.hostUpdated
+    // 工具箱对话框的模态开关已迁 <c-dialog> 公共件（AP-3）
     // （AP-4 拆分）；list↔run 切换重建 dialog 的重开逻辑同迁。
     // 纯文本分支的滚动容器 .body 只在该分支存在：在则绑定，不在则解绑
     const body = this.shadowRoot!.querySelector(".body") as HTMLElement | null;

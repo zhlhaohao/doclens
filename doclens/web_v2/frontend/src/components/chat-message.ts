@@ -354,7 +354,8 @@ export class ChatMessageEl extends LitElement {
   @state() private _copied = false;
   private _copiedFlash = createCopiedFlash(() => { this._copied = false; });
   /** 对话图片全屏预览（ADR-0034）：data URL，非 null 时渲染 dialog 放大图
-   *  （showModal top-layer，见 updated）；kb-img 内联图点击复用同状态。 */
+   *  （showModal top-layer，见 updated；AP-3 例外——灯箱非卡片形态，
+   *   *  自留原生 dialog）；kb-img 内联图点击复用同状态。 */
   @state() private _imgPreview: string | null = null;
   /** 思考流滑窗尾锚 rAF guard（同帧多次 updated 合并为单次） */
   private _thinkingRafPending = false;

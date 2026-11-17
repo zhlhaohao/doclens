@@ -12,6 +12,14 @@ import { SearchView } from "../src/views/search-view";
 
 const TOKEN_USE = /max-width:\s*var\(--content-max-width,\s*1080px\)/g;
 
+
+/** AP-3 后部分视图的 styles 是数组（公共块组合）——拼全体 cssText 断言。 */
+function cssTextOf(cls: unknown): string {
+  const styles = (cls as any).styles;
+  if (typeof styles?.cssText === "string") return styles.cssText;
+  return (styles as { cssText: string }[]).map((s) => s.cssText).join("\n");
+}
+
 describe("--content-max-width token contract", () => {
   it("tokens.css 定义了 token（单点配置口），hero token 已移除", () => {
     const css = readFileSync(
@@ -23,14 +31,14 @@ describe("--content-max-width token contract", () => {
   });
 
   it("chat-view：内容列限宽全部引用 token，无 820 硬编码", () => {
-    const cssText = (ChatView as any).styles.cssText as string;
+    const cssText = cssTextOf(ChatView);
     const uses = cssText.match(TOKEN_USE) ?? [];
     expect(uses.length).toBeGreaterThanOrEqual(3); // 初始卡 + 对话流 + 输入行
     expect(cssText).not.toMatch(/max-width:\s*820px/);
   });
 
   it("search-view：初始卡引用 token，无 720 硬编码（radial-gradient 除外）", () => {
-    const cssText = (SearchView as any).styles.cssText as string;
+    const cssText = cssTextOf(SearchView);
     expect(
       /\.initial-stack\s*\{[^}]*max-width:\s*var\(--content-max-width,\s*1080px\)/.test(cssText),
     ).toBe(true);
@@ -38,7 +46,7 @@ describe("--content-max-width token contract", () => {
   });
 
   it("diary-view：.page 引用 token，无 820 硬编码", () => {
-    const cssText = (DiaryView as any).styles.cssText as string;
+    const cssText = cssTextOf(DiaryView);
     expect(
       new RegExp(`\\.page\\s*\\{[^}]*max-width:\\s*var\\(--content-max-width,\\s*1080px\\)`).test(cssText),
     ).toBe(true);

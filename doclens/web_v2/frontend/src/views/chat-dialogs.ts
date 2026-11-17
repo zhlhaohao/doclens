@@ -7,6 +7,7 @@
  * 约定：每个函数在「不显示」时返回 nothing（调用方无条件放入模板即可）。
  */
 import { html, nothing } from "lit";
+import "../components/c-dialog";
 
 import type { Session } from "../state/types";
 import type { SkillInfo } from "../api/skills";
@@ -74,14 +75,14 @@ export function renderSkillDialog(props: {
 }) {
   if (!props.open) return nothing;
   return html`
-    <dialog @cancel=${props.onCancel}>
+    <c-dialog ?open=${true} @cancel=${props.onCancel}>
       <skill-toolbox-dialog
         .skills=${props.skills}
         .error=${props.error}
         @pick=${props.onPick}
         @cancel=${props.onCancel}
       ></skill-toolbox-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }
 
 /** 会话标题改名对话框宿主。 */
@@ -93,13 +94,13 @@ export function renderRenameDialog(props: {
 }) {
   if (!props.open || !props.session) return nothing;
   return html`
-    <dialog @cancel=${props.onCancel}>
+    <c-dialog ?open=${true} @cancel=${props.onCancel}>
       <session-rename-dialog
         .currentTitle=${props.session.title}
         @submit=${props.onSubmit}
         @cancel=${props.onCancel}
       ></session-rename-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }
 
 /** 视觉能力拦截对话框宿主（ADR-0034 L3）。 */
@@ -111,13 +112,13 @@ export function renderVisionGateDialog(props: {
 }) {
   if (!props.open) return nothing;
   return html`
-    <dialog @cancel=${props.onCancel}>
+    <c-dialog ?open=${true} @cancel=${props.onCancel}>
       <vision-gate-dialog
         .modelName=${props.modelName}
         @goto-settings=${props.onGotoSettings}
         @cancel=${props.onCancel}
       ></vision-gate-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }
 
 /** 插话输入对话框宿主（ADR-0048）。 */
@@ -128,12 +129,12 @@ export function renderInterjectDialog(props: {
 }) {
   if (!props.open) return nothing;
   return html`
-    <dialog @cancel=${props.onCancel}>
+    <c-dialog ?open=${true} @cancel=${props.onCancel}>
       <interject-dialog
         @submit=${props.onSubmit}
         @cancel=${props.onCancel}
       ></interject-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }
 
 /** 会话信息对话框宿主（2026-09-17）。 */
@@ -146,7 +147,7 @@ export function renderInfoDialog(props: {
   if (!props.open || !props.info) return nothing;
   const i = props.info;
   return html`
-    <dialog @cancel=${props.onClose}>
+    <c-dialog ?open=${true} @cancel=${props.onClose}>
       <session-info-dialog
         .sessionId=${i.sessionId}
         .used=${i.used}
@@ -163,7 +164,7 @@ export function renderInfoDialog(props: {
         @close=${props.onClose}
         @copy-failed=${props.onCopyFailed}
       ></session-info-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }
 
 /** 回退确认框宿主。 */
@@ -176,7 +177,7 @@ export function renderRewindDialog(props: {
   const d = props.state;
   if (!d || !props.sessionId) return nothing;
   return html`
-    <dialog @cancel=${props.onCancel}>
+    <c-dialog ?open=${true} @cancel=${props.onCancel}>
       <rewind-dialog
         .sessionId=${props.sessionId}
         .pointSeq=${d.seq}
@@ -185,7 +186,7 @@ export function renderRewindDialog(props: {
         @rewind-confirm=${props.onConfirm}
         @cancel=${props.onCancel}
       ></rewind-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }
 
 /** 删轮确认框宿主。 */
@@ -197,7 +198,7 @@ export function renderDeleteTurnDialog(props: {
   const d = props.state;
   if (!d) return nothing;
   return html`
-    <dialog @cancel=${(e: Event) => {
+    <c-dialog ?open=${true} @cancel=${(e: Event) => {
       if (d.submitting) e.preventDefault();
       else props.onCancel();
     }}>
@@ -210,7 +211,7 @@ export function renderDeleteTurnDialog(props: {
         @turn-delete-confirm=${props.onConfirm}
         @cancel=${props.onCancel}>
       </turn-delete-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }
 
 /** 压缩上下文模态框宿主（running 态拦截 ESC，模态锁定页面）。 */
@@ -222,7 +223,7 @@ export function renderCompactDialog(props: {
   const d = props.state;
   if (!d) return nothing;
   return html`
-    <dialog @cancel=${(e: Event) => {
+    <c-dialog ?open=${true} @cancel=${(e: Event) => {
       if (d.phase === "running") e.preventDefault();
       else props.onCancel();
     }}>
@@ -235,7 +236,7 @@ export function renderCompactDialog(props: {
         @compact-confirm=${props.onConfirm}
         @cancel=${props.onCancel}
       ></compact-confirm-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }
 
 /** 孪生复制确认框宿主（2026-10-10）。 */
@@ -247,13 +248,13 @@ export function renderForkDialog(props: {
   const s = props.session;
   if (!s) return nothing;
   return html`
-    <dialog @cancel=${props.onCancel}>
+    <c-dialog ?open=${true} @cancel=${props.onCancel}>
       <fork-confirm-dialog
         .sessionTitle=${s.title}
         @fork-confirm=${props.onConfirm}
         @cancel=${props.onCancel}
       ></fork-confirm-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }
 
 /** 导入确认框宿主（2026-10-29 取代 window.confirm）。 */
@@ -265,7 +266,7 @@ export function renderImportDialog(props: {
   const d = props.state;
   if (!d) return nothing;
   return html`
-    <dialog @cancel=${(e: Event) => {
+    <c-dialog ?open=${true} @cancel=${(e: Event) => {
       if (d.phase === "busy") e.preventDefault();
       else props.onCancel();
     }}>
@@ -278,5 +279,5 @@ export function renderImportDialog(props: {
         @import-confirm=${props.onConfirm}
         @cancel=${props.onCancel}
       ></import-confirm-dialog>
-    </dialog>`;
+    </c-dialog>`;
 }

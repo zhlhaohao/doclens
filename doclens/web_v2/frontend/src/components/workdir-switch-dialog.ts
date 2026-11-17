@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { dialogFrameStyles } from "../styles/dialog-frame";
+import { dialogHeadStyles } from "../styles/dialog-frame";
 import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { emptyStateStyles } from "../styles/empty-state-styles";
 import { customElement, property, state } from "lit/decorators.js";
@@ -12,6 +12,7 @@ import {
   type RecentWorkdir,
 } from "../api/workdir";
 import { WORKDIR_SWAP_FAILED_EVENT } from "../utils/events";
+import "./c-dialog";
 
 /** 工作目录切换对话框（ADR-0043）：顶栏「工作目录指示器」点击弹出。
  * 内容：最近工作目录清单 + 路径输入框 + 确认警告（孤儿任务数、草稿丢失）。
@@ -22,7 +23,7 @@ import { WORKDIR_SWAP_FAILED_EVENT } from "../utils/events";
  * 关掉对话框用户会以为没切）。 */
 @customElement("workdir-switch-dialog")
 export class WorkdirSwitchDialog extends LitElement {
-  static styles = [dialogFrameStyles, buttonBaseStyles, buttonRowStyles, emptyStateStyles, css`
+  static styles = [dialogHeadStyles, buttonBaseStyles, buttonRowStyles, emptyStateStyles, css`
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -238,8 +239,7 @@ export class WorkdirSwitchDialog extends LitElement {
     // 所需信息，非提示噪音）
     const others = this._recent.filter((r) => !this._samePath(r.path, this.currentWorkdir)).slice(0, 3);
     return html`
-      <div class="scrim" @click=${this._close}></div>
-      <dialog open>
+      <c-dialog ?open=${true} @cancel=${this._close}>
         <div class="head">
           <h3>切换工作目录</h3>
           <button class="close-btn" ?disabled=${this._submitting} @click=${this._close} aria-label="关闭">
@@ -290,7 +290,7 @@ export class WorkdirSwitchDialog extends LitElement {
             </button>
           </div>
         </div>
-      </dialog>
+      </c-dialog>
     `;
   }
 }

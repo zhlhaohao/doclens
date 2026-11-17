@@ -1,4 +1,5 @@
 import { css } from "lit";
+import { dialogCardStyles } from "./dialog-frame";
 
 /** chat-view 视图样式（AP-1 拆分第一步：静态 CSS 外迁）。
  *
@@ -6,7 +7,7 @@ import { css } from "lit";
  * 行为逻辑混在同一文件——God Object 的「样式域」职责。纯样式无状态、
  * 无副作用，机械外移，行为零变化。
  */
-export const chatViewStyles = css`
+export const chatViewStyles = [dialogCardStyles, css`
   :host {
     display: flex;
     flex-direction: column;
@@ -164,19 +165,6 @@ export const chatViewStyles = css`
     }
     dialog > * { padding: var(--cortex-space-4); }
   }
-  /* 技能选择对话框宿主 chrome（Meta 平铺浮层：hairline 边框 + 24px 圆角 + level-2 阴影），
-     与 files-view/diary-view 的 dialog 规格一致；此前无样式，吃的是浏览器默认外观 */
-  dialog {
-    border: 1px solid var(--cortex-border);
-    border-radius: var(--cortex-radius-xl);
-    box-sizing: border-box;
-    padding: 0;
-    background: var(--cortex-surface);
-    box-shadow: var(--cortex-shadow-lg);
-    max-width: 90vw;
-  }
-  dialog::backdrop { background: rgba(0, 0, 0, 0.3); }
-  dialog > * { display: block; padding: var(--cortex-space-6); }
   /* 移动端预览 overlay。**不得设 z-index**（2026-09-29 修复：对话页
      参考资料 PDF 在移动浏览器灰屏的真根因）——z-index 会创建层叠
      上下文，把 document.body 下 z-index:1 的 pdf-viewer portal 整个
@@ -219,4 +207,4 @@ export const chatViewStyles = css`
       width: 100%;
     }
   }
-`;
+`];

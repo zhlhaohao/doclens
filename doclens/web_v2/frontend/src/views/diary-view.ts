@@ -6,6 +6,7 @@
  * 领域规则（ADR-0007）：录入永远只写今天；成品态只读。
  */
 import { LitElement, html, css } from "lit";
+import "../components/c-dialog";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
@@ -20,10 +21,11 @@ import "../components/diary-record-panel";
 import "../components/diary-review-panel";
 import "../components/city-dialog";
 import "../components/icon";
+import { dialogCardStyles } from "../styles/dialog-frame";
 
 @customElement("diary-view")
 export class DiaryView extends LitElement {
-  static styles = css`
+  static styles = [dialogCardStyles, css`
     :host { box-sizing: border-box; }
     *, *::before, *::after { box-sizing: border-box; }
     :host {
@@ -113,17 +115,7 @@ export class DiaryView extends LitElement {
       color: var(--cortex-nav-active);
       font-size: var(--cortex-fs-sm);
     }
-    dialog {
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      max-width: 90vw;
-    }
-    dialog::backdrop { background: rgba(0, 0, 0, 0.3); }
-    dialog > * { display: block; padding: var(--cortex-space-6); }
-  `;
+  `];;
 
   private _unsubscribe?: () => void;
   private _initialized = false;
@@ -145,10 +137,6 @@ export class DiaryView extends LitElement {
 
   protected updated(changedProps: Map<string, unknown>) {
     super.updated(changedProps);
-    // 城市对话框用 showModal（top-layer + backdrop + ESC）；<dialog open> 是非模态
-    // inline，会落在页面底部（top: 3000+）不可见
-    const dlg = this.shadowRoot?.querySelector("dialog");
-    if (dlg && !dlg.open) dlg.showModal();
   }
 
   disconnectedCallback() {
@@ -428,11 +416,11 @@ export class DiaryView extends LitElement {
                 .calendarMonth=${d.calendarMonth}
                 .calendarDates=${d.calendarDates}></diary-review-panel>`}
         ${d.tab === "record" && d.cityDialogOpen ? html`
-          <dialog @cancel=${this._onCityCancel}>
+          <c-dialog ?open=${true} @cancel=${this._onCityCancel}>
             <city-dialog
               @submit=${this._onCitySubmit}
               @cancel=${this._onCityCancel}></city-dialog>
-          </dialog>` : null}
+          </c-dialog>` : null}
       </div>
     `;
   }

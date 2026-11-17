@@ -502,13 +502,6 @@ export class ChatView extends LitElement {
     this._mqMobileViewport?.addEventListener("change", this._onMobileViewportChange);
   }
 
-  updated() {
-    // 对话框用 showModal（top-layer + backdrop + ESC 关闭），与 files-view 一致。
-    // 可能有多个 dialog 宿主（技能选择 / 会话改名），逐个处理。
-    for (const dlg of this.renderRoot.querySelectorAll("dialog")) {
-      if (!dlg.open) dlg.showModal();
-    }
-  }
 
   /** 移动端会话导航动作（顶栏「更多」菜单）：桌面由 chat-stream 悬浮
    *  三钮组承担，移动端空间不足收进菜单（2026-11-06）。
@@ -612,7 +605,7 @@ export class ChatView extends LitElement {
   /** 历史列表星标切换：乐观翻转 starred，但保持列表顺序不变（重排在下次
    *  加载历史时自然发生），失败回滚。 */
 
-  /** 会话改名对话框宿主（<dialog> 由 updated() showModal）。 */
+  /** 会话改名对话框宿主（<c-dialog> 公共件外壳，AP-3）。 */
 
 
   /** 视觉能力拦截对话框（ADR-0034 L3）：当前模型不支持视觉时弹出，引导
@@ -662,7 +655,7 @@ export class ChatView extends LitElement {
     }
   };
 
-  /** 插话输入 dialog 宿主（原生 <dialog>，仓库惯例 showModal）。 */
+  /** 插话输入 dialog 宿主（<c-dialog> 公共件外壳，AP-3）。 */
 
 
   /** 会话信息对话框宿主（2026-09-17；<dialog> 由 updated() showModal）。 */
@@ -1344,13 +1337,13 @@ export class ChatView extends LitElement {
 
   /** user 气泡「删除这一轮」：弹确认框（删除不可撤销，不直接执行）。
 
-  /** 删轮确认框宿主（<dialog> 由 updated() showModal）。 */
+  /** 删轮确认框宿主（<c-dialog> 公共件外壳，AP-3）。 */
 
 
-  /** 回退确认框宿主（<dialog> 由 updated() showModal）。 */
+  /** 回退确认框宿主（<c-dialog> 公共件外壳，AP-3）。 */
 
 
-  /** 压缩上下文模态框宿主（<dialog> 由 updated() showModal）。running 态
+  /** 压缩上下文模态框宿主（<c-dialog> 公共件外壳，AP-3）。running 态
    *  拦截 cancel（ESC/无法点 backdrop——dialog 默认无 backdrop 点击关闭），
    *  保证压缩期间模态锁定页面。 */
 
@@ -1360,7 +1353,7 @@ export class ChatView extends LitElement {
    *  initial 分支（fork 按钮只出现在历史列表）。 */
 
 
-  /** 导入确认框宿主（<dialog> 由 updated() showModal）——2026-10-29 取代
+  /** 导入确认框宿主（<c-dialog> 公共件外壳，AP-3）——2026-10-29 取代
    *  window.confirm（可被浏览器静默抑制），并承载「同 id 已存在 → 作为
    *  副本导入」分支。 */
 

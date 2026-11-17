@@ -11,6 +11,7 @@ import { ReactiveController, ReactiveControllerHost } from "lit";
 import { html, nothing } from "lit";
 import { fetchSkills, type SkillInfo } from "../api/skills";
 import { recordSkillUse } from "../state/recent-skills";
+import "../components/c-dialog";
 import "../components/skill-toolbox-dialog";
 import "../components/skill-run-dialog";
 
@@ -44,15 +45,11 @@ export class SkillToolboxController implements ReactiveController {
     host.addController(this);
   }
 
-  hostUpdated(): void {
-    // showModal（top layer，防 PDF portal 遮挡、不受预览栏裁剪）；
-    // list↔run 切换时 dialog 节点重建，需重新 showModal。
-    if (this._phase) {
-      const root = (this.host as unknown as HTMLElement).shadowRoot;
-      const dlg = root?.querySelector("dialog") as HTMLDialogElement | null;
-      if (dlg && !dlg.open) dlg.showModal();
-    }
-  }
+  /** AP-3：模态开关（showModal / top-layer）已收敛到 <c-dialog> 公共件，
+   *  本 controller 不再自行 showModal——list↔run 切换时 dialog 节点重建
+   *  由 <c-dialog> 自身的 updated() 处理。此处保留空实现以满足
+   *  ReactiveController 接口（hostUpdated 是其唯一可选钩子）。 */
+  hostUpdated(): void {}
 
   /** 是否打开中（宿主可用作入口按钮激活态）。 */
   get open(): boolean {
@@ -117,24 +114,24 @@ export class SkillToolboxController implements ReactiveController {
   /** 两段对话框渲染（宿主模板尾部无条件挂载；关闭态渲染 nothing）。 */
   renderDialogs() {
     if (this._phase === "list") {
-      return html`<dialog @cancel=${(e: Event) => { e.preventDefault(); this.close(); }}>
+      return html`<c-dialog ?open=${true} @cancel=${(e: Event) => { e.preventDefault(); this.close(); }}>
         <skill-toolbox-dialog
           .skills=${this._skills}
           .error=${this._error}
           @pick=${this._onPick}
           @cancel=${() => this.close()}
         ></skill-toolbox-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     if (this._phase === "run" && this._picked) {
-      return html`<dialog @cancel=${(e: Event) => { e.preventDefault(); this.close(); }}>
+      return html`<c-dialog ?open=${true} @cancel=${(e: Event) => { e.preventDefault(); this.close(); }}>
         <skill-run-dialog
           .skill=${this._picked}
           .filePaths=${this.filePaths()}
           @submit=${this._onRunSubmit}
           @cancel=${() => this.close()}
         ></skill-run-dialog>
-      </dialog>`;
+      </c-dialog>`;
     }
     return nothing;
   }
