@@ -25,6 +25,19 @@ import { css } from "lit";
 
 /** 表单控件族：input / select / textarea / checkbox 的形态契约。 */
 export const formStyles = css`
+  /* 盒模型归一（AP-6 视觉修正 2026-11-17）：**元素选择器**而非仅类名
+     选择器——shadow DOM 不受全局 reset 影响，裸 <input> / <select> /
+     <textarea>（input-dialog-base 的输入框、interject-dialog 的 textarea、
+     mcp-servers-section 的输入、ask-card / file-search-box 的输入等）
+     若不带 .input/.select/.textarea 类名，原先只在类名选择器上的
+     box-sizing 根本不命中 → width:100% 按 content-box 计算 =
+     100% + padding + border → 溢出容器右侧（重命名对话框实测）。
+     元素选择器覆盖全部表单控件，content-box 溢出一次性根治。 */
+  input,
+  select,
+  textarea {
+    box-sizing: border-box;
+  }
   .input,
   .select,
   .textarea {
@@ -37,7 +50,6 @@ export const formStyles = css`
     font-family: inherit;
     width: 100%;
     max-width: 100%;
-    box-sizing: border-box;
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
   }
   .input:focus,

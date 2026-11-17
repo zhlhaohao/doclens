@@ -32,6 +32,17 @@ describe("form-styles", () => {
     expect(css).toContain("resize: vertical");
   });
 
+  it("盒模型归一用元素选择器（裸表单控件也受保护）", () => {
+    // 回归（2026-11-17）：box-sizing 原先只挂在 .input/.select/.textarea
+    // 类名选择器上——裸 <input>（input-dialog-base 的输入框、interject 的
+    // textarea、mcp 的输入等）不命中 → width:100% 按 content-box 算 =
+    // 100% + padding + border → 溢出容器右侧（重命名对话框实测）。
+    const css = formStyles.cssText;
+    expect(css).toMatch(
+      /(^|\n)\s*input,\s*\n?\s*select,\s*\n?\s*textarea\s*\{[^}]*box-sizing:\s*border-box/,
+    );
+  });
+
   it("全仓组件无第二处 .input/.select/.textarea 形态定义", () => {
     const offenders: string[] = [];
     for (const root of SRC_ROOTS) {
