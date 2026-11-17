@@ -253,6 +253,15 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
       .quota .q-full { display: none; }
       .quota .q-tag { display: inline; }
     }
+    /* 重置时间（2026-11-17）：独立于 .q-full 的 1023px 档控制——
+       .q-full（标签文案「已用」等）走 1023px 档（移动端换迷你标签），
+       而重置时间走 **640px** 档：窄屏手机（≤640px，折叠态/普通手机
+       竖屏 360-430px）维持原状不显示；折叠屏展开（≈690-900px）与
+       平板、横屏等宽屏状态恢复显示。
+       故重置时间元素不带 .q-full 类（否则被 1023px 档一并隐藏）。 */
+    @media (max-width: 640px) {
+      .quota .q-reset { display: none; }
+    }
 
     @media (max-width: 1023px) {
       .form { grid-template-columns: 1fr; }
@@ -790,7 +799,7 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
             class="q-pct ${high ? "q-high" : ""}"
             >${pct}%</span
           >${w.next_reset_ms
-            ? html`<span class="q-full q-reset"> 重置 ${this._fmtReset(w.next_reset_ms)}</span>`
+            ? html`<span class="q-reset"> 重置 ${this._fmtReset(w.next_reset_ms)}</span>`
             : nothing}`;
       })}`;
     }
