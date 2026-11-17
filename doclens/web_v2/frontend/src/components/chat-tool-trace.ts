@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { TemplateResult } from "lit";
 import type { ToolStep } from "../state/types";
+import { copyText, createCopiedFlash } from "../utils/clipboard";
 import "./spinner";
 
 const TOOL_ICON: Record<string, string> = {
@@ -323,22 +324,17 @@ export class ChatToolTrace extends LitElement {
   private _userToggled = false;
   @state() private _fullResultIds = new Set<string>();
   @state() private _copied = false;
-  /** 复制反馈复位 timer（AP-41：卸载清理，对照 chat-message _copyTimer）。 */
-  private _copyTimer: number | null = null;
+  /** 复制反馈复位（AP-41：句柄化 + 卸载清理，统一走 utils/clipboard）。 */
+  private _copiedFlash = createCopiedFlash(() => { this._copied = false; });
 
-  /** 置 _copied 并 2s 后复位（单一定时器入口）。 */
+  /** 置 _copied（复位由 _copiedFlash 统一安排，单一定时器入口）。 */
   private _flashCopied(): void {
     this._copied = true;
-    if (this._copyTimer !== null) window.clearTimeout(this._copyTimer);
-    this._copyTimer = window.setTimeout(() => {
-      this._copyTimer = null;
-      this._copied = false;
-    }, 2000);
+    this._copiedFlash.flash();
   }
 
   disconnectedCallback(): void {
-    if (this._copyTimer !== null) window.clearTimeout(this._copyTimer);
-    this._copyTimer = null;
+    this._copiedFlash.dispose();
     super.disconnectedCallback();
   }
 
@@ -407,25 +403,7 @@ export class ChatToolTrace extends LitElement {
   private async _onCopy(e: Event) {
     e.stopPropagation();
     const text = buildFullText(this.steps);
-    try {
-      await navigator.clipboard.writeText(text);
-      this._flashCopied();
-    } catch (err) {
-      // clipboard 不可用（权限/非安全上下文）时降级：使用隐藏 textarea + execCommand
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-        this._flashCopied();
-      } catch (err2) {
-        console.warn("copy failed:", err2);
-      }
-    }
+    if (await copyText(text)) this._flashCopied();
   }
 
   private _renderArgs(s: ToolStep): TemplateResult {

@@ -8,6 +8,7 @@ import katexStyles from "katex/dist/katex.min.css?inline";
 import { sanitizeHtml } from "../utils/sanitize";
 import { cjkInlineMath, makeSingleLineDisplayMath } from "../utils/marked-math";
 import type { PageMarker } from "../api/preview";
+import { copyText, createCopiedFlash, COPY_FEEDBACK_MS } from "../utils/clipboard";
 import { bustRawImages } from "./image-viewer";
 import "./icon";
 import {
@@ -589,6 +590,7 @@ export class MdViewer extends LitElement {
   @state() private _viewerSrc = "";
   /** 全文复制反馈 */
   @state() private _copied = false;
+  private _copiedFlash = createCopiedFlash(() => { this._copied = false; });
   /** 跳过 line/content 变化触发的命中行定位（preview-pane 模式切换做
    *  位置恢复期间置 true，避免定位打架） */
   @property({ type: Boolean }) suppressLocate = false;
@@ -714,6 +716,7 @@ export class MdViewer extends LitElement {
   disconnectedCallback() {
     window.removeEventListener("cortex:image-rotated", this._onImageRotated);
     this.removeEventListener("scroll", this._onBadgeScroll);
+    this._copiedFlash.dispose();
     window.clearTimeout(this._badgeTimer);
     this._badgeTimer = undefined;
     this._pageObserver?.disconnect();
@@ -818,10 +821,12 @@ export class MdViewer extends LitElement {
       btn.addEventListener("click", () => {
         const code = btn.parentElement?.querySelector("code");
         if (code) {
-          navigator.clipboard.writeText(code.textContent || "").then(() => {
-            btn.textContent = "已复制";
-            setTimeout(() => { btn.textContent = "复制"; }, 1500);
-          }).catch(() => {});
+          // AP-5：改走单一入口（含降级）；失败不再是静默 catch——按钮短暂
+          // 显示「复制失败」给用户反馈（原实现点复制无任何反应）。
+          void copyText(code.textContent || "").then((ok) => {
+            btn.textContent = ok ? "已复制" : "复制失败";
+            setTimeout(() => { btn.textContent = "复制"; }, COPY_FEEDBACK_MS);
+          });
         }
       });
     });
@@ -1539,10 +1544,18 @@ export class MdViewer extends LitElement {
   }
 
   private _copyAll = () => {
-    navigator.clipboard.writeText(this.content).then(() => {
-      this._copied = true;
-      setTimeout(() => { this._copied = false; }, 1500);
-    }).catch(() => {});
+    // AP-5：改走单一入口（含降级）；失败不再静默——冒泡 copy-failed 由
+    // 宿主 toast（与 chat-message / history-item 同协议）。
+    void copyText(this.content).then((ok) => {
+      if (ok) {
+        this._copied = true;
+        this._copiedFlash.flash();
+      } else {
+        this.dispatchEvent(new CustomEvent("copy-failed", {
+          bubbles: true, composed: true,
+        }));
+      }
+    });
   };
 }
 

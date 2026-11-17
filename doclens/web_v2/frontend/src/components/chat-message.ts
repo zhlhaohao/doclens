@@ -6,6 +6,7 @@ import { createMathMarked } from "../utils/marked-math";
 import katexStyles from "katex/dist/katex.min.css?inline";
 import type { ChatMessage, ToolStep } from "../state/types";
 import { isCoarsePointer } from "../utils/device";
+import { copyText, createCopiedFlash } from "../utils/clipboard";
 import { traceStepsOf } from "./chat-tool-trace";
 import "./ask-card";
 
@@ -351,7 +352,7 @@ export class ChatMessageEl extends LitElement {
   @property({ attribute: false }) modelName: string | null = null;
   /** 复制成功后的瞬时反馈：图标由 copy 变 check，1.5s 后恢复 */
   @state() private _copied = false;
-  private _copyTimer?: number;
+  private _copiedFlash = createCopiedFlash(() => { this._copied = false; });
   /** 对话图片全屏预览（ADR-0034）：data URL，非 null 时渲染 dialog 放大图
    *  （showModal top-layer，见 updated）；kb-img 内联图点击复用同状态。 */
   @state() private _imgPreview: string | null = null;
@@ -391,7 +392,7 @@ export class ChatMessageEl extends LitElement {
     this.removeEventListener("click", this._onClick);
     this.removeEventListener("mouseenter", this._onHoverChange);
     this.removeEventListener("mouseleave", this._onHoverChange);
-    if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
+    this._copiedFlash.dispose();
   }
 
   private _onHoverChange = (e: MouseEvent): void => {
@@ -516,12 +517,11 @@ export class ChatMessageEl extends LitElement {
     e.stopPropagation();
     const text = this.message?.content ?? "";
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyText(text);
+    if (ok) {
       this._copied = true;
-      if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
-      this._copyTimer = window.setTimeout(() => { this._copied = false; }, 1500);
-    } catch {
+      this._copiedFlash.flash();
+    } else {
       this.dispatchEvent(
         new CustomEvent("copy-failed", { bubbles: true, composed: true }),
       );

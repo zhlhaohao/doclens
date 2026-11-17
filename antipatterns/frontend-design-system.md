@@ -85,7 +85,7 @@
 - **修复方案**：新增 `components/confirm-dialog-base.ts`（抽象基类，对标 `InputDialogBase`）：`title`/`icon`/`body` slot/`note`/`warn`/`danger` 按钮语义/`submitting`/`errorMessage`/ESC-cancel 协议；多态内容用模板方法 `renderBody()` 供子类覆写。**各件内容结构保留在子类**（不强行统一 compact 四态机与 import 三态机）。样式层把 `buttonBaseStyles`/`confirmButtonStyles`/`dialogSlotStyles` 的按钮定义归一为一套 token 化按钮 + 单一 `.actions` 类名（`.actions`/`.buttons` 两套类名现由 `styles/button-styles.ts:99-127` 与 `utils/dialog-styles.ts:22-47` 各定义一次，同名不同值）。
 - **回归验证**：`npm run test -- tests/compact-confirm-dialog.spec.ts tests/turn-delete-dialog.spec.ts tests/delete-dialog.spec.ts tests/city-dialog.spec.ts` + `npm run build` + 人工比对六框主按钮视觉一致。
 
-### AP-5 剪贴板写入 9 处各写一份 + 降级配方只有 2 处实现 [P2] [status: pending]
+### AP-5 剪贴板写入 9 处各写一份 + 降级配方只有 2 处实现 [P2] [status: done(见执行记录)]
 - **形态**：Copy-and-Paste Programming + Error Hiding（部分变体）
 - **证据**：`navigator.clipboard.writeText` 调用 9 处，各写各的：
   - `components/chat-message.ts:520`（await + catch → 冒泡 `copy-failed`）
@@ -103,6 +103,7 @@
 - **风险**：① 「复制」在 WebView/HTTP 部署下大概率失败（原生下载同款问题已在 `download-overlay` 注释承认），7 处无降级 = 用户可见功能缺失，其中 md-viewer 两处连失败提示都没有；② 定时器未清理 = 卸载后回调操作已卸载 @state（与 AP-11/AP-41 同型）；③ 反馈时长/降级/事件名三种契约各写各的。
 - **修复方案**：新增 `utils/clipboard.ts`：`copyText(text): Promise<boolean>`（`navigator.clipboard` → 隐藏 textarea + `execCommand` → 全失败返回 false）+ `COPY_FEEDBACK_MS = 1500` 常量 + 可选 `onCopied` 复位回调。9 处改调此单一入口；`md-viewer` 两处的静默 catch 补失败反馈（沿用宿主 `copy-failed` 协议）；`session-info-dialog`/`compact-confirm-dialog`/`md-viewer` 补 timer 句柄化 + `disconnectedCallback` 清理。
 - **回归验证**：`npm run test -- tests/chat-message.spec.ts tests/chat-tool-trace.spec.ts tests/md-viewer.spec.ts tests/history-list.spec.ts` + `npm run build`；人工在非安全上下文（HTTP 访问）验证复制降级可用。
+- **执行结果**：新增 `src/utils/clipboard.ts`（`copyText()`：clipboard API → 隐藏 textarea + execCommand 降级 → false；`COPY_FEEDBACK_MS = 1500` 唯一口径；`createCopiedFlash()`：置位/复位/重置计时/dispose 卸载清理全套状态机）。9 处调用点全部迁移：chat-message / history-item / session-info-dialog（`copy-failed` 协议不变）、chat-tool-trace / compact-confirm-dialog（双份降级配方收编）、md-viewer 代码块 + 全文复制（**两处静默吞错修复**：代码块失败显示「复制失败」、全文失败冒泡 `copy-failed` 由宿主 toast——需宿主监听确认，见下「执行期间发现」）、preview-pane（`path-copied {ok}` 协议不变）、files-view（toast 双分支不变）。降级覆盖 2/9 → **9/9**；反馈时长 1500/2000 两派 → 1500 唯一；timer 清理补齐 session-info-dialog / compact-confirm-dialog / md-viewer 三处（新建 disconnectedCallback 或并入既有）。**执行期间发现**：① jsdom `execCommand` 是「未实现但不抛错」的 no-op 返回 false——降级路径须尊重返回值（初版无条件 return true 被测试抓住）；② md-viewer 全文复制失败冒泡 `copy-failed`，但 preview-pane 宿主链上无监听（chat-view 的 `@copy-failed` 绑在 chat-message 上）——失败反馈在预览页不可见，属 AP-2 空态/错误反馈域的邻接问题，不扩散（护栏 3），留 AP-2 处理时一并接线。回归：新增 `tests/clipboard.spec.ts` 8 例（主路径/降级/降级返回 false/全失败/flash 重置计时/dispose 幂等/时长唯一/「全仓无直调 navigator.clipboard.writeText」守卫）；`tests/session-info-dialog.spec.ts` 时序修正（fake timers 下 await 链补一拍 waitFor）。前端全量 1153 测试通过（115 文件）+ `npm run build` 通过 + `tests/test_architecture.py` 9 通过。
 
 ### AP-6 表单控件样式 4 套并存（input/select/textarea/checkbox）[P3] [status: pending]
 - **形态**：Copy-and-Paste Programming（样式级）+ 口径分裂
@@ -147,3 +148,4 @@
 |---|---|---|---|
 | 2026-11-17 | 审计（无令，仅台账） | AP-1~AP-7 | 台账成文，7 条全部 pending；未改任何源码文件 |
 | 2026-11-17 | 批 1（公共件·加载指示） | AP-1 | 新增 `src/styles/spinner-styles.ts`（唯一 `@keyframes cortex-spin` + reduced-motion 降级）+ `src/components/spinner.ts`（`<c-spinner>` size/border/duration/variant/label）；8 个配方点全部改消费公共件（app.ts / compact-confirm-dialog / download-overlay / files-view / search-results / pull-refresh-indicator / chat-tool-trace / file-list×2）；keyframes 名 8→1，reduced-motion 覆盖 4/9→9/9。新增 `tests/spinner.spec.ts` 7 例（含「全仓无第二处 spin keyframes」「全仓无圆环+rotate 配方」两条守卫）；`tests/pull-to-refresh.spec.ts` 断言随实现迁移更新（不再锁死 `ptr-spin` 名，改验公共件消费）。回归：前端全量 1145 测试通过（114 文件）+ `npm run build` 通过 + `tests/test_architecture.py` 9 通过 |
+| 2026-11-17 | 批 2（公共件·剪贴板） | AP-5 | 新增 `src/utils/clipboard.ts`（copyText 含 execCommand 降级 + COPY_FEEDBACK_MS=1500 + createCopiedFlash 状态机）；9 处调用点全部迁移，降级覆盖 2/9→9/9，md-viewer 两处静默吞错修复（代码块失败显示「复制失败」、全文失败冒泡 copy-failed），timer 清理补齐 3 处。jsdom execCommand no-op 返回 false 的坑已尊重（测试抓住）。新增 `tests/clipboard.spec.ts` 8 例（含「全仓无直调 navigator.clipboard.writeText」守卫）；`tests/session-info-dialog.spec.ts` fake-timers 时序修正。遗留：md-viewer copy-failed 在预览页宿主链无监听，归 AP-2 一并接线。回归：前端全量 1153 测试通过（115 文件）+ `npm run build` 通过 + `tests/test_architecture.py` 9 通过 |

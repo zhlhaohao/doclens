@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatTokens } from "../utils/format";
 import { dialogSlotStyles } from "../utils/dialog-styles";
+import { copyText, createCopiedFlash } from "../utils/clipboard";
 import "./spinner";
 
 /** 压缩上下文确认/进度模态框（ADR-0026 手动压缩入口）。
@@ -100,8 +101,14 @@ export class CompactConfirmDialog extends LitElement {
   @property({ type: String }) errorMessage = "";
   /** done：压缩产物可读转录（后端渲染，copy 按钮拷贝供人审核）。 */
   @property({ type: String }) compactedText = "";
-  /** copy 成功瞬时反馈（2s 复位）。 */
+  /** copy 成功瞬时反馈（复位统一走 utils/clipboard，卸载清理）。 */
   @state() private _copied = false;
+  private _copiedFlash = createCopiedFlash(() => { this._copied = false; });
+
+  disconnectedCallback(): void {
+    this._copiedFlash.dispose();
+    super.disconnectedCallback();
+  }
 
   private _onConfirm = (): void => {
     this.dispatchEvent(new CustomEvent("compact-confirm", {
@@ -119,34 +126,16 @@ export class CompactConfirmDialog extends LitElement {
     return Math.round((1 - this.postTokens / this.preTokens) * 100);
   }
 
-  /** copy 压缩产物到剪贴板（clipboard 不可用时降级 execCommand，同
-   *  chat-tool-trace 的双轨配方；均失败时 console.warn）。 */
+  /** copy 压缩产物到剪贴板（降级/复位统一走 utils/clipboard 单一入口）。 */
   private async _onCopy(): Promise<void> {
     const text = this.compactedText;
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      this._flashCopied();
-    } catch {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-        this._flashCopied();
-      } catch (err2) {
-        console.warn("copy failed:", err2);
-      }
-    }
+    if (await copyText(text)) this._flashCopied();
   }
 
   private _flashCopied(): void {
     this._copied = true;
-    setTimeout(() => { this._copied = false; }, 2000);
+    this._copiedFlash.flash();
   }
 
   render() {
