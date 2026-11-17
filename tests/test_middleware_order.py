@@ -60,9 +60,39 @@ def test_authenticated_still_sees_swap_503(gate_on, monkeypatch):
 
 
 def test_registration_puts_auth_outermost(monkeypatch):
-    """结构不变量：user_middleware[0] 是最外层（Starlette 反向包装），必须是 auth。"""
+    """结构不变量：user_middleware[0] 是最外层（Starlette 反向包装），必须是 auth。
+
+    gzip 中间件（2026-11-17 加入）无 dispatch 参数（非 BaseHTTPMiddleware），
+    故此处按「首个有 dispatch 的中间件」取名字，而非假设全部都有。
+    """
     from doclens.web_v2.app import create_app
 
     app = create_app()
-    names = [m.kwargs["dispatch"].__name__ for m in app.user_middleware]
+    names = [
+        m.kwargs["dispatch"].__name__
+        for m in app.user_middleware
+        if "dispatch" in m.kwargs
+    ]
     assert names[:2] == ["auth_gate", "swap_gate"], names
+
+
+def test_gzip_is_innermost(monkeypatch):
+    """gzip 必须比 auth/swap 更内层（2026-11-17）。
+
+    理由：auth 是最外层（AP-33 不变量——切换窗口内未登录 LAN 客户端
+    必须拿到 401 而非 503）。gzip 插到最内层时 /assets/* 仍会被压缩
+    （auth/swap 只拦 /api/*），但响应包装顺序不被破坏。
+    """
+    from doclens.web_v2.app import create_app
+
+    app = create_app()
+    classes = [m.cls.__name__ for m in app.user_middleware]
+    assert "GZipMiddleware" in classes, classes
+    # user_middleware[0] 是最外层；gzip 必须在 auth/swap 之后（即更内层）
+    dispatch_idx = [
+        i for i, m in enumerate(app.user_middleware) if "dispatch" in m.kwargs
+    ]
+    gzip_idx = classes.index("GZipMiddleware")
+    assert gzip_idx > dispatch_idx[0], (
+        f"gzip 必须在 auth 之后注册（更内层），实际 order={classes}"
+    )
