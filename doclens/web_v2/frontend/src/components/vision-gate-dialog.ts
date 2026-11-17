@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { dialogSlotStyles } from "../utils/dialog-styles";
+import { buttonBaseStyles, confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
 
 /** 视觉能力拦截对话框（ADR-0034 L3，AP-1 从 chat-view 抽出）：当前模型不
  *  支持视觉时弹出，引导跳设置页切换；拦截的消息/图由 chat-view 保留在
@@ -9,6 +10,9 @@ import { dialogSlotStyles } from "../utils/dialog-styles";
 export class VisionGateDialog extends LitElement {
   static styles = [
     dialogSlotStyles,
+    buttonBaseStyles,
+    confirmButtonStyles,
+    buttonRowStyles,
     css`
       :host {
         display: block;

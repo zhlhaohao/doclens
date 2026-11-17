@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { dialogSlotStyles } from "../utils/dialog-styles";
 import { formStyles } from "../styles/form-styles";
+import { buttonBaseStyles, confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
 
 /** 插话输入对话框（ADR-0048 决策 7，AP-1 从 chat-view 抽出）：向正在执行
  *  的 AI 提问或下达临时指令（当前步骤完成后送达，不打断原任务）。
@@ -12,6 +13,9 @@ export class InterjectDialog extends LitElement {
   static styles = [
     formStyles,
     dialogSlotStyles,
+    buttonBaseStyles,
+    confirmButtonStyles,
+    buttonRowStyles,
     css`
       :host {
         display: block;

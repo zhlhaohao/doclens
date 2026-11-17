@@ -72,10 +72,22 @@ export async function* streamSSE(
       buffer = buffer.slice(idx + sepLen);
       let event = "message";
       let data = "";
+      let hasField = false;
       for (const line of rawEvent.split(/\r\n|\r|\n/)) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) data += line.slice(5).trim();
+        // SSE 注释行（以 ':' 开头）——如 sse_starlette 的保活 ping
+        // （": ping - <ts>"），无字段语义，忽略。
+        if (line.startsWith(":")) continue;
+        if (line.startsWith("event:")) {
+          event = line.slice(6).trim();
+          hasField = true;
+        } else if (line.startsWith("data:")) {
+          data += line.slice(5).trim();
+          hasField = true;
+        }
       }
+      // 无任何字段的块（纯注释/空块）不是业务事件：不产出，
+      // 否则会被下游当成未知事件（如 chat 的 "message"）刷警告。
+      if (!hasField) continue;
       yield { event, data };
     }
   }

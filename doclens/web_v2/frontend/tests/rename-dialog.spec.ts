@@ -50,9 +50,17 @@ describe("rename-dialog", () => {
     // 移除外层 360px min-width
     expect(cssText).toMatch(/@media[\s\S]*?:host\s*\{\s*min-width:\s*0/);
     // actions 列向（column-reverse），主按钮在主按钮在上方
-    expect(cssText).toMatch(/@media[\s\S]*?\.actions\s*\{\s*flex-direction:\s*column-reverse/);
+    // AP-4：按钮排公共块的选择器改为组形式（.actions, .buttons）——
+    // 正则需容忍组内的逗号分隔。
+    expect(cssText).toMatch(
+      /@media[\s\S]*?\.actions[^{]*\{[^}]*flex-direction:\s*column-reverse/,
+    );
     // 按钮全宽 + 44px 触控目标
-    expect(cssText).toMatch(/@media[\s\S]*?\.actions\s+button\s*\{[^}]*width:\s*100%/);
-    expect(cssText).toMatch(/@media[\s\S]*?\.actions\s+button\s*\{[^}]*min-height:\s*44px/);
+    expect(cssText).toMatch(
+      /@media[\s\S]*?\.actions[^{]*button\s*\{[^}]*width:\s*100%/,
+    );
+    expect(cssText).toMatch(
+      /@media[\s\S]*?\.actions[^{]*button\s*\{[^}]*min-height:\s*44px/,
+    );
   });
 });

@@ -4,6 +4,8 @@ import { formatTokens } from "../utils/format";
 import { dialogSlotStyles } from "../utils/dialog-styles";
 import { copyText, createCopiedFlash } from "../utils/clipboard";
 import "./spinner";
+import { buttonBaseStyles, confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
+import { confirmStyles } from "../styles/confirm-styles";
 
 /** 压缩上下文确认/进度模态框（ADR-0026 手动压缩入口）。
  *  三态复用同一个 <dialog> 宿主（chat-view 渲染），确认后不关框——压缩
@@ -22,6 +24,10 @@ import "./spinner";
 export class CompactConfirmDialog extends LitElement {
   static styles = [
     dialogSlotStyles,
+    confirmStyles,
+    buttonBaseStyles,
+    confirmButtonStyles,
+    buttonRowStyles,
     css`
       :host {
         display: block;
@@ -29,22 +35,12 @@ export class CompactConfirmDialog extends LitElement {
         font-size: var(--cortex-fs-md);
         color: var(--cortex-text);
       }
-      h2 {
-        font-size: var(--cortex-fs-lg);
-        margin: 0 0 var(--cortex-space-4);
-      }
-      h2.with-icon {
-        display: flex;
-        align-items: center;
-        gap: var(--cortex-space-3);
-      }
+      /* 标题略大（本地变体，形态走公共块 confirmStyles） */
+      h2 { font-size: var(--cortex-fs-lg); margin: 0 0 var(--cortex-space-4); }
+      h2.with-icon { gap: var(--cortex-space-3); }
       p {
         margin: 0 0 var(--cortex-space-3);
         line-height: 1.6;
-      }
-      .muted {
-        color: var(--cortex-text-muted);
-        font-size: var(--cortex-fs-sm);
       }
       button doclens-icon { font-size: 14px; vertical-align: -2px; margin-right: 4px; }
 

@@ -1,7 +1,7 @@
-import { LitElement, html, css, nothing } from "lit";
-import { confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
+import { html, css, nothing } from "lit";
 import { formStyles } from "../styles/form-styles";
 import { customElement, property, state } from "lit/decorators.js";
+import { ConfirmDialogBase } from "./confirm-dialog-base";
 
 import { fetchRewindPreview } from "../api/sessions";
 import type { RewindFilesPlan } from "../api/sessions";
@@ -18,8 +18,8 @@ const ANCHOR_EXCERPT_LEN = 160;
  * chat-view 负责；取消/ESC 冒泡 cancel。
  */
 @customElement("rewind-dialog")
-export class RewindDialog extends LitElement {
-  static styles = [confirmButtonStyles, buttonRowStyles, formStyles, css`
+export class RewindDialog extends ConfirmDialogBase {
+  static styles = [...ConfirmDialogBase.styles, formStyles, css`
     :host {
       display: block;
       font-size: var(--cortex-fs-md);
@@ -29,19 +29,8 @@ export class RewindDialog extends LitElement {
       font-size: var(--cortex-fs-lg);
       margin: 0 0 var(--cortex-space-4);
     }
-    .anchor {
-      background: var(--cortex-surface-muted);
-      border-left: 3px solid var(--cortex-primary);
-      border-radius: var(--cortex-radius-sm);
-      padding: 8px 10px;
-      margin: 0 0 var(--cortex-space-3);
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: 5.2em;
-      overflow: hidden;
-    }
+    /* 摘录块限高（本地变体，形态走公共块 confirmStyles） */
+    .anchor { max-height: 5.2em; overflow: hidden; }
     .dead-count {
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted);
@@ -89,17 +78,6 @@ export class RewindDialog extends LitElement {
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-subtle);
     }
-    .warn {
-      display: flex;
-      gap: 6px;
-      align-items: flex-start;
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      background: var(--cortex-surface-muted);
-      border-radius: var(--cortex-radius-sm);
-      padding: 8px 10px;
-      margin-bottom: var(--cortex-space-4);
-    }
     .checkbox-row {
       display: flex;
       align-items: center;
@@ -116,7 +94,6 @@ export class RewindDialog extends LitElement {
       color: var(--cortex-text-subtle);
       padding: var(--cortex-space-3) 0;
     }
-    .error { color: var(--cortex-danger); }
   `];;
 
   @property() sessionId = "";
@@ -130,7 +107,7 @@ export class RewindDialog extends LitElement {
   @state() private _error: string | null = null;
   @state() private _plan: RewindFilesPlan | null = null;
   @state() private _restoreFiles = true;
-  @state() private _submitting = false;
+  @state() protected _submitting = false;
 
   connectedCallback() {
     super.connectedCallback();
@@ -153,7 +130,14 @@ export class RewindDialog extends LitElement {
     this._restoreFiles = !this._restoreFiles;
   };
 
-  private _onConfirm = (): void => {
+  protected get dialogTitle(): unknown { return "回退到这条消息"; }
+  protected get confirmLabel(): string { return "回退"; }
+  /** 预览未加载完 / 预览失败时不可提交。 */
+  protected get canSubmit(): boolean {
+    return !this._loading && !this._error && !this._submitting;
+  }
+
+  protected confirm(): void {
     if (this._submitting) return;
     this._submitting = true;
     this.dispatchEvent(
@@ -163,11 +147,7 @@ export class RewindDialog extends LitElement {
         composed: true,
       }),
     );
-  };
-
-  private _onCancel = (): void => {
-    this.dispatchEvent(new CustomEvent("cancel", { bubbles: true, composed: true }));
-  };
+  }
 
   private _renderFiles() {
     if (this._loading) return html`<div class="loading">正在获取文件恢复清单…</div>`;
@@ -194,11 +174,10 @@ export class RewindDialog extends LitElement {
     `;
   }
 
-  render() {
+  protected renderBody() {
     const excerpt = this.anchorContent.slice(0, ANCHOR_EXCERPT_LEN) || "（空消息）";
     return html`
-      <h2>回退到这条消息</h2>
-      <div class="anchor">${excerpt}</div>
+      <div class="anchor primary">${excerpt}</div>
       <div class="dead-count">回退后，此后 ${this.deadCount} 条消息将折叠（这条提问会回到输入框，可编辑后重发）。</div>
       <div class="files">
         <div class="files-title"><doclens-icon name="history"></doclens-icon> 文件恢复</div>
@@ -208,13 +187,11 @@ export class RewindDialog extends LitElement {
         ? html`<div class="warn"><doclens-icon name="alert-triangle"></doclens-icon>
             <span>文件恢复会<b>覆盖当前内容</b>（恢复项）/ 删除回退点后才创建的文件（删除项），此操作不可撤销。</span></div>`
         : nothing}
-      <div class="buttons">
-        <button class="plain" type="button" @click=${this._onCancel}>取消</button>
-        <button class="primary" type="button" ?disabled=${this._loading || !!this._error || this._submitting} @click=${this._onConfirm}>
-          ${this._submitting ? "回退中…" : "回退"}
-        </button>
-      </div>
     `;
+  }
+
+  render() {
+    return this.renderConfirm();
   }
 }
 

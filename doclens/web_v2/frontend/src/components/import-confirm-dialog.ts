@@ -1,6 +1,8 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { dialogSlotStyles } from "../utils/dialog-styles";
+import { buttonBaseStyles, confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
+import { confirmStyles } from "../styles/confirm-styles";
 
 /**
  * <import-confirm-dialog> —— 会话导入确认框（2026-10-29 重做，ADR-0038）。
@@ -23,6 +25,10 @@ import { dialogSlotStyles } from "../utils/dialog-styles";
 export class ImportConfirmDialog extends LitElement {
   static styles = [
     dialogSlotStyles,
+    confirmStyles,
+    buttonBaseStyles,
+    confirmButtonStyles,
+    buttonRowStyles,
     css`
     :host {
       display: block;
@@ -31,6 +37,7 @@ export class ImportConfirmDialog extends LitElement {
       font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
     }
+    /* 标题略大 + 图标（本地变体，形态走公共块 confirmStyles） */
     h2 {
       display: flex;
       align-items: center;
@@ -57,11 +64,6 @@ export class ImportConfirmDialog extends LitElement {
       word-break: break-word;
     }
     .session .title { color: var(--cortex-text); }
-    .detail {
-      font-size: var(--cortex-fs-sm);
-      line-height: 1.6;
-      margin-bottom: var(--cortex-space-3);
-    }
     .note doclens-icon { color: var(--cortex-primary, var(--cortex-text)); flex: none; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     `,

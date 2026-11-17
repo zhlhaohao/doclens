@@ -131,6 +131,33 @@ describe("streamSSE", () => {
     ]);
   });
 
+  it("skips SSE comment/keep-alive blocks (no event/data fields)", async () => {
+    // sse_starlette 的保活 ping 是注释行 ": ping - <ts>"，无字段语义
+    const chunks = [
+      new TextEncoder().encode(": ping - 2026-11-17T00:00:00Z\r\n\r\n"),
+      new TextEncoder().encode('event: token\r\ndata: {"text":"hi"}\r\n\r\n'),
+    ];
+    let call = 0;
+    (globalThis.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: async () =>
+            call < chunks.length
+              ? { value: chunks[call++], done: false }
+              : { value: undefined, done: true },
+        }),
+      },
+    });
+
+    const events = [];
+    for await (const ev of streamSSE("/api/chat", { message: "hi" })) {
+      events.push(ev);
+    }
+
+    expect(events).toEqual([{ event: "token", data: '{"text":"hi"}' }]);
+  });
+
   it("throws ApiError when response is not ok", async () => {
     (globalThis.fetch as any).mockResolvedValueOnce({
       ok: false,

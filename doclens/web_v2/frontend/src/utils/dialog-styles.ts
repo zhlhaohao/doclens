@@ -1,12 +1,19 @@
-/** 对话框内嵌件共享样式（AP-27/29/35）：`<dialog>` slot 内容件的公共 CSS。
+/** 对话框内嵌件共享样式（AP-27/29/35 → AP-4 收敛）。
+ *
  *  此前 .note / .buttons / button.primary / 移动端 column-reverse 在
  *  compact / fork / import / city / rewind / turn-delete 等多份逐字复制
  *  （漂移实证：about-dialog `<dialog>` 忘写 open 靠级联巧合显示）。
- *  迁移策略：样式归一，组件本体不合并（防 DRY Misuse）。 */
+ *
+ *  AP-4 收敛：按钮形态与按钮排已归入 `styles/button-styles.ts`
+ *  （buttonBaseStyles / confirmButtonStyles / buttonRowStyles）——本文件
+ *  原先内嵌的第三套 `button {}` 定义随之删除，`.buttons` 规则改由
+ *  buttonRowStyles 提供（同名同义，单一真相源）。
+ *  本文件只保留**对话框内容块的提示样式**（.note）。
+ */
 
 import { css } from "lit";
 
-/** 提示块（.note）+ 按钮排（.buttons）+ 按钮基础/主键样式 + 移动端断点。 */
+/** 提示块（.note）：图标 + 文案的两栏块。 */
 export const dialogSlotStyles = css`
   .note {
     display: flex;
@@ -18,32 +25,6 @@ export const dialogSlotStyles = css`
     border-radius: var(--cortex-radius-sm);
     padding: 8px 10px;
     margin-bottom: var(--cortex-space-4);
-  }
-  .buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--cortex-space-2);
-    margin-top: var(--cortex-space-4);
-  }
-  button {
-    padding: 8px 18px;
-    border: 1px solid var(--cortex-border);
-    background: var(--cortex-surface);
-    color: var(--cortex-text-muted);
-    cursor: pointer;
-    border-radius: var(--cortex-radius-pill);
-    font-size: var(--cortex-fs-sm);
-    font-family: inherit;
-  }
-  button.primary {
-    background: var(--cortex-btn-primary-bg);
-    color: var(--cortex-btn-primary-text);
-    border: none;
-  }
-  button.primary:hover { opacity: 0.9; }
-  @media (max-width: 1023px) {
-    .buttons { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-    .buttons button { width: 100%; padding: 12px 16px; min-height: 44px; }
   }
 `;
 
