@@ -22,7 +22,7 @@
 | **多格式** | Markdown、PDF、DOCX、PPTX、Excel、HTML、JSON、CSV、PST 邮件档案、EPUB、图像（视觉解析）、代码（Python AST + tree-sitter） |
 | **零嵌入** | 文档树上的 FTS5/BM25——无向量数据库，完全离线 |
 | **中日韩支持** | jieba 分词 |
-| **Web UI** | Lit + Shoelace PWA——默认界面 |
+| **Web UI** | Lit PWA（Meta 设计系统 + Lucide 图标）——默认界面 |
 | **结构化查询** | AND / OR / NOT / PHRASE 运算符（`search_v2`） |
 | **正则降级** | ripgrep 风格的正则 `grep`；FTS 无结果时自动降级到 ripgrep |
 
@@ -144,11 +144,11 @@ doclens <command> [--workdir DIR]
 
 ## Web UI
 
-默认界面是 Lit + Shoelace 构建的 PWA，由 FastAPI 服务在 `http://127.0.0.1:7860`（端口冲突时自动递增——以启动日志为准）。
+默认界面是 Lit 构建的 PWA（Meta 设计系统 + Lucide 图标），由 FastAPI 服务在 `http://127.0.0.1:7860`（端口冲突时自动递增——以启动日志为准）。
 
 - **搜索** — 关键词搜索，结果卡片与片段
 - **对话** — harness agent：SSE 流式输出、工具调用轨迹、会话历史（见 [AI Agent](#ai-agent知识库问答--vibe-coding)）
-- **文件** — 知识库文件树，支持上传 / 改名 / 移动 / 预览（Markdown、PDF、DOCX、PPTX、Excel、图像、PST 邮件列表），长文档有 TOC 抽屉
+- **文件** — 知识库文件树，支持上传 / 改名 / 移动 / 预览（Markdown、PDF、DOCX、PPTX、Excel、图像、PST 邮件列表），列表头可按名称 / 大小 / 修改时间排序，长文档有 TOC 抽屉
 - **日记** — 每日片段（图片 + 天气），次日总结为成品日记
 - **设置** — 模型预设（LLM / 视觉 / 搜索）、访问密码、技能、MCP 服务器、Git 同步
 
@@ -330,7 +330,7 @@ npm test           # vitest 单元测试
 
 ```
 ┌─────────────────────────────────────────────────┐
-│            Web UI (Lit + Shoelace PWA)          │
+│            Web UI (Lit PWA · Meta 设计)          │
 │           FastAPI + SSE streaming               │
 └───────────────────────┬─────────────────────────┘
                         │
