@@ -303,10 +303,17 @@ describe("<ptr-indicator>", () => {
     document.body.removeChild(el);
   });
 
-  it("styles：不拦截指针、reduced-motion 降级、含 spin keyframes", () => {
+  it("styles：不拦截指针、reduced-motion 降级、spinner 走公共件（AP-1）", async () => {
     const cssText = PullRefreshIndicator.styles.cssText;
     expect(cssText).toContain("pointer-events: none");
     expect(cssText).toContain("prefers-reduced-motion");
-    expect(cssText).toContain("ptr-spin");
+    // AP-1：转圈配方已迁 <c-spinner> 公共件，本组件只管显隐——
+    // 不再自带 keyframes（守卫：配方单一真相源，见 tests/spinner.spec.ts）
+    expect(cssText).not.toContain("@keyframes");
+    const el = document.createElement("ptr-indicator") as PullRefreshIndicator;
+    document.body.appendChild(el);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("c-spinner")).toBeTruthy();
+    document.body.removeChild(el);
   });
 });

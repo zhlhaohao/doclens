@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { TemplateResult } from "lit";
 import type { ToolStep } from "../state/types";
+import "./spinner";
 
 const TOOL_ICON: Record<string, string> = {
   search: "search",
@@ -250,17 +251,7 @@ export class ChatToolTrace extends LitElement {
       display: none;
     }
     .res .more, .arg .more { color: var(--cortex-primary); cursor: pointer; display: inline-block; margin-top: 3px; }
-    .spin {
-      width: 12px; height: 12px;
-      border: 2px solid var(--cortex-primary);
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin .8s infinite linear;
-      display: inline-block;
-    }
     .running-text { color: var(--cortex-primary); font-size: var(--cortex-fs-xs); }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
     .copy-btn {
       margin-left: auto;
       /* 背景融入 .summary 容器（transparent + 无边框），仅 hover/已复制 给轻反馈 */
@@ -511,7 +502,7 @@ export class ChatToolTrace extends LitElement {
     return html`
       <div class="step ${running ? "running" : ""} ${error ? "error" : ""}">
         <div class="head">
-          ${running ? html`<span class="spin"></span>` : html`<doclens-icon name=${icon}></doclens-icon>`}
+          ${running ? html`<c-spinner class="spin" size="12" variant="reverse"></c-spinner>` : html`<doclens-icon name=${icon}></doclens-icon>`}
           <span class="name" title=${s.name}>${mcpName ?? s.name}</span>
           ${running ? html`<span class="running-text">${mcpName ? `正在调用 ${mcpName.split(" / ")[0]}` : (TOOL_ACTION[s.name] ?? "正在调用")}...</span>` : null}
           <span class="meta">

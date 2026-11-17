@@ -35,6 +35,7 @@ import "./views/login-view";
 import "./components/app-bar";
 import "./components/reindex-dialog";
 import "./components/pull-refresh-indicator";
+import "./components/spinner";
 import { PullToRefreshController } from "./utils/pull-to-refresh";
 import { startWatchStream, stopWatchStream } from "./watch-stream";
 
@@ -88,15 +89,6 @@ export class CortexApp extends LitElement {
       font-family: var(--cortex-font);
       color: var(--cortex-text);
     }
-    .swap-overlay .spin {
-      width: 32px;
-      height: 32px;
-      border: 3px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: swap-spin 0.9s linear infinite;
-    }
-    @keyframes swap-spin { to { transform: rotate(360deg); } }
     .swap-overlay .msg { font-size: var(--cortex-fs-md); font-weight: 600; }
     .swap-overlay .sub {
       font-size: var(--cortex-fs-sm);
@@ -314,7 +306,7 @@ export class CortexApp extends LitElement {
       <reindex-dialog></reindex-dialog>
       ${this._swapTarget !== null ? html`
         <div class="swap-overlay" role="alert" aria-live="assertive">
-          <div class="spin"></div>
+          <c-spinner size="32" border="3" duration="0.9"></c-spinner>
           <div class="msg">正在切换工作目录…</div>
           ${this._swapTarget ? html`<div class="sub">${this._swapTarget}</div>` : null}
         </div>

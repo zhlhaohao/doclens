@@ -11,6 +11,7 @@ import {
 } from "../utils/browse-path";
 import { sortFileEntries, type FileSortKey } from "../utils/file-sort";
 import "./file-row";
+import "./spinner";
 
 const DEFAULT_COL_WIDTHS = [28, 28, 240, 80, 140] as const;
 const COL_MINS = [20, 20, 80, 50, 80];
@@ -121,23 +122,10 @@ export class FileList extends LitElement {
     }
     .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
     /* 上传中：图标换成旋转圆环动画（"上传中"感知，无进度通道的补偿 UX）；
-       min-width 锚定原 1em 图标宽度，避免替换时按钮抖动 */
+       c-spinner 宽度锚定 1em（原图标宽度），避免替换时按钮抖动 */
     .toolbar button.uploading { opacity: 1; }
-    .toolbar button.uploading::after { min-width: 1em; }
     .toolbar button.uploading doclens-icon { display: none; }
-    .toolbar button.uploading::after {
-      content: "";
-      width: 12px;
-      height: 12px;
-      border: 2px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: cortex-upload-spin 0.8s linear infinite;
-    }
-    @keyframes cortex-upload-spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) {
-      .toolbar button.uploading::after { animation: none; }
-    }
+    .toolbar button.uploading c-spinner { width: 1em; }
     .toolbar button.danger { color: var(--cortex-danger); }
     .toolbar button.danger:hover:not(:disabled) {
       background: rgba(220, 38, 38, 0.06);
@@ -242,16 +230,6 @@ export class FileList extends LitElement {
     /* 上传中：菜单项图标换旋转圆环 + 文案（移动端主路径，App 内上传入口） */
     .mobile-header .mobile-menu button.uploading { opacity: 1; }
     .mobile-header .mobile-menu button.uploading doclens-icon { display: none; }
-    .mobile-header .mobile-menu button.uploading::before {
-      content: "";
-      width: 14px;
-      height: 14px;
-      flex-shrink: 0;
-      border: 2px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: cortex-upload-spin 0.8s linear infinite;
-    }
     .mobile-header .mobile-menu button.danger { color: var(--cortex-danger); }
     .header-row {
       display: grid;
@@ -765,7 +743,7 @@ export class FileList extends LitElement {
                   class=${this.uploading ? "uploading" : ""}
                   ?disabled=${this.uploading || readOnly}
                   @click=${this._onMenuItemClick("upload")}
-                >${this.uploading ? "上传中…" : html`<doclens-icon name="upload"></doclens-icon>上传`}</button>
+                >${this.uploading ? html`<c-spinner size="14"></c-spinner>上传中…` : html`<doclens-icon name="upload"></doclens-icon>上传`}</button>
                 <button
                   type="button"
                   role="menuitem"
@@ -959,7 +937,7 @@ export class FileList extends LitElement {
           : null}
         <button data-action="new-file" title=${readOnly ? "工作目录外只读" : "在当前目录新建文本文件（如 笔记.md）"} ?disabled=${readOnly} @click=${() => this._action("new-file")}><doclens-icon name="file-plus"></doclens-icon><span class="btn-label">新文件</span></button>
         <button data-action="mkdir" title=${readOnly ? "工作目录外只读" : "新建目录"} ?disabled=${readOnly} @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
-        <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading || readOnly} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
+        <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading || readOnly} @click=${() => this._action("upload")}>${this.uploading ? html`<c-spinner size="12"></c-spinner><span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
         <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>
         <button data-action="download" title="下载选中文件（单选）" ?disabled=${!canDownload} @click=${() => this._action("download")}><doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span></button>
         <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}><doclens-icon name="arrow-right"></doclens-icon><span class="btn-label">移动</span></button>

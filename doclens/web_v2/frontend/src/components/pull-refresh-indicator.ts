@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement } from "lit/decorators.js";
+import "./spinner";
 
 /** 下拉刷新浮层指示器（移动端 pull-to-refresh）。
  *
@@ -55,23 +56,11 @@ export class PullRefreshIndicator extends LitElement {
       transform: rotate(180deg);
       color: var(--cortex-primary);
     }
-    /* 刷新中 spinner：视觉配方同 search-results 的 loading::after */
-    .ring {
-      display: none;
-      width: 14px;
-      height: 14px;
-      border: 2px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-    }
-    :host([refreshing]) .ring {
-      display: inline-block;
-      animation: ptr-spin 0.8s linear infinite;
-    }
+    /* 刷新中 spinner：统一走 <c-spinner>（AP-1），本组件只管显隐 */
+    c-spinner { display: none; }
+    :host([refreshing]) c-spinner { display: inline-flex; }
     :host([refreshing]) .arrow { display: none; }
-    @keyframes ptr-spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) {
-      .ring { animation: none; }
       .arrow,
       :host(.settle) { transition: none; }
     }
@@ -128,7 +117,7 @@ export class PullRefreshIndicator extends LitElement {
             stroke-linejoin="round"
           />
         </svg>
-        <span class="ring" aria-hidden="true"></span>
+        <c-spinner size="14"></c-spinner>
         <span class="label">${this._label}</span>
       </div>
     `;

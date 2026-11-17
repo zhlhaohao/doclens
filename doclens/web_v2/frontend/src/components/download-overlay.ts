@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import "./spinner";
 
 /**
  * <download-overlay> —— 下载中屏幕中心遮罩（preview-pane 与 files-view
@@ -21,20 +22,9 @@ export class DownloadOverlay extends LitElement {
       backdrop-filter: blur(2px);
       z-index: var(--cortex-z-modal);
     }
-    .ring {
-      width: 40px; height: 40px;
-      border: 4px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: cortex-download-spin 0.8s linear infinite;
-    }
     .label {
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted);
-    }
-    @keyframes cortex-download-spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) {
-      .ring { animation: none; }
     }
   `;
 
@@ -44,7 +34,7 @@ export class DownloadOverlay extends LitElement {
   render() {
     if (!this.open) return null;
     return html`<div class="download-overlay" role="status" aria-live="polite">
-      <div class="ring"></div>
+      <c-spinner size="40" border="4"></c-spinner>
       <div class="label">${this.label}</div>
     </div>`;
   }

@@ -15,7 +15,7 @@
 
 ## 二、发现条目
 
-### AP-1 spinner 配方 8 处复制 + 4 处漏 `prefers-reduced-motion` [P2] [status: pending]
+### AP-1 spinner 配方 8 处复制 + 4 处漏 `prefers-reduced-motion` [P2] [status: done(见执行记录)]
 - **形态**：Copy-and-Paste Programming（样式级）+ 缺失可访问性降级
 - **证据**：同一配方（`border: Npx solid var(--cortex-border)` + `border-top-color: var(--cortex-primary)` + `border-radius: 50%` + `@keyframes X { to { transform: rotate(360deg) } }`）在 8 处各自定义，**keyframes 名各不相同**：
   - `app.ts:92-99`（`swap-spin`，32px/3px/0.9s）
@@ -31,6 +31,7 @@
 - **风险**：① 旋转动画对前庭功能障碍用户是健康风险（WCAG 2.3.3 Animation from Interactions），5 处无降级；② 改 spinner 视觉（边框粗细/配色/时长）要改 9 处，keyframes 名已各自漂移（`spin`/`ptr-spin`/`cortex-spin`/`compact-spin`/`swap-spin`/`cortex-download-spin`/`cortex-upload-spin`/`cortex-upload-overlay-spin` 共 8 个名字指同一动画）；③ `chat-tool-trace` 的配色反向版本说明「配方无单一真相源」已导致行为分裂。
 - **修复方案**：新增 `components/spinner.ts`（`<c-spinner>`：`size` / `variant`（track=border+primary顶 / primary=primary+透明顶）/ `label` slot）+ `styles/spinner-styles.ts`（唯一一份 `@keyframes cortex-spin`）。9 个消费点替换为该组件或该样式块；`prefers-reduced-motion: reduce` 降级写进公共块一次（全量覆盖）。**不改 DOM 结构**（除 file-list 两处伪元素需改为真实 `<c-spinner>` 或保留伪元素但引用公共 keyframes 名）。
 - **回归验证**：`npm run test -- tests/download-overlay.spec.ts tests/search-flow.spec.ts tests/files-flow.spec.ts` + `npm run build`；人工核对 9 处视觉一致 + 系统开启「减少动态效果」后均静止。
+- **执行结果**：新增 `src/styles/spinner-styles.ts`（唯一一份 `@keyframes cortex-spin` + `prefers-reduced-motion` 降级）与 `src/components/spinner.ts`（`<c-spinner size/border/duration/variant/label>`，尺寸走 CSS 变量）。8 个配方点全部改为消费公共件：app.ts 切换遮罩（32px/3px/0.9s）、compact-confirm-dialog 压缩中（28px/3px）、download-overlay 下载中（40px/4px）、files-view 上传遮罩（40px/4px）、search-results 加载中（14px，伪元素 → 真实元素）、pull-refresh-indicator 刷新中（14px，`.ring` span → `<c-spinner>`）、chat-tool-trace 工具运行中（12px，`variant="reverse"` 保留配色反向语义）、file-list 上传中两处（12px 桌面 / 14px 移动端，伪元素 → 真实元素）。**reduced-motion 覆盖 4/9 → 9/9**（缺失的 5 处：app.ts、compact-confirm-dialog、search-results、chat-tool-trace、file-list 移动端）。keyframes 名 8 个 → 1 个。新增 `tests/spinner.spec.ts`（7 例：变量注入/尺寸覆写/reverse 变体/aria 语义/公共块含降级/**全仓无第二处 `@keyframes *spin*` 守卫**/**全仓无圆环+rotate 配方残留守卫**）；`tests/pull-to-refresh.spec.ts` 原断言锁死旧 keyframes 名 `ptr-spin`，改为断言「本组件不再自带 keyframes + 渲染 `<c-spinner>`」并保留 pointer-events 与 reduced-motion 两条实质守卫（测试固化错误：断言锁定实现细节，随实现迁移同步更新）。回归：前端全量 1145 测试通过（114 文件）+ `npm run build` 通过 + `tests/test_architecture.py` 9 通过。
 
 ### AP-2 `.empty` 空态样式 17 处定义且形态分裂 [P2] [status: pending]
 - **形态**：Copy-and-Paste Programming（样式级）+ 口径分裂
@@ -145,3 +146,4 @@
 | 日期 | 令 | 条目 | 结果（commit） |
 |---|---|---|---|
 | 2026-11-17 | 审计（无令，仅台账） | AP-1~AP-7 | 台账成文，7 条全部 pending；未改任何源码文件 |
+| 2026-11-17 | 批 1（公共件·加载指示） | AP-1 | 新增 `src/styles/spinner-styles.ts`（唯一 `@keyframes cortex-spin` + reduced-motion 降级）+ `src/components/spinner.ts`（`<c-spinner>` size/border/duration/variant/label）；8 个配方点全部改消费公共件（app.ts / compact-confirm-dialog / download-overlay / files-view / search-results / pull-refresh-indicator / chat-tool-trace / file-list×2）；keyframes 名 8→1，reduced-motion 覆盖 4/9→9/9。新增 `tests/spinner.spec.ts` 7 例（含「全仓无第二处 spin keyframes」「全仓无圆环+rotate 配方」两条守卫）；`tests/pull-to-refresh.spec.ts` 断言随实现迁移更新（不再锁死 `ptr-spin` 名，改验公共件消费）。回归：前端全量 1145 测试通过（114 文件）+ `npm run build` 通过 + `tests/test_architecture.py` 9 通过 |

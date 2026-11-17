@@ -42,6 +42,7 @@ import {
   parentOfBrowseRoot,
 } from "../utils/browse-path";
 import "../components/download-overlay";
+import "../components/spinner";
 import "../components/workdir-switch-dialog";
 import { downloadServerFile } from "../utils/download";
 
@@ -279,20 +280,9 @@ export class FilesView extends LitElement {
       backdrop-filter: blur(2px);
       z-index: var(--cortex-z-modal);
     }
-    .upload-overlay .ring {
-      width: 40px; height: 40px;
-      border: 4px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: cortex-upload-overlay-spin 0.8s linear infinite;
-    }
     .upload-overlay .label {
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted);
-    }
-    @keyframes cortex-upload-overlay-spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) {
-      .upload-overlay .ring { animation: none; }
     }
     .back-btn {
       position: absolute; top: var(--cortex-space-2); left: var(--cortex-space-2);
@@ -1553,7 +1543,7 @@ export class FilesView extends LitElement {
         : ""}
       ${this._uploading
         ? html`<div class="upload-overlay" role="status" aria-live="polite">
-            <div class="ring"></div>
+            <c-spinner size="40" border="4"></c-spinner>
             <div class="label">上传中…</div>
           </div>`
         : ""}

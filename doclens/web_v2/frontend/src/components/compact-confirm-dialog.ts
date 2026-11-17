@@ -2,6 +2,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatTokens } from "../utils/format";
 import { dialogSlotStyles } from "../utils/dialog-styles";
+import "./spinner";
 
 /** 压缩上下文确认/进度模态框（ADR-0026 手动压缩入口）。
  *  三态复用同一个 <dialog> 宿主（chat-view 渲染），确认后不关框——压缩
@@ -55,16 +56,6 @@ export class CompactConfirmDialog extends LitElement {
         padding: var(--cortex-space-6) 0;
         text-align: center;
       }
-      .spinner {
-        width: 28px;
-        height: 28px;
-        border: 3px solid var(--cortex-border);
-        border-top-color: var(--cortex-primary);
-        border-radius: 50%;
-        animation: compact-spin 0.8s linear infinite;
-      }
-      @keyframes compact-spin { to { transform: rotate(360deg); } }
-
       /* —— done 态效果展示 —— */
       .result {
         display: flex;
@@ -189,7 +180,7 @@ export class CompactConfirmDialog extends LitElement {
   private _renderRunning() {
     return html`
       <div class="running">
-        <div class="spinner" role="status" aria-label="正在压缩"></div>
+        <c-spinner size="28" border="3" label="正在压缩"></c-spinner>
         <div>
           <h2 style="margin: 0 0 var(--cortex-space-2); text-align: center;">正在压缩会话历史…</h2>
           <p class="muted" style="margin: 0;">AI 正在总结会话内容，约需几十秒，请勿关闭页面。</p>
