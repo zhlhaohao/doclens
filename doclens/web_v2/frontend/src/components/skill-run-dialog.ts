@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, property, state } from "lit/decorators.js";
 import type { SkillInfo } from "../api/skills";
 import "../components/icon";
@@ -10,7 +11,7 @@ import "../components/icon";
  */
 @customElement("skill-run-dialog")
 export class SkillRunDialog extends LitElement {
-  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
+  static styles = [buttonBaseStyles, buttonRowStyles, formStyles, css`
     :host {
       display: block;
       min-width: 420px;
@@ -51,28 +52,18 @@ export class SkillRunDialog extends LitElement {
       display: block; font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted); margin: var(--cortex-space-3) 0 4px 0;
     }
+    /* 技能参数输入区（本地尺寸覆盖，形态走公共块） */
     textarea {
-      width: 100%; min-height: 72px; padding: 8px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
+      width: 100%;
+      min-height: 72px;
+      padding: 8px;
       font-size: var(--cortex-fs-base);
-      font-family: inherit;
-      box-sizing: border-box;
-      resize: vertical;
-      transition: border-color 0.15s, box-shadow 0.15s;
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
-    }
-    textarea:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
     }
     @media (max-width: 1023px) {
       :host { min-width: 0; }
       .files { max-height: 35vh; }
     }
-  `;
+  `];;
 
   /** 用户点选的技能（来自 skill-toolbox-dialog 的 pick 事件）。 */
   @property({ attribute: false }) skill: SkillInfo | null = null;

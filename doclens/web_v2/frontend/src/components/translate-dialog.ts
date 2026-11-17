@@ -18,6 +18,7 @@ import {
 import { listPresets, type Preset } from "../api/presets";
 import { pushToast } from "../utils/toast";
 import { getConfig } from "../api/config";
+import { formStyles } from "../styles/form-styles";
 
 const LANGS = ["en", "zh", "ja", "ko", "de", "fr", "es", "it", "pt", "ru"];
 
@@ -26,7 +27,7 @@ const CANCEL_WIRED = new WeakSet<HTMLDialogElement>();
 
 @customElement("translate-dialog")
 export class TranslateDialog extends LitElement {
-  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
+  static styles = [buttonBaseStyles, buttonRowStyles, formStyles, css` 
     /* 原生 <dialog> + showModal()：top layer 全屏居中（沿宿主工具箱/
        关于对话框范式）——不被 PDF portal（document.body z-index 1）遮挡、
        不受预览栏 overflow 裁剪（2026-10-08 修复：旧 absolute 定位只浮在
@@ -68,14 +69,13 @@ export class TranslateDialog extends LitElement {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
     }
+    /* 翻译对话框控件：紧凑尺寸（本地覆盖，形态走公共块） */
     select,
     input[type="text"] {
+      width: 100%;
       font: inherit;
       padding: var(--cortex-space-2);
-      border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-sm);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
     }
     .row {
       display: grid;
@@ -144,7 +144,7 @@ export class TranslateDialog extends LitElement {
       border-radius: var(--cortex-radius-sm);
       padding: var(--cortex-space-2);
     }
-  `;
+  `];;
 
   /** 知识库内 PDF 相对路径（必传）。 */
   @property() path = "";

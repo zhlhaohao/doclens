@@ -1,6 +1,8 @@
 import { ToastFlashMixin } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
 import { settingsSectionStyles } from "../styles/settings-section-styles";
+import { badgeStyles } from "../styles/badge-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, state } from "lit/decorators.js";
 
 import {
@@ -36,7 +38,7 @@ interface InstallDialogState {
  */
 @customElement("skills-section")
 export class SkillsSection extends ToastFlashMixin(LitElement) {
-  static styles = css`${settingsSectionStyles} 
+  static styles = [settingsSectionStyles, badgeStyles, formStyles, css`
     :host {
       display: block;
       font-family: var(--cortex-font);
@@ -90,17 +92,6 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
       gap: var(--cortex-space-2);
       font-family: var(--cortex-font-mono);
     }
-    .badge {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-pill);
-      padding: 1px var(--cortex-space-2);
-      font-family: var(--cortex-font);
-    }
-    .badge.github { color: var(--cortex-primary); }
     .skill-desc {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
@@ -238,22 +229,8 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
       font-size: var(--cortex-fs-lg);
       font-weight: 700;
     }
-    .input {
-      padding: 8px 10px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-bg);
-      font-size: var(--cortex-fs-sm);
-      font-family: var(--cortex-font-mono);
-      color: var(--cortex-text);
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .input:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
-    }
+    /* GitHub 安装地址输入：等宽字体（本地变体，形态走公共块） */
+    .input { font-family: var(--cortex-font-mono); }
     .preview-list {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
@@ -318,7 +295,7 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
         flex: 1;
       }
     }
-  `;
+  `];;
 
   @state() private _skills: SkillManageItem[] = [];
   @state() private _loading = true;
@@ -497,7 +474,7 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
         <div class="skill-row deleted">
           <span class="skill-icon"><doclens-icon name=${s.icon}></doclens-icon></span>
           <div class="skill-main">
-            <div class="skill-name">${s.name}<span class="badge">已删除 · 内置</span></div>
+            <div class="skill-name">${s.name}<span class="badge neutral">已删除 · 内置</span></div>
             ${s.description ? html`<div class="skill-desc">${s.description}</div>` : nothing}
           </div>
           <div class="row-actions">
@@ -517,8 +494,8 @@ export class SkillsSection extends ToastFlashMixin(LitElement) {
           <div class="skill-name">
             ${s.name}
             ${s.builtin
-              ? html`<span class="badge">内置</span>`
-              : html`<span class="badge github">GitHub</span>`}
+              ? html`<span class="badge neutral">内置</span>`
+              : html`<span class="badge primary">GitHub</span>`}
           </div>
           ${s.description ? html`<div class="skill-desc">${s.description}</div>` : nothing}
           ${s.source_url ? html`<div class="skill-source" title=${s.source_url}>${s.source_url}</div>` : nothing}

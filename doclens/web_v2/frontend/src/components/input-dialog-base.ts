@@ -8,28 +8,21 @@
 import { LitElement, html, css, nothing } from "lit";
 import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { state } from "lit/decorators.js";
+import { formStyles } from "../styles/form-styles";
 
 export abstract class InputDialogBase extends LitElement {
-  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
+  static styles = [buttonBaseStyles, buttonRowStyles, formStyles, css`
     :host { display: block; min-width: 360px; }
     .row { margin: var(--cortex-space-3) 0; }
     label {
       display: block; font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted); margin-bottom: 4px;
     }
+    /* 单输入框：对话框场景字号略大（本地覆盖，形态走公共块） */
     input {
-      width: 100%; padding: 8px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
+      width: 100%;
+      padding: 8px;
       font-size: var(--cortex-fs-base);
-      box-sizing: border-box;
-      font-family: inherit;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    input:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
     }
     input.invalid { border-color: var(--cortex-danger); }
     input.invalid:focus { box-shadow: var(--cortex-focus-ring-danger); }
@@ -42,7 +35,7 @@ export abstract class InputDialogBase extends LitElement {
       :host { min-width: 0; }
       input { font-size: 16px; padding: 10px; }
     }
-  `;
+  `];;
 
   @state() protected _value = "";
   @state() protected _err = "";

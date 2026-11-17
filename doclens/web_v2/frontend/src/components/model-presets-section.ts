@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { settingsSectionStyles } from "../styles/settings-section-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -110,7 +111,7 @@ const PROTOCOL_OPTIONS: { value: PresetProtocol; label: string }[] = [
  */
 @customElement("model-presets-section")
 export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
-  static styles = css`${settingsSectionStyles} 
+  static styles = [settingsSectionStyles, formStyles, css`
     :host {
       display: block;
       font-family: var(--cortex-font);
@@ -187,15 +188,6 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
       align-items: center;
       gap: var(--cortex-space-2);
     }
-    .badge {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-primary);
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-primary);
-      border-radius: var(--cortex-radius-pill);
-      padding: 1px var(--cortex-space-2);
-    }
     .preset-meta {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
@@ -208,23 +200,6 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
       display: flex;
       gap: var(--cortex-space-1);
       flex-shrink: 0;
-    }
-    .input, .select {
-      padding: 8px 10px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-bg);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-      color: var(--cortex-text);
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .input.mono { font-family: var(--cortex-font-mono); }
-    .input:focus, .select:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
     }
     .env-rows {
       display: flex;
@@ -282,7 +257,7 @@ export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
     @media (max-width: 1023px) {
       .form { grid-template-columns: 1fr; }
     }
-  `;
+  `];;
 
   /** 当前激活预设名（来自 .env 的 CORTEX_ACTIVE_*_PRESET，由 settings-view 传入）。 */
   @property() activeLlm = "";

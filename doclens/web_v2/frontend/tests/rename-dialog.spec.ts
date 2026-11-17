@@ -42,7 +42,10 @@ describe("rename-dialog", () => {
   });
 
   it("mobile breakpoint overrides :host min-width and stacks actions", async () => {
-    const cssText = (RenameDialog as any).styles.cssText as string;
+    // AP-6 后 styles 是数组（公共块组合）——拼全体 cssText 断言
+    const cssText = ((RenameDialog as any).styles as { cssText: string }[])
+      .map((s) => s.cssText)
+      .join("\n") as string;
     expect(cssText).toMatch(/@media\s*\(max-width:\s*1023px\)/);
     // 移除外层 360px min-width
     expect(cssText).toMatch(/@media[\s\S]*?:host\s*\{\s*min-width:\s*0/);

@@ -1,12 +1,13 @@
 import { LitElement, html, css } from "lit";
 import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, state } from "lit/decorators.js";
 import { store } from "../state/store";
 import "./tree-node";
 
 @customElement("move-dialog")
 export class MoveDialog extends LitElement {
-  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
+  static styles = [buttonBaseStyles, buttonRowStyles, formStyles, css`
     :host { display: block; min-width: 360px; }
     h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .tree {
@@ -32,7 +33,7 @@ export class MoveDialog extends LitElement {
       :host { min-width: 0; }
       .tree { max-height: 50vh; }
     }
-  `;
+  `];;
 
   @state() private _dest = "";
   @state() private _overwrite = false;

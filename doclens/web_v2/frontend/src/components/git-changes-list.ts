@@ -12,6 +12,7 @@ import { gitApi } from "../api/git";
 import type { GitChange } from "../api/git";
 import { formatBytes } from "../utils/format";
 import { emptyStateStyles } from "../styles/empty-state-styles";
+import { badgeStyles } from "../styles/badge-styles";
 import "../components/icon";
 import "./diff-viewer";
 
@@ -44,7 +45,7 @@ function formatSize(size: number | null): string {
 
 @customElement("git-changes-list")
 export class GitChangesList extends LitElement {
-  static styles = [emptyStateStyles, css`
+  static styles = [emptyStateStyles, badgeStyles, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -121,14 +122,6 @@ export class GitChangesList extends LitElement {
     }
     .row:hover { background: var(--cortex-surface-muted); }
     .row.active { background: var(--cortex-primary-soft); }
-    .badge {
-      flex-shrink: 0;
-      font-size: var(--cortex-fs-xs);
-      padding: 1px 8px;
-      border-radius: var(--cortex-radius-pill);
-      border: 1px solid var(--cortex-border);
-      white-space: nowrap;
-    }
     .badge.added { color: var(--cortex-diff-add); border-color: color-mix(in srgb, var(--cortex-diff-add) 45%, transparent); }
     .badge.modified { color: var(--cortex-primary); border-color: color-mix(in srgb, var(--cortex-primary) 45%, transparent); }
     .badge.deleted { color: var(--cortex-diff-del); border-color: color-mix(in srgb, var(--cortex-diff-del) 45%, transparent); }
@@ -256,7 +249,7 @@ export class GitChangesList extends LitElement {
                       @click=${() => this._onRowClick(c.path)}
                       title=${c.path}
                     >
-                      <span class="badge ${c.kind}">${KIND_LABEL[c.kind] ?? c.kind}</span>
+                      <span class="badge outline ${c.kind}">${KIND_LABEL[c.kind] ?? c.kind}</span>
                       <span class="path">${dir
                         ? html`<span class="dir">${dir}</span>${name}`
                         : name}</span>

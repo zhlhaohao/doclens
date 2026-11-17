@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, state } from "lit/decorators.js";
 import { store } from "../state/store";
 import { filesApi } from "../api/files";
@@ -9,7 +10,7 @@ type Phase = "loading-stats" | "confirming" | "deleting";
 
 @customElement("delete-dialog")
 export class DeleteDialog extends LitElement {
-  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
+  static styles = [buttonBaseStyles, buttonRowStyles, formStyles, css`
     :host { display: block; min-width: 360px; }
     h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); word-break: break-all; font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .warn {
@@ -39,7 +40,7 @@ export class DeleteDialog extends LitElement {
     @media (max-width: 1023px) {
       :host { min-width: 0; }
     }
-  `;
+  `];;
 
   @state() private _phase: Phase = "confirming";
   @state() private _stats: { file_count: number; dir_count: number; total_size_bytes: number } | null = null;

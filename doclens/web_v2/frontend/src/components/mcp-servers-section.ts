@@ -1,6 +1,8 @@
 import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
 import { settingsSectionStyles } from "../styles/settings-section-styles";
+import { badgeStyles } from "../styles/badge-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, state } from "lit/decorators.js";
 
 import {
@@ -98,7 +100,7 @@ function formatLines(obj: Record<string, string>): string {
  */
 @customElement("mcp-servers-section")
 export class McpServersSection extends ToastFlashMixin(LitElement) {
-  static styles = css`${settingsSectionStyles} 
+  static styles = [settingsSectionStyles, badgeStyles, formStyles, css`
     :host {
       display: block;
       font-family: var(--cortex-font);
@@ -140,15 +142,6 @@ export class McpServersSection extends ToastFlashMixin(LitElement) {
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
-    }
-    .badge {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-pill);
-      padding: 1px var(--cortex-space-2);
     }
     .server-meta {
       font-size: var(--cortex-fs-xs);
@@ -259,35 +252,15 @@ export class McpServersSection extends ToastFlashMixin(LitElement) {
     .tools-panel .tool-desc {
       color: var(--cortex-text-muted);
     }
-    .input, .select, .textarea {
-      padding: 8px 10px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-bg);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-      color: var(--cortex-text);
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .textarea {
-      min-height: 64px;
-      resize: vertical;
-      font-family: var(--cortex-font-mono);
-    }
-    .input.mono { font-family: var(--cortex-font-mono); }
-    .input:focus, .select:focus, .textarea:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
-    }
+    /* env 值域用等宽字体（本地变体，形态走公共块） */
+    .textarea { font-family: var(--cortex-font-mono); }
     @media (max-width: 1023px) {
       /* 移动端 scroll-area 无顶 padding，补齐与 .section 一致的顶部间距，避免标题行顶到 tab 条分隔线 */
       .wrap { margin-top: var(--cortex-space-4); }
       .form { grid-template-columns: 1fr; }
       .status .err-text { max-width: 120px; }
     }
-  `;
+  `];
 
   @state() private _servers: McpServer[] = [];
   @state() private _loading = true;
@@ -545,7 +518,7 @@ export class McpServersSection extends ToastFlashMixin(LitElement) {
         <div class="server-main" @click=${() => this._toggleTools(s)} title="点击展开工具清单">
           <div class="server-name">
             ${s.name}
-            <span class="badge">${TRANSPORT_LABEL[s.transport]}</span>
+            <span class="badge neutral">${TRANSPORT_LABEL[s.transport]}</span>
           </div>
           <div class="server-meta">
             ${s.transport === "stdio"

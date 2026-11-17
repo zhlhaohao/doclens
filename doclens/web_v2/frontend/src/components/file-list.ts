@@ -11,6 +11,7 @@ import {
 } from "../utils/browse-path";
 import { sortFileEntries, type FileSortKey } from "../utils/file-sort";
 import { emptyStateStyles } from "../styles/empty-state-styles";
+import { formStyles } from "../styles/form-styles";
 import "./file-row";
 import "./spinner";
 
@@ -22,7 +23,7 @@ const COL_WIDTHS_KEY = "cortex.files.colWidths";
 
 @customElement("file-list")
 export class FileList extends LitElement {
-  static styles = [emptyStateStyles, css`
+  static styles = [emptyStateStyles, formStyles, css`
     :host {
       display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
       background: var(--cortex-surface);
@@ -860,6 +861,7 @@ export class FileList extends LitElement {
               <span class="select-all">
                 <input
                   type="checkbox"
+                  aria-label="全选当前目录"
                   .checked=${allSelected}
                   @click=${this._onSelectAll}
                 />
@@ -940,6 +942,7 @@ export class FileList extends LitElement {
             <span class="select-all">
               ${readOnly ? null : html`<input
                 type="checkbox"
+                aria-label="全选当前目录"
                 .checked=${allSelected}
                 @click=${this._onSelectAll}
               />`}

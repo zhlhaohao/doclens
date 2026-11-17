@@ -11,12 +11,14 @@ import { ApiError } from "../api/client";
 import { clearPassword, getAuthStatus, logout, setPassword } from "../api/auth";
 import { actions } from "../state/store";
 import { router } from "../router/router";
+import { badgeStyles } from "../styles/badge-styles";
+import { formStyles } from "../styles/form-styles";
 
 const PIN_LENGTH = 6;
 
 @customElement("password-section")
 export class PasswordSection extends LitElement {
-  static styles = css`
+  static styles = [badgeStyles, formStyles, css`
     :host { display: block; }
     .section {
       margin-top: var(--cortex-space-4, 16px);
@@ -48,16 +50,6 @@ export class PasswordSection extends LitElement {
       border: 1px solid var(--cortex-warning);
       border-radius: var(--cortex-radius-md);
     }
-    .badge {
-      display: inline-block;
-      padding: 2px 10px;
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-success);
-      border: 1px solid var(--cortex-success);
-      border-radius: var(--cortex-radius-pill);
-      margin-left: 8px;
-      vertical-align: middle;
-    }
     /* 垂直 label + 全宽 input（DESIGN form 风格） */
     .field {
       display: grid;
@@ -71,21 +63,12 @@ export class PasswordSection extends LitElement {
       font-weight: 400;
       color: var(--cortex-text-muted);
     }
+    /* PIN 输入：等宽数字字体（本地变体，形态走公共块） */
     input {
       width: 100%;
-      box-sizing: border-box;
       padding: 8px 10px;
       font-size: var(--cortex-fs-base);
       font-family: var(--cortex-font-mono);
-      color: var(--cortex-text);
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      outline: none;
-    }
-    input:focus {
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
     }
     .actions {
       display: flex;
@@ -121,7 +104,7 @@ export class PasswordSection extends LitElement {
     }
     .feedback.error { color: var(--cortex-danger); }
     .feedback.ok { color: var(--cortex-success); }
-  `;
+  `];;
 
   @state() private _hasPassword: boolean | null = null;
   @state() private _required = false;
@@ -242,7 +225,7 @@ export class PasswordSection extends LitElement {
       <div class="section">
         <h2>
           🔒 访问密码
-          ${hasOld ? html`<span class="badge">已设置</span>` : nothing}
+          ${hasOld ? html`<span class="badge success">已设置</span>` : nothing}
         </h2>
         <p class="hint">
           仅当 GUI 绑定非环回地址（如 0.0.0.0 暴露局域网）时生效；本机 127.0.0.1 访问始终免登录。

@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { dialogSlotStyles } from "../utils/dialog-styles";
+import { formStyles } from "../styles/form-styles";
 
 /** 插话输入对话框（ADR-0048 决策 7，AP-1 从 chat-view 抽出）：向正在执行
  *  的 AI 提问或下达临时指令（当前步骤完成后送达，不打断原任务）。
@@ -9,6 +10,7 @@ import { dialogSlotStyles } from "../utils/dialog-styles";
 @customElement("interject-dialog")
 export class InterjectDialog extends LitElement {
   static styles = [
+    formStyles,
     dialogSlotStyles,
     css`
       :host {
@@ -24,13 +26,12 @@ export class InterjectDialog extends LitElement {
         font-size: var(--cortex-fs-sm);
         line-height: 1.5;
       }
+      /* 插话输入区：字号略大（本地尺寸覆盖，形态走公共块） */
       textarea {
-        width: 100%; box-sizing: border-box; resize: vertical;
-        border: 1px solid var(--cortex-border); border-radius: var(--cortex-radius-md);
-        padding: 8px 10px; font-size: var(--cortex-fs-md); font-family: var(--cortex-font);
-        background: var(--cortex-surface); color: var(--cortex-text);
+        width: 100%;
+        font-size: var(--cortex-fs-md);
+        font-family: var(--cortex-font);
       }
-      textarea:focus-visible { outline: 2px solid var(--cortex-primary); outline-offset: -1px; }
     `,
   ];
 

@@ -1,6 +1,7 @@
 import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
 import { settingsSectionStyles } from "../styles/settings-section-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -72,7 +73,7 @@ const FIELDS: { key: keyof Omit<FormState, "name">; label: string; hint: string;
  */
 @customElement("search-presets-section")
 export class SearchPresetsSection extends ToastFlashMixin(LitElement) {
-  static styles = css`${settingsSectionStyles} 
+  static styles = [settingsSectionStyles, formStyles, css`
     :host {
       display: block;
       font-family: var(--cortex-font);
@@ -154,28 +155,13 @@ export class SearchPresetsSection extends ToastFlashMixin(LitElement) {
       margin-top: 2px;
       line-height: 1.4;
     }
-    .input {
-      padding: 8px 10px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-bg);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-      color: var(--cortex-text);
-      width: 100%;
-      box-sizing: border-box;
-      font-variant-numeric: tabular-nums;
-    }
-    .input:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
-    }
+    /* 数字输入用等宽数位（本地变体，形态走公共块） */
+    .input { font-variant-numeric: tabular-nums; }
 
     @media (max-width: 1023px) {
       .form { grid-template-columns: 1fr; }
     }
-  `;
+  `];;
 
   /** 当前激活搜索预设名（来自 .env CORTEX_ACTIVE_SEARCH_PRESET）。 */
   @property() activeSearch = "";

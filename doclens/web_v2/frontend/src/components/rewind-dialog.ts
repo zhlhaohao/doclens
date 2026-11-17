@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import { fetchRewindPreview } from "../api/sessions";
@@ -18,7 +19,7 @@ const ANCHOR_EXCERPT_LEN = 160;
  */
 @customElement("rewind-dialog")
 export class RewindDialog extends LitElement {
-  static styles = css`${confirmButtonStyles} ${buttonRowStyles} 
+  static styles = [confirmButtonStyles, buttonRowStyles, formStyles, css`
     :host {
       display: block;
       font-size: var(--cortex-fs-md);
@@ -116,7 +117,7 @@ export class RewindDialog extends LitElement {
       padding: var(--cortex-space-3) 0;
     }
     .error { color: var(--cortex-danger); }
-  `;
+  `];;
 
   @property() sessionId = "";
   @property({ type: Number }) pointSeq = -1;

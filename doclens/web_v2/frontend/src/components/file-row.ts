@@ -3,10 +3,11 @@ import { customElement, property } from "lit/decorators.js";
 import type { FileEntry } from "../api/files";
 import { getFileTypeBadge } from "../utils/file-type";
 import { formatBytes } from "../utils/format";
+import { formStyles } from "../styles/form-styles";
 
 @customElement("file-row")
 export class FileRow extends LitElement {
-  static styles = css`
+  static styles = [formStyles, css`
     :host { display: block; }
     /* 移动端：host 跟随 .row 的 max-content 宽（file-list :host overflow
        hidden 会裁 display:block 的 host），行底线/行点击区贯穿滑出列 */
@@ -52,14 +53,6 @@ export class FileRow extends LitElement {
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
-    .badge {
-      display: inline-block;
-      padding: 1px 6px;
-      font-size: var(--cortex-fs-xs);
-      border-radius: var(--cortex-radius-sm);
-      background: var(--cortex-primary-soft);
-      color: var(--cortex-primary);
-    }
     .type-badge {
       display: inline-flex;
       align-items: center;
@@ -92,7 +85,7 @@ export class FileRow extends LitElement {
       }
       .size { font-size: var(--cortex-fs-2xs, var(--cortex-fs-xs)); }
     }
-  `;
+  `];;
 
   @property({ type: Object }) entry!: FileEntry;
   @property({ type: Boolean }) selected = false;
@@ -149,6 +142,7 @@ export class FileRow extends LitElement {
         <span class="checkbox">
           <input
             type="checkbox"
+            aria-label=${`选中 ${this.entry.name}`}
             .checked=${this.selected}
             @click=${this._onCheckboxClick}
           />

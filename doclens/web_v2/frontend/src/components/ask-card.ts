@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import { splitRecommended } from "../api/ask";
 import type { AskAnswer, AskQuestionPayload } from "../api/ask";
+import { badgeStyles } from "../styles/badge-styles";
 
 /** 门禁确认卡本地超时（毫秒）：比后端 GUARD_TIMEOUT_SECONDS（120s）多 2s
  *  缓冲——后端先超时（fail-closed 拒绝、流恢复），前端到点把交互卡转为
@@ -26,7 +27,7 @@ const GUARD_CARD_DISMISS_MS = 122_000;
  */
 @customElement("ask-card")
 export class AskCard extends LitElement {
-  static styles = css`
+  static styles = [badgeStyles, css`
     :host {
       display: block;
       width: 100%;
@@ -111,16 +112,6 @@ export class AskCard extends LitElement {
       margin-top: 2px;
       line-height: 1.45;
     }
-    .badge {
-      display: inline-block;
-      font-size: var(--cortex-fs-xs, 11px);
-      color: var(--cortex-primary);
-      border: 1px solid currentColor;
-      border-radius: var(--cortex-radius-pill);
-      padding: 0 6px;
-      margin-left: 6px;
-      vertical-align: 1px;
-    }
     .other-row {
       display: flex;
       align-items: center;
@@ -195,7 +186,7 @@ export class AskCard extends LitElement {
       color: var(--cortex-danger);
       font-size: var(--cortex-fs-sm, 13px);
     }
-  `;
+  `];;
 
   /** 悬置问题载荷（requestId + questions） */
   @property({ attribute: false }) ask: {
@@ -370,7 +361,7 @@ export class AskCard extends LitElement {
                 @change=${() => this._toggle(i, opt.label, q.multiSelect)}
               />
               <span class="opt-body">
-                <span class="opt-label">${label}${recommended ? html`<span class="badge">推荐</span>` : nothing}</span>
+                <span class="opt-label">${label}${recommended ? html`<span class="badge primary">推荐</span>` : nothing}</span>
                 <div class="opt-desc">${opt.description}</div>
               </span>
             </label>
