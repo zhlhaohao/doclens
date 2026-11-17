@@ -16,20 +16,35 @@ icon: package
 
 ## 第 1 步：全量回归（必须后台跑）
 
-全量 `pytest tests/ -q`（1600+ 用例 ≈ 4 分钟）——**禁止 bash 前台跑**（120s 超时掐断）：
+全量 `pytest tests/ -q`（1900+ 用例 ≈ 4 分钟）——**禁止 bash 前台跑**（120s 超时掐断）：
 
 ```
 background_run(
-  command = 'cd <repo根> && <venv python> -m pytest tests/ -q 2>&1 | tail -3',
+  command = 'cd <repo根> && <venv python> -m pytest tests/ -q > <repo根>/.doclens/tmp/pytest-full.log 2>&1; echo "EXIT=$?" >> <repo根>/.doclens/tmp/pytest-full.log',
   timeout = 900
 )
 ```
 
+- **输出必须落文件再看，不要用 `| tail -N` 管道**：完成通知只带管道尾部片段，中途输出永久丢失（看着像「被截断/超时」，实为管道所致）。结束后读 log 文件末行拿汇总（末行形如 `1904 passed, 1 skipped ... in 227.69s` + `EXIT=0`）。
 - venv python 按 worktree 惯例取 `../cortex/.venv/Scripts/python.exe`（主仓库用 `.venv/`）。
 - 发起后**只发裸 `check_background` 轮询**，不要 sleep、不要夹带 bash——框架对纯轮询自动指数退避，跑完发 `<background-results>` 通知提前唤醒。
 - **禁止以「等通知唤醒」为由结束回合**：通知只在回合存续时自动送达，结束回合就没人叫醒你了。
 - 有失败 → 先修再发（真 bug 修代码；断言过期/钉错则改测试并 commit），全量重跑至绿。
 - 单独跑 `tests/test_architecture.py`（红线守卫）必须绿。
+- **别拿超时当计时器**：已知会超时的命令第一次就 background_run。前台试探一次即白跑一轮。
+- **别传未安装插件的参数**：本仓未装 pytest-timeout，`--timeout=300` 会让 pytest 直接报 `unrecognized arguments` 整轮白跑；要超时控制就用 background_run 的 `timeout`。
+
+### 同样必须后台跑的其他命令
+
+| 命令 | 已知耗时 | 备注 |
+|---|---|---|
+| `pytest tests/ -q` | ≈ 4 分钟 | 全量回归 |
+| `npx vitest run`（前端全量） | 123 文件 / 1190 测试 | 逼近 120s，改动多时必超时 |
+| `npm run build`（前端） | `tsc --noEmit && vite build` | ≈ 40s，边缘；改动多 + 大 bundle 会超 |
+| `npm run test:e2e:search` | Playwright + 语料复制 + 索引构建 | 跨前后端旅程 |
+| `playwright test`（全量 E2E） | 同上 | |
+| `rag-bench run` | 每题 1–3 分钟 × 题数 | 见 rag-bench 技能 |
+| `doclens index`（全库建索引） | 50 万文件级审计是分钟级 | |
 
 ## 第 2 步：逐包盘点改动
 
@@ -81,6 +96,8 @@ curl -s https://pypi.org/pypi/<pkg>/json | <python> -c "import json,sys;print(js
 ## 硬约束与事故教训
 
 - **全量 pytest 只许 background_run**：2026-10-24 实战 bash 前台 120s 被掐两次。
+- **后台命令的输出落文件，不走 `| tail` 管道**：通知只带管道尾部，中途输出永久丢失（2026-11-17 实战：连踩「前台试探超时」+「臆造 `--timeout=300`」+「管道截断」三轮白跑）。
+- **「结束回合等通知」是假的**：通知只在回合存续时自动送达，结束回合就没人消费；要等结果必须在回合内持续 `check_background`。
 - **轮询期间禁 git stash**：后台测试在跑时弹储藏会污染工作区（同日事故——pop 引发 index.html 冲突，靠 `reset --hard` 才还原，stash 条目险些丢失）。要暂存改动先等测试跑完。
 - **push 失败 `Could not resolve host: github.com`** ≠ 代码问题：本地 DNS（路由器 192.168.50.1）解析不出但公共 DNS 能（`nslookup github.com 223.5.5.5`）时，取 IP 写 hosts 救急（`Add-Content $env:SystemRoot\System32\drivers\etc\hosts "20.205.243.166 github.com"`，pwsh 管理员），网络恢复后删掉。
 - **发行版依赖 PyPI 版本**：改了 `planify/**`/`treesearch/**` 不发版，发行版用户永远停旧版——用户说「发版」默认覆盖所有有改动的包，不只 doclens。

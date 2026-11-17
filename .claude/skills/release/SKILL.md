@@ -11,7 +11,7 @@ description: 发版全流程：远端连通性预检 → 提交代码 → publis
 
 1. 问清或从上下文推断要发的包：`doclens` / `treesearch` / `planify`（可多个；未指明时用 `--dry-run` 逐个探测，有变化的才发）
 2. **前置检查**：
-   - `../cortex/.venv/Scripts/python.exe -m pytest -q` 全绿（发版前必须）
+   - `../cortex/.venv/Scripts/python.exe -m pytest -q` 全绿（发版前必须）——**全量 pytest 必须 `background_run` 后台跑**（bash 前台 120s 硬超时会掐断进程树，≈4 分钟必超）；输出重定向落文件再看（如 `> .doclens/tmp/pytest-full.log 2>&1`），不要用 `| tail` 管道（通知只带管道尾部，中途输出丢失）。同批后台跑：`npx vitest run` / `npm run build` / `npm run test:e2e:search` / `playwright test` / `doclens index`。
    - `git status` 浏览待提交改动，无意外文件（构建产物、临时文件应被 gitignore 挡住；发现可疑文件先停下问用户）
 
 ## 远端连通性预检（必做，任何推送之前）
