@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { SkillInfo } from "../api/skills";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import "../components/icon";
 
 /** 技能选择对话框：列出调用方传入的技能清单，点选即确认（pick 事件）。
@@ -23,7 +24,7 @@ import "../components/icon";
  */
 @customElement("skill-toolbox-dialog")
 export class SkillToolboxDialog extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: block;
       /* 桌面占页面宽度 50%（2026-08-17 决议），三列卡片矩阵 */
@@ -171,12 +172,6 @@ export class SkillToolboxDialog extends LitElement {
     }
 
     /* ── 状态与动作 ── */
-    .empty {
-      padding: var(--cortex-space-8);
-      text-align: center;
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-sm);
-    }
     .err {
       color: var(--cortex-danger);
       font-size: var(--cortex-fs-sm);
@@ -212,7 +207,7 @@ export class SkillToolboxDialog extends LitElement {
       :host { width: 100%; box-sizing: border-box; }
       button.cancel { padding: 12px 20px; min-height: var(--cortex-touch-target); }
     }
-  `;
+  `];;
 
   /** 技能清单，调用方供给；null = 加载中。 */
   @property({ attribute: false }) skills: SkillInfo[] | null = null;

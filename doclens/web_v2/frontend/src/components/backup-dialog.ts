@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { dialogFrameStyles } from "../styles/dialog-frame";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -21,7 +22,7 @@ import "./icon";
  */
 @customElement("backup-dialog")
 export class BackupDialog extends LitElement {
-  static styles = css`${dialogFrameStyles} 
+  static styles = [dialogFrameStyles, emptyStateStyles, css`
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -134,13 +135,7 @@ export class BackupDialog extends LitElement {
       opacity: 0.5;
       cursor: not-allowed;
     }
-    .empty {
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      text-align: center;
-      padding: var(--cortex-space-6) 0;
-    }
-  `;
+  `];
 
   @property({ type: Boolean, reflect: true })
   open = false;

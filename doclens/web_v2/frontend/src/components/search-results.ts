@@ -1,12 +1,13 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { FileGroup, SearchHit } from "../state/types";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import "./file-card";
 import "./spinner";
 
 @customElement("search-results")
 export class SearchResults extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: flex;
       gap: var(--cortex-space-4);
@@ -28,12 +29,6 @@ export class SearchResults extends LitElement {
       display: flex;
       flex-direction: column;
     }
-    .empty {
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-base);
-      text-align: center;
-      padding: var(--cortex-space-8);
-    }
     .loading {
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-base);
@@ -52,7 +47,7 @@ export class SearchResults extends LitElement {
         border-right: none;
       }
     }
-  `;
+  `];;
 
   @property({ attribute: false }) groups: FileGroup[] = [];
   /** 当前激活命中（detailStack 顶部引用）——path+line 匹配对应行加亮。 */

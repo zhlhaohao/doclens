@@ -11,6 +11,7 @@ import type { PageMarker } from "../api/preview";
 import { copyText, createCopiedFlash, COPY_FEEDBACK_MS } from "../utils/clipboard";
 import { bustRawImages } from "./image-viewer";
 import "./icon";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import {
   shadowSelection,
   domTextLength,
@@ -273,6 +274,7 @@ export function buildMatchLines(content: string, keyword: string): number[] {
 export class MdViewer extends LitElement {
   static styles = [
     scrollJumpFabStyles,
+    emptyStateStyles,
     unsafeCSS(katexStyles),
     css`
     :host { box-sizing: border-box; }
@@ -445,11 +447,6 @@ export class MdViewer extends LitElement {
       border-radius: 0;
       max-width: min(100%, 1400px);
       margin: 0 auto;
-    }
-    .empty {
-      color: var(--cortex-text-subtle);
-      text-align: center;
-      padding: var(--cortex-space-6);
     }
     /* 全文复制按钮：贴纸面右上角（absolute，不受 padding 影响） */
     .copy-bar-top {

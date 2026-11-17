@@ -11,6 +11,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { gitApi } from "../api/git";
 import type { GitChange } from "../api/git";
 import { formatBytes } from "../utils/format";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import "../components/icon";
 import "./diff-viewer";
 
@@ -43,7 +44,7 @@ function formatSize(size: number | null): string {
 
 @customElement("git-changes-list")
 export class GitChangesList extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -156,18 +157,6 @@ export class GitChangesList extends LitElement {
       font-family: var(--cortex-font-mono);
       white-space: nowrap;
     }
-    .empty {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: var(--cortex-space-2);
-      padding: var(--cortex-space-8);
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-base);
-      text-align: center;
-    }
     .error {
       flex: 1;
       display: flex;
@@ -178,7 +167,7 @@ export class GitChangesList extends LitElement {
       font-size: var(--cortex-fs-base);
       text-align: center;
     }
-  `;
+  `];;
 
   /** 当前选中（预览 diff）的路径 —— 该行加 active 高亮。 */
   @property() activePath = "";
@@ -252,9 +241,9 @@ export class GitChangesList extends LitElement {
       ${this._error
         ? html`<div class="error">${this._error}</div>`
         : this._loading && this._changes === null
-          ? html`<div class="empty">获取改动列表…</div>`
+          ? html`<div class="empty fill">获取改动列表…</div>`
           : this._changes !== null && this._changes.length === 0
-            ? html`<div class="empty">
+            ? html`<div class="empty fill">
                 工作区干净<br>
                 <span style="font-size: var(--cortex-fs-sm)">所有改动均已提交</span>
               </div>`

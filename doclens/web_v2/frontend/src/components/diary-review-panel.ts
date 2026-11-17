@@ -11,13 +11,14 @@ import { customElement, property } from "lit/decorators.js";
 
 import type { DiaryEntry } from "../state/types";
 import { weekdayCn } from "./diary-calendar";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import "./diary-calendar";
 import "./icon";
 import "./md-viewer";
 
 @customElement("diary-review-panel")
 export class DiaryReviewPanel extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: block;
       position: relative;
@@ -86,13 +87,7 @@ export class DiaryReviewPanel extends LitElement {
       color: var(--cortex-text-muted);
       padding: var(--cortex-space-8, 32px) 0;
     }
-    .empty {
-      text-align: center;
-      color: var(--cortex-text-muted);
-      padding: var(--cortex-space-8, 32px) 0;
-      font-size: var(--cortex-fs-md);
-    }
-  `;
+  `];;
 
   @property() date = "";
   @property() today = "";

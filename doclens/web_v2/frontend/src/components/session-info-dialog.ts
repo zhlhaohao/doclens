@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import { formatTokens } from "../utils/format";
@@ -14,7 +15,7 @@ import "./icon";
  *  打开弹窗时 re-fetch 刷新）。 */
 @customElement("session-info-dialog")
 export class SessionInfoDialog extends LitElement {
-  static styles = css`${buttonBaseStyles} ${buttonRowStyles} 
+  static styles = [buttonBaseStyles, buttonRowStyles, emptyStateStyles, css`
     :host { display: block; min-width: 340px; }
     .row { margin: var(--cortex-space-3) 0; }
     .label {
@@ -52,11 +53,6 @@ export class SessionInfoDialog extends LitElement {
       color: var(--cortex-text-subtle);
     }
     .hint.warn { color: var(--cortex-warning); }
-    .empty {
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-sm);
-      padding: var(--cortex-space-3) 0;
-    }
     /* 会话 ID 行：label 左、ID + copy 钮右侧对齐成一排；长 ID 不换行 */
     .id-row {
       display: flex;
@@ -103,7 +99,7 @@ export class SessionInfoDialog extends LitElement {
     @media (max-width: 1023px) {
       :host { min-width: 0; }
     }
-  `;
+  `];;
 
   /** 已占用 tokens（最近一次调用的总输入）；null = 暂无数据 */
   @property({ type: Number }) used: number | null = null;

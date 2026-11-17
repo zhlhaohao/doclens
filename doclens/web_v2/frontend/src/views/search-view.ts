@@ -549,6 +549,11 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
     else this._pushToast("复制失败（剪贴板不可用）", "error", 5000);
   };
 
+  /** 预览 md 复制失败（AP-5 遗留接线：md-viewer 的 copy-failed 冒泡穿
+   *  shadow 到宿主，此前预览页无监听——失败无反馈）。 */
+  private _onPreviewCopyFailed = (): void =>
+    this._pushToast("复制失败，请手动选择文本", "error", 5000);
+
   private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
     this._pushToast(`下载失败：${e.detail.message}`, "error", 5000);
   };
@@ -727,6 +732,7 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
                 @save-failed=${this._onPreviewSaveFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
                 @path-copied=${this._onPathCopied}
+      @copy-failed=${this._onPreviewCopyFailed}
                 @download-failed=${this._onPreviewDownloadFailed}
                 @bookmark-added=${this._onBookmarkAdded}
                 @bookmark-duplicate=${this._onBookmarkDuplicate}

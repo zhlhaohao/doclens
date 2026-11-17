@@ -1428,6 +1428,11 @@ export class ChatView extends LitElement {
 
   /** 预览 pane 阅读书签收藏反馈（added / duplicate / full）。 */
   private _onBookmarkAdded = (): void => this._pushToast("已收藏书签", "success", 2500);
+
+  /** 预览 md 复制失败（AP-5 遗留接线：md-viewer 的 copy-failed 冒泡穿
+   *  shadow 到宿主，此前预览页无监听——失败无反馈）。 */
+  private _onPreviewCopyFailed = (): void =>
+    this._pushToast("复制失败，请手动选择文本", "error", 5000);
   private _onBookmarkDuplicate = (): void => this._pushToast("此处已有书签", "info", 2500);
   private _onBookmarkFull = (): void => this._pushToast("书签已满（200 条），请先清理", "error", 5000);
 
@@ -1538,6 +1543,7 @@ export class ChatView extends LitElement {
       @saved=${this._onPreviewSaved}
       @save-failed=${this._onPreviewSaveFailed}
       @path-copied=${this._onPathCopied}
+      @copy-failed=${this._onPreviewCopyFailed}
       @bookmark-added=${this._onBookmarkAdded}
       @bookmark-duplicate=${this._onBookmarkDuplicate}
       @bookmark-full=${this._onBookmarkFull}

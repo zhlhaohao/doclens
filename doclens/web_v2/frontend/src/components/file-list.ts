@@ -10,6 +10,7 @@ import {
   parentOfBrowseRoot,
 } from "../utils/browse-path";
 import { sortFileEntries, type FileSortKey } from "../utils/file-sort";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import "./file-row";
 import "./spinner";
 
@@ -21,7 +22,7 @@ const COL_WIDTHS_KEY = "cortex.files.colWidths";
 
 @customElement("file-list")
 export class FileList extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
       background: var(--cortex-surface);
@@ -362,19 +363,7 @@ export class FileList extends LitElement {
     /* 箭头用 CSS content 渲染——列头 DOM 文本保持纯标签（表头文本契约） */
     .sort-arrow::before { content: attr(data-arrow); }
     .rows { flex: 1; overflow-y: auto; }
-    .empty {
-      padding: var(--cortex-space-8);
-      text-align: center;
-      color: var(--cortex-text-subtle);
-    }
-    /* 加载中态：呼吸动画给「正在干活」的感知（区别于确定性的「目录为空」） */
-    .empty.loading {
-      animation: empty-pulse 1.2s ease-in-out infinite;
-    }
-    @keyframes empty-pulse {
-      50% { opacity: 0.45; }
-    }
-  `;
+  `];;
 
   private _unsubscribe?: () => void;
 

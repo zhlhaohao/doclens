@@ -28,6 +28,7 @@ import { SkillToolboxController } from "../utils/skill-toolbox";
 import { downloadServerFile } from "../utils/download";
 import { copyText } from "../utils/clipboard";
 import { getFileTypeBadge } from "../utils/file-type";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import {
   FONT_SCALE_MIN_PCT,
   FONT_SCALE_MAX_PCT,
@@ -89,6 +90,7 @@ export function normalizeHighlightKeyword(input: string): string {
 export class PreviewPane extends LitElement {
   static styles = [
     scrollJumpFabStyles,
+    emptyStateStyles,
     css`
     :host {
       display: flex;
@@ -247,14 +249,6 @@ export class PreviewPane extends LitElement {
     }
     .attachment.disabled:hover {
       background: transparent;
-    }
-    .empty {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-base);
     }
     /* 次级动作按钮：hairline + radius-sm + muted；hover surface-muted + text */
     button.download-btn,
@@ -1862,12 +1856,12 @@ export class PreviewPane extends LitElement {
     // 会漏掉只渲染其中某个分支的场景（mobile 无桌面 header → download
     // 注入缺失）。
     this._syncInteractions();
-    if (this.loading) return html`<div class="empty">加载中...</div>`;
+    if (this.loading) return html`<div class="empty fill">加载中...</div>`;
     // 空态守卫按 path 判定：空文件（新建 笔记.md 等）的 content 是合法空串，
     // 不等于「无预览」；各视图清空预览时都会把 path 重置为 ""。
     // pdf 分支无需豁免——其 content 恒空串但 path 非空，守卫天然放行。
     if (!this.path)
-      return html`<div class="empty">点击左侧结果查看预览</div>`;
+      return html`<div class="empty fill">点击左侧结果查看预览</div>`;
 
     // 移动端用自己的顶部 bar，常规 .header 不再渲染（避免双 bar）
     const renderMobileBar = this.mobile ? this._renderMobileHeader() : null;

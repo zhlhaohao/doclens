@@ -1299,6 +1299,11 @@ export class FilesView extends LitElement {
     else this._showToast("复制失败（剪贴板不可用）");
   };
 
+  /** 预览 md 复制失败（AP-5 遗留接线：md-viewer 的 copy-failed 冒泡穿
+   *  shadow 到宿主，此前预览页无监听——失败无反馈）。 */
+  private _onPreviewCopyFailed = (): void =>
+    this._showToast("复制失败，请手动选择文本");
+
   /** 预览 pane 阅读书签收藏反馈（added / duplicate / full）。 */
   private _onBookmarkAdded = () => this._showToast("已收藏书签");
   private _onBookmarkDuplicate = () => this._showToast("此处已有书签");
@@ -1441,6 +1446,7 @@ export class FilesView extends LitElement {
       @save-failed=${this._onPreviewSaveFailed}
       @download-success=${this._onPreviewDownloadSuccess}
       @path-copied=${this._onPathCopied}
+      @copy-failed=${this._onPreviewCopyFailed}
       @download-failed=${this._onPreviewDownloadFailed}
       @bookmark-added=${this._onBookmarkAdded}
       @bookmark-duplicate=${this._onBookmarkDuplicate}

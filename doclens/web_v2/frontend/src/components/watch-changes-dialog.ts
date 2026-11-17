@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { dialogFrameStyles } from "../styles/dialog-frame";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import { customElement, property } from "lit/decorators.js";
 
 import { store } from "../state/store";
@@ -11,7 +12,7 @@ import type { WatchChange } from "../state/types";
  * 打开期间订阅 store 实时刷新列表；Esc / 点遮罩 / 关闭按钮 → 派发 close。 */
 @customElement("watch-changes-dialog")
 export class WatchChangesDialog extends LitElement {
-  static styles = css`${dialogFrameStyles} 
+  static styles = [dialogFrameStyles, emptyStateStyles, css`
     .list {
       overflow-y: auto;
       padding: var(--cortex-space-2) var(--cortex-space-6) var(--cortex-space-4);
@@ -39,14 +40,7 @@ export class WatchChangesDialog extends LitElement {
       white-space: nowrap;
       font-size: var(--cortex-fs-xs);
     }
-    .empty {
-      padding: var(--cortex-space-6);
-      text-align: center;
-      color: var(--cortex-text-muted);
-      font-size: var(--cortex-fs-sm);
-      font-family: var(--cortex-font);
-    }
-  `;
+  `];;
 
   @property({ type: Boolean, reflect: true })
   open = false;

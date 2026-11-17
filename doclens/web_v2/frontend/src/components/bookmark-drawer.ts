@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { ReadingBookmark } from "../utils/bookmarks";
 import { sideDrawerStyles, renderSideDrawer } from "../utils/side-drawer";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import "./icon";
 
 /**
@@ -20,6 +21,7 @@ import "./icon";
 export class BookmarkDrawer extends LitElement {
   static styles = [
     sideDrawerStyles,
+    emptyStateStyles,
     css`
     .del-btn {
       border: none;
@@ -53,13 +55,6 @@ export class BookmarkDrawer extends LitElement {
     }
     .add-btn:hover {
       background: var(--cortex-primary-soft);
-    }
-    .empty {
-      padding: var(--cortex-space-6) var(--cortex-space-4);
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      text-align: center;
-      line-height: 1.6;
     }
     .item {
       display: flex;

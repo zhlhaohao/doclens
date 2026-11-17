@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { dialogFrameStyles } from "../styles/dialog-frame";
 import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -21,7 +22,7 @@ import { WORKDIR_SWAP_FAILED_EVENT } from "../utils/events";
  * 关掉对话框用户会以为没切）。 */
 @customElement("workdir-switch-dialog")
 export class WorkdirSwitchDialog extends LitElement {
-  static styles = css`${dialogFrameStyles} ${buttonBaseStyles} ${buttonRowStyles} 
+  static styles = [dialogFrameStyles, buttonBaseStyles, buttonRowStyles, emptyStateStyles, css`
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -59,7 +60,6 @@ export class WorkdirSwitchDialog extends LitElement {
     .recent-item:hover:not(:disabled) { background: var(--cortex-surface-muted); }
     .recent-item.current { color: var(--cortex-text-muted); cursor: default; }
     .recent-item:disabled { opacity: 0.5; cursor: not-allowed; }
-    .empty { font-size: var(--cortex-fs-sm); color: var(--cortex-text-muted); padding: 4px 0; }
     input {
       width: 100%;
       padding: 8px;
@@ -93,7 +93,7 @@ export class WorkdirSwitchDialog extends LitElement {
     @media (max-width: 1023px) {
       input { font-size: 16px; padding: 10px; }
     }
-  `;
+  `];;
 
   @property({ type: Boolean, reflect: true })
   open = false;

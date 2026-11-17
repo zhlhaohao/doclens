@@ -9,6 +9,7 @@
  */
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 
 interface DiffRow {
   type: "add" | "del" | "ctx" | "hunk" | "skip";
@@ -74,7 +75,7 @@ export function parseUnifiedDiff(diff: string): DiffRow[] {
 
 @customElement("diff-viewer")
 export class DiffViewer extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -141,17 +142,7 @@ export class DiffViewer extends LitElement {
       background: var(--cortex-bg);
       user-select: none;
     }
-    .empty {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--cortex-text-subtle);
-      font-family: var(--cortex-font);
-      font-size: var(--cortex-fs-base);
-      padding: var(--cortex-space-8);
-    }
-  `;
+  `];;
 
   /** unified diff 文本（空 = 无差异/占位）。 */
   @property({ attribute: false }) diff = "";
@@ -163,7 +154,7 @@ export class DiffViewer extends LitElement {
 
   render() {
     if (!this.diff) {
-      return html`<div class="empty">无差异内容</div>`;
+      return html`<div class="empty fill">无差异内容</div>`;
     }
     if (this._rowsCache === null || this._rowsCacheFor !== this.diff) {
       this._rowsCacheFor = this.diff;
@@ -171,7 +162,7 @@ export class DiffViewer extends LitElement {
     }
     const rows = this._rowsCache;
     if (rows.length === 0) {
-      return html`<div class="empty">无差异内容</div>`;
+      return html`<div class="empty fill">无差异内容</div>`;
     }
     return html`
       <div class="diff-body">
