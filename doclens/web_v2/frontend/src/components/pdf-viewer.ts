@@ -6,6 +6,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import viewerCssUrl from "pdfjs-dist/web/pdf_viewer.css?url";
 import type { TocItem } from "../utils/toc";
 import { encodePdfScrollAnchor, decodePdfScrollAnchor } from "../utils/scroll-memory";
+import { installPdfCompatPolyfill } from "../utils/pdf-compat";
 import "./icon";
 
 /**
@@ -19,6 +20,11 @@ let viewerModulePromise: Promise<PdfViewerModule> | null = null;
 function loadViewerModule(): Promise<PdfViewerModule> {
   if (!viewerModulePromise) {
     viewerModulePromise = (async () => {
+      // 旧浏览器兼容补丁须在 import pdf.js **之前**安装：pdf.js v6 产物
+      // 顶层引用 Iterator.prototype.join，Firefox 112 等旧版缺 Iterator
+      // 全局 → 模块求值即 ReferenceError → 整个 import 失败 →
+      // 「PDF 渲染引擎加载失败」（详见 utils/pdf-compat.ts）。
+      installPdfCompatPolyfill();
       const pdfjs = await import("pdfjs-dist");
       const workerUrl = (
         await import("pdfjs-dist/build/pdf.worker.min.mjs?url")
