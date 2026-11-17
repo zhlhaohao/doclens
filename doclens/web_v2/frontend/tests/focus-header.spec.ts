@@ -73,8 +73,11 @@ describe("<focus-header> actions prop", () => {
     // focus-header 之后；backdrop-filter 已使 :host 成为层叠上下文，
     // 缺 z-index 时菜单会被 preview-pane 整体盖住。
     // AP-4：裸数字已换成分层变量（--cortex-z-raised = 10）。
+    // 2026-11-17：显式降一档（calc(raised-1)=9）——同档 raised 会按 DOM
+    // 顺序反压 app-bar 的用户下拉菜单（chat-view 在 app-bar 之后渲染，
+    // 菜单从顶栏下探到 header 区域被盖）。
     const cssText = FocusHeader.styles.cssText;
-    expect(cssText).toContain("z-index: var(--cortex-z-raised)");
+    expect(cssText).toContain("z-index: calc(var(--cortex-z-raised) - 1)");
   });
 });
 
