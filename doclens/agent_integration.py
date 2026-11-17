@@ -54,6 +54,21 @@ from planify.skills.skill_loader import SkillLoader
 # 中断事件
 _interrupt_event = threading.Event()
 
+#: GUI 工具表显式降级清单（2026-11-17 决策 B）：
+#: - legacy ask：ask_user/user_confirm 在 GUI 无 emitter 通道（悬置 300s 假死）
+#: - 团队协作 5 工具 + 协议 3 工具：回合制宿主容不下常驻队友——收件箱只在
+#:   下一回合循环顶 drain、进程退出全灭、与 task 子代理功能重叠。模型因
+#:   提示词零引导从未成功使用（23 天日志仅 1 次调用且队友 55 秒内死亡），
+#:   保留只会白占工具描述 token + 偶发误用面。planify 层保持注册不动
+#:   （未来 Router/Worker 分层时按需重新启用）；doclens 装配侧统一过滤。
+GUI_FILTERED_TOOLS = frozenset({
+    "ask_user", "user_confirm",
+    "spawn_teammate", "list_teammates", "send_message",
+    "read_inbox", "broadcast",
+    "shutdown_request", "plan_approval", "idle",
+})
+
+
 
 #: 子线程建库的等待上界（秒）。TreeSearch.index() 在事件循环运行时拒绝执行，
 #: 初始化必须绕到子线程；但等待必须有上界——无 timeout 的 join 会把「索引构建
@@ -534,10 +549,9 @@ class CortexAgent:
             gui_mode=True,
             max_tokens=asm.max_tokens,
         )
-        legacy_ask = {"ask_user", "user_confirm"}
-        asm.tools = [t for t in tools if t["name"] not in legacy_ask]
+        asm.tools = [t for t in tools if t["name"] not in GUI_FILTERED_TOOLS]
         asm.tool_handlers = {
-            k: v for k, v in tool_handlers.items() if k not in legacy_ask
+            k: v for k, v in tool_handlers.items() if k not in GUI_FILTERED_TOOLS
         }
 
     def _stage_assemble(self, asm: "_Assembly") -> None:
