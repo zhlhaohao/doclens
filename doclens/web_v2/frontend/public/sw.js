@@ -28,6 +28,11 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
+  // 只处理 http(s) 同源请求：浏览器插件/用户脚本注入的 chrome-extension://
+  // 请求也会冒泡到本 SW，Cache API 不支持该 scheme（put 抛
+  // "Request scheme 'chrome-extension' is unsupported"）。
+  if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (url.origin !== self.location.origin) return;
   // 不拦截 API
   if (url.pathname.startsWith("/api/")) return;
 
