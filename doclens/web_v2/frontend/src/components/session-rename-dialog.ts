@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { InputDialogBase } from "./input-dialog-base";
+import { InputDialogBase, type ValidationResult } from "./input-dialog-base";
 
 /** 会话标题改名对话框（2026-09-17）。
  *  外壳复用 input-dialog-base（AP-28 归一），校验规则与文件名不同：标题是
@@ -21,9 +21,13 @@ export class SessionRenameDialog extends InputDialogBase {
     return this.currentTitle;
   }
 
-  protected validate(v: string): string {
+  protected validate(v: string): ValidationResult {
     if (!v.trim()) return "标题不能为空";
-    if (v === this.currentTitle) return "标题未变化";
+    // 「未变化」是尚未修改的中性状态，不是错误——降为 hint 级
+    // （灰字提示，不红框；AP-28 视觉改版 2026-11-17）。
+    if (v === this.currentTitle) {
+      return { message: "标题未变化", level: "hint" };
+    }
     return "";
   }
 
