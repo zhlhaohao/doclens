@@ -4,7 +4,7 @@
 //   - HTML：network-first，失败回退缓存
 //   - /api/*：不拦截（永远走网络）
 //   - manifest / sw 自身：network-first
-const CACHE_VERSION = "doclens-3f329c3c-mwgg2fch";
+const CACHE_VERSION = "doclens-48256232-mwkigzgi";
 const CACHE_NAME = `doclens-static-${CACHE_VERSION}`;
 
 self.addEventListener("install", (event) => {
@@ -28,6 +28,11 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
+  // 只处理 http(s) 同源请求：浏览器插件/用户脚本注入的 chrome-extension://
+  // 请求也会冒泡到本 SW，Cache API 不支持该 scheme（put 抛
+  // "Request scheme 'chrome-extension' is unsupported"）。
+  if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (url.origin !== self.location.origin) return;
   // 不拦截 API
   if (url.pathname.startsWith("/api/")) return;
 

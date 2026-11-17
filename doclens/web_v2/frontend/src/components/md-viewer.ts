@@ -2,15 +2,23 @@ import { LitElement, html, css, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
-import katex from "katex";
 // shadow DOM 隔离全局样式，KaTeX CSS 必须以内联方式注入组件 styles；
 // Vite 会重写其中字体 url() 为构建产物路径（woff2 按 @font-face 按需加载）。
 import katexStyles from "katex/dist/katex.min.css?inline";
 import { sanitizeHtml } from "../utils/sanitize";
-import { cjkInlineMath } from "../utils/marked-math";
+import { cjkInlineMath, makeSingleLineDisplayMath } from "../utils/marked-math";
 import type { PageMarker } from "../api/preview";
+import { copyText, createCopiedFlash, COPY_FEEDBACK_MS } from "../utils/clipboard";
 import { bustRawImages } from "./image-viewer";
 import "./icon";
+import { emptyStateStyles } from "../styles/empty-state-styles";
+import {
+  shadowSelection,
+  domTextLength,
+  domLocate,
+  blockSourceText,
+  type SourceContext,
+} from "../utils/selection-math";
 import {
   ScrollJumpController,
   scrollJumpFabStyles,
@@ -195,35 +203,6 @@ blockRenderer.image = function (token: any) {
   return `<figure><img src="${href}" alt="${alt}"${titleAttr} loading="lazy">${caption}</figure>\n`;
 };
 
-/** 单行 `$$...$$` 块级公式扩展（marked-katex-extension 只认定界符独占一行）。
- *
- *  arxiv 转换的 md 常写成单行 `$$ $A$ ( $B$ ) $$`，且内部嵌套 `$...$`
- *  （LaTeX→md 转换残留）。自定义 block tokenizer 整行匹配、不改写源文本
- *  （改写会打乱 data-source-line 与后端行号对齐）；renderer 剥掉内层 `$`
- *  后按 displayMode 渲染。 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const singleLineDisplayMath: any = {
-  name: "singleLineDisplayMath",
-  level: "block",
-  start(src: string) {
-    return src.indexOf("$$");
-  },
-  tokenizer(src: string) {
-    const m = /^\$\$([^\n]+?)\$\$\s*(?:\n|$)/.exec(src);
-    if (!m) return undefined;
-    return { type: "singleLineDisplayMath", raw: m[0], text: m[1].trim() };
-  },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  renderer(token: any) {
-    const line = lineOf(token.raw);
-    const body = katex.renderToString(token.text.replace(/\$/g, ""), {
-      displayMode: true,
-      throwOnError: false,
-    });
-    return `<div data-source-line="${line}">${body}</div>\n`;
-  },
-};
-
 /** 标记是否已 use 过（避免重复 use） */
 let mdConfigured = false;
 function ensureMdConfigured(): void {
@@ -253,12 +232,19 @@ function ensureMdConfigured(): void {
   // 后注册先尝试）。
   marked.use({ extensions: [cjkInlineMath] });
   // 单行 $$...$$ 兜底（扩展 tokenizer 返回 undefined 才轮到它，不抢标准块级语法）
-  marked.use({ extensions: [singleLineDisplayMath] });
+  // ——AP-6：逻辑体收敛 marked-math.ts 的 makeSingleLineDisplayMath 工厂，
+  // 本组件只注入 data-source-line 行号（源行对齐，聊天版不需要）。
+  marked.use({ extensions: [makeSingleLineDisplayMath((token) => `data-source-line="${lineOf(token.raw)}"`)] });
 }
 
 /** 匹配导航粗跳阈值（px）：目标距离超过此值时第一段用瞬跳（auto）粗定位，
  *  避免 smooth 全程滚动期间懒渲染页密集插入导致的高度持续塌变压垮收敛。 */
 const MATCH_NAV_ROUGH_JUMP_PX = 50000;
+/** 收敛循环参数（AP-7 命名常量，原 300/5/1 裸数字）：超时帧上限（~5s
+ *  @60fps）、判定「稳定」的连续帧数、位置比较容差（px）。 */
+const SETTLE_MAX_FRAMES = 300;
+const SETTLE_STABLE_FRAMES = 5;
+const SETTLE_EPS_PX = 1;
 
 /** 匹配导航的源文本索引：逐行跑与 _highlightKeyword 相同口径的正则
  *  （空格分词 + escape + join("|")，大小写不敏感），返回每个匹配起始所在的
@@ -288,6 +274,7 @@ export function buildMatchLines(content: string, keyword: string): number[] {
 export class MdViewer extends LitElement {
   static styles = [
     scrollJumpFabStyles,
+    emptyStateStyles,
     unsafeCSS(katexStyles),
     css`
     :host { box-sizing: border-box; }
@@ -461,17 +448,12 @@ export class MdViewer extends LitElement {
       max-width: min(100%, 1400px);
       margin: 0 auto;
     }
-    .empty {
-      color: var(--cortex-text-subtle);
-      text-align: center;
-      padding: var(--cortex-space-6);
-    }
     /* 全文复制按钮：贴纸面右上角（absolute，不受 padding 影响） */
     .copy-bar-top {
       position: absolute;
       top: 8px;
       right: 12px;
-      z-index: 5;
+      z-index: var(--cortex-z-base);
     }
     .doc-copy {
       position: relative;
@@ -507,7 +489,7 @@ export class MdViewer extends LitElement {
       line-height: 1.4;
       padding: 2px 10px;
       border-radius: var(--cortex-radius-pill);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       pointer-events: none;
     }
     /* 定位块的闪烁动画（"你滚到这里了"指示）
@@ -605,6 +587,7 @@ export class MdViewer extends LitElement {
   @state() private _viewerSrc = "";
   /** 全文复制反馈 */
   @state() private _copied = false;
+  private _copiedFlash = createCopiedFlash(() => { this._copied = false; });
   /** 跳过 line/content 变化触发的命中行定位（preview-pane 模式切换做
    *  位置恢复期间置 true，避免定位打架） */
   @property({ type: Boolean }) suppressLocate = false;
@@ -639,6 +622,9 @@ export class MdViewer extends LitElement {
   // 滚动接近（observer 提前量）才渲染该页内容；跳转/定位先展开目标页。
   /** _splitByPages 的缓存（content/pages 变化时重算，render 与 _renderPage 共用）。 */
   private _pagedChunks: Array<{ label: string; md: string; offset: number }> | null = null;
+  /** 单块模式解析记忆化（AP-7）：content 未变时复用 parse+sanitize 结果。 */
+  private _renderedHtml: string | null = null;
+  private _renderedHtmlFor = "";
   /** 已渲染页的 index 集合（content/pages 变化时整体作废）。 */
   private _renderedPages = new Set<number>();
   private _pageObserver: IntersectionObserver | null = null;
@@ -727,6 +713,7 @@ export class MdViewer extends LitElement {
   disconnectedCallback() {
     window.removeEventListener("cortex:image-rotated", this._onImageRotated);
     this.removeEventListener("scroll", this._onBadgeScroll);
+    this._copiedFlash.dispose();
     window.clearTimeout(this._badgeTimer);
     this._badgeTimer = undefined;
     this._pageObserver?.disconnect();
@@ -831,10 +818,12 @@ export class MdViewer extends LitElement {
       btn.addEventListener("click", () => {
         const code = btn.parentElement?.querySelector("code");
         if (code) {
-          navigator.clipboard.writeText(code.textContent || "").then(() => {
-            btn.textContent = "已复制";
-            setTimeout(() => { btn.textContent = "复制"; }, 1500);
-          }).catch(() => {});
+          // AP-5：改走单一入口（含降级）；失败不再是静默 catch——按钮短暂
+          // 显示「复制失败」给用户反馈（原实现点复制无任何反应）。
+          void copyText(code.textContent || "").then((ok) => {
+            btn.textContent = ok ? "已复制" : "复制失败";
+            setTimeout(() => { btn.textContent = "复制"; }, COPY_FEEDBACK_MS);
+          });
         }
       });
     });
@@ -956,66 +945,29 @@ export class MdViewer extends LitElement {
     requestAnimationFrame(() => requestAnimationFrame(scrollOnce));
   }
 
-  /** 组件渲染树内的 Selection（Chromium 提供 ShadowRoot.getSelection，
-   *  标准 TS DOM lib 未收录——运行时探测）；回退 window 级（open shadow
-   *  的选区节点同样暴露在 document selection 中）。 */
+  /** 组件渲染树内的 Selection（工具函数 shadowSelection，AP-6 迁出）。 */
   private _shadowSelection(): Selection | null {
-    const shadowSel = (this.shadowRoot as unknown as {
-      getSelection?: () => Selection | null;
-    })?.getSelection?.();
-    return shadowSel ?? window.getSelection();
+    return shadowSelection(this.shadowRoot!);
   }
 
-  /** 块覆盖的源行闭区间（from = 锚行，to = 下一锚块起始行-1 / 文档末行）。 */
-  private _blockSourceLines(el: HTMLElement): { from: number; to: number } {
-    const from = Number(el.getAttribute("data-source-line")) || 1;
-    const blocks = this._anchorBlocks();
-    const idx = blocks.indexOf(el);
-    const next =
-      idx >= 0 && idx + 1 < blocks.length
-        ? Number(blocks[idx + 1].getAttribute("data-source-line")) || from
-        : this.content.split("\n").length + 1;
-    return { from, to: Math.max(from, next - 1) };
+  /** 选区换算的源上下文（content + 锚块；utils/selection-math 纯函数消费）。 */
+  private _srcCtx(): SourceContext {
+    return { content: this.content, anchorBlocks: this._anchorBlocks() };
   }
 
-  /** 行号（1-indexed）行首在 content 中的绝对字符偏移。 */
-  private _lineStartOffset(n: number): number {
-    const lines = this.content.split("\n");
-    let off = 0;
-    for (let i = 0; i < Math.min(n - 1, lines.length); i++) off += lines[i].length + 1;
-    return off;
-  }
-
-  /** 块内渲染文本总长（TreeWalker 累计文本节点；含 copy-btn 文本，
-   *  与捕获方向的 Range.toString 对称）。 */
+  /** 块内源文本（覆盖行 join）；同时返回块首绝对偏移。 */
   private _domTextLength(el: HTMLElement): number {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    let len = 0;
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) len += (n as Text).length;
-    return len;
+    return domTextLength(el);
   }
 
-  /** 块渲染文本第 k 字符的 DOM 位置（(node, offset)；超界钳块尾文本节点）。 */
+  /** 块渲染文本第 k 字符的 DOM 位置（utils/selection-math#domLocate）。 */
   private _domLocate(el: HTMLElement, k: number): { node: Node; offset: number } | null {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-    let remain = Math.max(0, k);
-    let last: Text | null = null;
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      const t = n as Text;
-      if (remain <= t.length) return { node: t, offset: remain };
-      remain -= t.length;
-      last = t;
-    }
-    return last ? { node: last, offset: last.length } : null;
+    return domLocate(el, k);
   }
 
   /** 块内源文本（覆盖行 join）；同时返回块首绝对偏移。 */
   private _blockSourceText(el: HTMLElement): { abs: number; text: string } {
-    const { from, to } = this._blockSourceLines(el);
-    return {
-      abs: this._lineStartOffset(from),
-      text: this.content.split("\n").slice(from - 1, to).join("\n"),
-    };
+    return blockSourceText(this._srcCtx(), el);
   }
 
   /** 当前 DOM 选区 → 源文本字符偏移（与 cm-editor 的 selectionStart/End
@@ -1277,29 +1229,29 @@ export class MdViewer extends LitElement {
     this._settleTo(gen, scrollOnce, flash);
   }
 
-  /** 等 scrollTop 稳定（连续 5 帧不动）后校准，**循环至收敛**再重放闪烁。
-   *  远距离跳转：途经懒渲染页陆续插入 + content-visibility 估高塌变，
-   *  单轮校准本身又引起新滚动、滚动又触发页插入——高度持续变，一次性
-   *  校准不够（症状：连点/大跨度跳转后页面"看似无高亮"，回退再进——
+  /** 等 scrollTop 稳定（连续 SETTLE_STABLE_FRAMES 帧不动）后校准，**循环至收敛**
+   *  再重放闪烁。远距离跳转：途经懒渲染页陆续插入 + content-visibility
+   *  估高塌变，单轮校准本身又引起新滚动、滚动又触发页插入——高度持续变，
+   *  一次性校准不够（症状：连点/大跨度跳转后页面"看似无高亮"，回退再进——
    *  那时页已渲染、高度稳定——才正确）。收敛判据 = 稳定后的修正量
-   *  ≤1px（此时落点已精确）。gen 不匹配（被更新的导航取代）立即退出；
-   *  300 帧（~5s）超时兜底。 */
+   *  ≤SETTLE_EPS_PX（此时落点已精确）。gen 不匹配（被更新的导航取代）
+   *  立即退出；SETTLE_MAX_FRAMES 帧（~5s）超时兜底。 */
   private _settleTo(gen: number, scrollOnce: () => number, flash: () => void) {
     let last = -1;
     let stable = 0;
     let frames = 0;
     const check = () => {
       if (gen !== this._settleGen || !this.isConnected) return;
-      if (frames++ > 300) {
+      if (frames++ > SETTLE_MAX_FRAMES) {
         flash();
         return;
       }
       const cur = this.scrollTop;
-      if (Math.abs(cur - last) <= 1) {
+      if (Math.abs(cur - last) <= SETTLE_EPS_PX) {
         stable++;
-        if (stable >= 5) {
+        if (stable >= SETTLE_STABLE_FRAMES) {
           const delta = scrollOnce();
-          if (delta <= 1) {
+          if (delta <= SETTLE_EPS_PX) {
             flash(); // 落点已精确，重放闪烁
             return;
           }
@@ -1523,7 +1475,15 @@ export class MdViewer extends LitElement {
     // 导致 _locateAndHighlight 用正确的 line 找不到匹配块（dsl 全部偏大），
     // 表现为「先点 PDF 再点 docx/md，预览定位失效」。
     currentOffset = 0;
-    const raw = sanitizeHtml(marked.parse(this.content, { async: false }) as string);
+    // 解析记忆化（AP-7）：单块模式此前每次 render 都全量 parse+sanitize——
+    // _copied/_matchIndex（滚动派生）等无关 @state 变化都触发重解析。
+    // 按 content 记忆化：内容未变直接复用（keyword 高亮走 <mark> 后处理，
+    // 不依赖重解析）。
+    if (this._renderedHtml === null || this._renderedHtmlFor !== this.content) {
+      this._renderedHtmlFor = this.content;
+      this._renderedHtml = sanitizeHtml(marked.parse(this.content, { async: false }) as string);
+    }
+    const raw = this._renderedHtml;
     return html`
       <div class="md-body">
         <div class="copy-bar-top">${this._renderCopyBtn()}</div>
@@ -1581,10 +1541,18 @@ export class MdViewer extends LitElement {
   }
 
   private _copyAll = () => {
-    navigator.clipboard.writeText(this.content).then(() => {
-      this._copied = true;
-      setTimeout(() => { this._copied = false; }, 1500);
-    }).catch(() => {});
+    // AP-5：改走单一入口（含降级）；失败不再静默——冒泡 copy-failed 由
+    // 宿主 toast（与 chat-message / history-item 同协议）。
+    void copyText(this.content).then((ok) => {
+      if (ok) {
+        this._copied = true;
+        this._copiedFlash.flash();
+      } else {
+        this.dispatchEvent(new CustomEvent("copy-failed", {
+          bubbles: true, composed: true,
+        }));
+      }
+    });
   };
 }
 

@@ -10,7 +10,10 @@ import {
   parentOfBrowseRoot,
 } from "../utils/browse-path";
 import { sortFileEntries, type FileSortKey } from "../utils/file-sort";
+import { emptyStateStyles } from "../styles/empty-state-styles";
+import { formStyles } from "../styles/form-styles";
 import "./file-row";
+import "./spinner";
 
 const DEFAULT_COL_WIDTHS = [28, 28, 240, 80, 140] as const;
 const COL_MINS = [20, 20, 80, 50, 80];
@@ -20,7 +23,7 @@ const COL_WIDTHS_KEY = "cortex.files.colWidths";
 
 @customElement("file-list")
 export class FileList extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, formStyles, css`
     :host {
       display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
       background: var(--cortex-surface);
@@ -121,23 +124,10 @@ export class FileList extends LitElement {
     }
     .toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
     /* 上传中：图标换成旋转圆环动画（"上传中"感知，无进度通道的补偿 UX）；
-       min-width 锚定原 1em 图标宽度，避免替换时按钮抖动 */
+       c-spinner 宽度锚定 1em（原图标宽度），避免替换时按钮抖动 */
     .toolbar button.uploading { opacity: 1; }
-    .toolbar button.uploading::after { min-width: 1em; }
     .toolbar button.uploading doclens-icon { display: none; }
-    .toolbar button.uploading::after {
-      content: "";
-      width: 12px;
-      height: 12px;
-      border: 2px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: cortex-upload-spin 0.8s linear infinite;
-    }
-    @keyframes cortex-upload-spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) {
-      .toolbar button.uploading::after { animation: none; }
-    }
+    .toolbar button.uploading c-spinner { width: 1em; }
     .toolbar button.danger { color: var(--cortex-danger); }
     .toolbar button.danger:hover:not(:disabled) {
       background: rgba(220, 38, 38, 0.06);
@@ -161,7 +151,7 @@ export class FileList extends LitElement {
       line-height: 1.4;
       padding: 2px 10px;
       border-radius: var(--cortex-radius-pill);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       pointer-events: none;
     }
     .mobile-header {
@@ -215,7 +205,7 @@ export class FileList extends LitElement {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
       box-shadow: var(--cortex-shadow-lg);
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
       padding: 4px 0;
     }
     .mobile-header .mobile-menu button {
@@ -242,16 +232,6 @@ export class FileList extends LitElement {
     /* 上传中：菜单项图标换旋转圆环 + 文案（移动端主路径，App 内上传入口） */
     .mobile-header .mobile-menu button.uploading { opacity: 1; }
     .mobile-header .mobile-menu button.uploading doclens-icon { display: none; }
-    .mobile-header .mobile-menu button.uploading::before {
-      content: "";
-      width: 14px;
-      height: 14px;
-      flex-shrink: 0;
-      border: 2px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: cortex-upload-spin 0.8s linear infinite;
-    }
     .mobile-header .mobile-menu button.danger { color: var(--cortex-danger); }
     .header-row {
       display: grid;
@@ -326,7 +306,7 @@ export class FileList extends LitElement {
       width: 8px;
       height: 100%;
       cursor: col-resize;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
       user-select: none;
       background: transparent;
     }
@@ -384,19 +364,7 @@ export class FileList extends LitElement {
     /* 箭头用 CSS content 渲染——列头 DOM 文本保持纯标签（表头文本契约） */
     .sort-arrow::before { content: attr(data-arrow); }
     .rows { flex: 1; overflow-y: auto; }
-    .empty {
-      padding: var(--cortex-space-8);
-      text-align: center;
-      color: var(--cortex-text-subtle);
-    }
-    /* 加载中态：呼吸动画给「正在干活」的感知（区别于确定性的「目录为空」） */
-    .empty.loading {
-      animation: empty-pulse 1.2s ease-in-out infinite;
-    }
-    @keyframes empty-pulse {
-      50% { opacity: 0.45; }
-    }
-  `;
+  `];;
 
   private _unsubscribe?: () => void;
 
@@ -643,17 +611,22 @@ export class FileList extends LitElement {
     return selEntry?.is_dir !== true;
   }
 
-  private _renderMobileHeader() {
-    const { currentDir, treeCache, selectedPaths } = store.getState().files;
-    // ADR-0049：与桌面 render() 同口径的外部只读判定（此处独立计算——
-    // mobile header 是独立渲染路径）
+  /** mobile header 与桌面 render 共用的七项派生态（AP-33：原先两路径各自
+   *  重复计算 readOnly/canRename/canDownload/canAct/canGoUp/breadcrumb/
+   *  showSetWorkdir，注释自认「独立计算」——口径靠手工保持一致，已现漂移风险）。 */
+  private get _toolbarState(): {
+    readOnly: boolean;
+    canRename: boolean;
+    canAct: boolean;
+    canGoUp: boolean;
+    breadcrumb: string;
+    showSetWorkdir: boolean;
+  } {
+    const { currentDir, selectedPaths } = store.getState().files;
+    // ADR-0049 外部浏览态：写操作全禁用（只读浏览），下载/拷贝路径照常
     const readOnly = isOutsideWorkdir(currentDir) || isDrivesLayer(currentDir);
-    const canRename = selectedPaths.length === 1 && !readOnly;
-    const canDownload = this._canDownloadSelected(
-      treeCache[currentDir] || [], selectedPaths,
-    );
-    const canAct = selectedPaths.length >= 1 && !readOnly;
-    // 上溯可用性（ADR-0049）：workdir 根也可上溯到 workdir 父目录
+    // 上溯（ADR-0049）：workdir 根也可上溯（→workdir 父目录）；仅当
+    // workdir 未知/是盘符根本身时置灰。外部链/此电脑层照常逐级上溯。
     const canGoUp = currentDir !== ""
       ? true
       : parentOfBrowseRoot(store.getState().status?.workdir) !== null;
@@ -661,8 +634,24 @@ export class FileList extends LitElement {
       : currentDir === "" ? "/"
       : isOutsideWorkdir(currentDir) ? `${currentDir}/`
       : `/${currentDir}/`;
-    // 「设为工作目录」：真实目录且非 workdir 本身（ADR-0049）
+    // 「设为工作目录」：真实目录且非 workdir 本身时显示（ADR-0049）
     const showSetWorkdir = currentDir !== "" && !isDrivesLayer(currentDir);
+    return {
+      readOnly,
+      canRename: selectedPaths.length === 1 && !readOnly,
+      canAct: selectedPaths.length >= 1 && !readOnly,
+      canGoUp,
+      breadcrumb,
+      showSetWorkdir,
+    };
+  }
+
+  private _renderMobileHeader() {
+    const { currentDir, treeCache, selectedPaths } = store.getState().files;
+    const { readOnly, canRename, canAct, canGoUp, breadcrumb, showSetWorkdir } = this._toolbarState;
+    const canDownload = this._canDownloadSelected(
+      treeCache[currentDir] || [], selectedPaths,
+    );
 
     return html`
       <div class="mobile-header">
@@ -744,7 +733,7 @@ export class FileList extends LitElement {
                   class=${this.uploading ? "uploading" : ""}
                   ?disabled=${this.uploading || readOnly}
                   @click=${this._onMenuItemClick("upload")}
-                >${this.uploading ? "上传中…" : html`<doclens-icon name="upload"></doclens-icon>上传`}</button>
+                >${this.uploading ? html`<c-spinner size="14"></c-spinner>上传中…` : html`<doclens-icon name="upload"></doclens-icon>上传`}</button>
                 <button
                   type="button"
                   role="menuitem"
@@ -853,28 +842,15 @@ export class FileList extends LitElement {
     const rawEntries = treeCache[currentDir] || [];
     const entries = sortFileEntries(rawEntries, sortKey, sortDir);
     const sel = new Set(selectedPaths);
-    // ADR-0049 外部浏览态：写操作全禁用（只读浏览），下载/拷贝路径照常
-    const outside = isOutsideWorkdir(currentDir);
-    const readOnly = outside || isDrivesLayer(currentDir);
-    const canRename = selectedPaths.length === 1 && !readOnly;
+    // 七项派生：与 mobile header 同口径（AP-33 归一，注释/ADR 见 _toolbarState）
+    const { readOnly, canRename, canAct, canGoUp, breadcrumb, showSetWorkdir } = this._toolbarState;
     const canDownload = this._canDownloadSelected(entries, selectedPaths);
-    const canAct = selectedPaths.length >= 1 && !readOnly;
-    // 上溯（ADR-0049）：workdir 根也可上溯（→workdir 父目录）；仅当
-    // workdir 未知/是盘符根本身时置灰。外部链/此电脑层照常逐级上溯。
-    const canGoUp = currentDir !== ""
-      ? true
-      : parentOfBrowseRoot(store.getState().status?.workdir) !== null;
-    const breadcrumb = currentDir === DRIVES_SENTINEL ? "此电脑"
-      : currentDir === "" ? "/"
-      : isOutsideWorkdir(currentDir) ? `${currentDir}/`
-      : `/${currentDir}/`;
     const allSelected = entries.length > 0 && entries.every(e => sel.has(e.path));
     // 加载中判定：请求进行中且当前目录尚未进 cache（首次进入/切换目录）——
     // 与「已加载但为空」区分，避免加载期间闪现误导性的「目录为空」
     const loading = listing && !(currentDir in treeCache);
     const emptyBlock = html`<div class="empty ${loading ? "loading" : ""}">${loading ? "加载中…" : "目录为空"}</div>`;
-    // 「设为工作目录」：真实目录且非 workdir 本身时显示（ADR-0049）
-    const showSetWorkdir = currentDir !== "" && !isDrivesLayer(currentDir);
+    const outside = isOutsideWorkdir(currentDir);
 
     if (this.mobile) {
       return html`
@@ -885,6 +861,7 @@ export class FileList extends LitElement {
               <span class="select-all">
                 <input
                   type="checkbox"
+                  aria-label="全选当前目录"
                   .checked=${allSelected}
                   @click=${this._onSelectAll}
                 />
@@ -951,7 +928,7 @@ export class FileList extends LitElement {
           : null}
         <button data-action="new-file" title=${readOnly ? "工作目录外只读" : "在当前目录新建文本文件（如 笔记.md）"} ?disabled=${readOnly} @click=${() => this._action("new-file")}><doclens-icon name="file-plus"></doclens-icon><span class="btn-label">新文件</span></button>
         <button data-action="mkdir" title=${readOnly ? "工作目录外只读" : "新建目录"} ?disabled=${readOnly} @click=${() => this._action("mkdir")}><doclens-icon name="folder-plus"></doclens-icon><span class="btn-label">新目录</span></button>
-        <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading || readOnly} @click=${() => this._action("upload")}>${this.uploading ? html`<span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
+        <button data-action="upload" class=${this.uploading ? "uploading" : ""} ?disabled=${this.uploading || readOnly} @click=${() => this._action("upload")}>${this.uploading ? html`<c-spinner size="12"></c-spinner><span class="btn-label">上传中</span>` : html`<doclens-icon name="upload"></doclens-icon><span class="btn-label">上传</span>`}</button>
         <button data-action="rename" ?disabled=${!canRename} @click=${() => this._action("rename")}><doclens-icon name="pencil"></doclens-icon><span class="btn-label">重命名</span></button>
         <button data-action="download" title="下载选中文件（单选）" ?disabled=${!canDownload} @click=${() => this._action("download")}><doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span></button>
         <button data-action="move" ?disabled=${!canAct} @click=${() => this._action("move")}><doclens-icon name="arrow-right"></doclens-icon><span class="btn-label">移动</span></button>
@@ -965,6 +942,7 @@ export class FileList extends LitElement {
             <span class="select-all">
               ${readOnly ? null : html`<input
                 type="checkbox"
+                aria-label="全选当前目录"
                 .checked=${allSelected}
                 @click=${this._onSelectAll}
               />`}

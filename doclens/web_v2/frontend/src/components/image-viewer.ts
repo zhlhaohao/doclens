@@ -14,8 +14,20 @@ import { rotatePreviewImage } from "../api/preview";
  * /api/preview/asset（文档内嵌图，ImageStore 提取产物）不提供。
  */
 
+import { pinchDistance, pinchScaleFrom, clampScale } from "../utils/pinch-gesture";
+
 /** 可手动旋转的图像扩展名（与后端 ORIENTABLE_IMAGE_EXTS 对齐，仅 4 种）。 */
 const ROTATABLE_EXTS = new Set(["jpg", "jpeg", "png", "webp"]);
+
+/** 图像查看缩放域与手势阈值（AP-4：此前 0.5/5/1.5/2.5/0.0015 裸字面量
+ *  散布，且 pinch 公式与 pdf-viewer 双实现——常量与公式已收敛单一来源）。 */
+const SCALE_MIN = 0.5;
+const SCALE_MAX = 5;
+/** 双击判定：超过此值视为「已放大」→ 双击复位 1x，否则放大到 TARGET。 */
+const DBL_CHECK_THRESHOLD = 1.5;
+const DBL_TARGET_SCALE = 2.5;
+/** 滚轮缩放灵敏度（deltaY px → 缩放增量）。 */
+const WHEEL_SENSITIVITY = 0.0015;
 
 /** 判定查看器 src 是否可手动旋转（ADR-0029）。
  *
@@ -58,7 +70,7 @@ export class ImageViewer extends LitElement {
     :host {
       position: fixed;
       inset: 0;
-      z-index: 9999;
+      z-index: var(--cortex-z-modal);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -72,7 +84,7 @@ export class ImageViewer extends LitElement {
       position: fixed;
       top: calc(16px + env(safe-area-inset-top));
       right: 16px;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
       width: 44px;
       height: 44px;
       border: none;
@@ -90,7 +102,7 @@ export class ImageViewer extends LitElement {
       position: fixed;
       top: calc(16px + env(safe-area-inset-top));
       right: 68px;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
       width: 44px;
       height: 44px;
       border: none;
@@ -185,8 +197,8 @@ export class ImageViewer extends LitElement {
   // --- 滚轮缩放（桌面） ---
   private _onWheel(e: WheelEvent) {
     e.preventDefault();
-    const delta = -e.deltaY * 0.0015;
-    this._scale = Math.max(0.5, Math.min(5, this._scale + delta));
+    const delta = -e.deltaY * WHEEL_SENSITIVITY;
+    this._scale = clampScale(this._scale + delta, SCALE_MIN, SCALE_MAX);
   }
 
   // --- 背景点击关闭 ---
@@ -198,8 +210,8 @@ export class ImageViewer extends LitElement {
 
   // --- 双击切换 ---
   private _onDbl() {
-    if (this._scale > 1.5) { this._scale = 1; this._x = 0; this._y = 0; }
-    else { this._scale = 2.5; }
+    if (this._scale > DBL_CHECK_THRESHOLD) { this._scale = 1; this._x = 0; this._y = 0; }
+    else { this._scale = DBL_TARGET_SCALE; }
   }
 
   // --- 鼠标拖拽 ---
@@ -224,7 +236,7 @@ export class ImageViewer extends LitElement {
       this._ox = this._x; this._oy = this._y;
     } else if (e.touches.length === 2) {
       this._dragging = false;
-      this._pinchDist = this._dist(e.touches);
+      this._pinchDist = pinchDistance(e.touches);
       this._pinchScale = this._scale;
     }
   }
@@ -234,17 +246,13 @@ export class ImageViewer extends LitElement {
       this._x = this._ox + (e.touches[0].clientX - this._sx);
       this._y = this._oy + (e.touches[0].clientY - this._sy);
     } else if (e.touches.length === 2 && this._pinchDist > 0) {
-      const ratio = this._dist(e.touches) / this._pinchDist;
-      this._scale = Math.max(0.5, Math.min(5, this._pinchScale * ratio));
+      this._scale = pinchScaleFrom(
+        { dist: this._pinchDist, scale: this._pinchScale },
+        pinchDistance(e.touches), SCALE_MIN, SCALE_MAX,
+      );
     }
   }
   private _te() { this._dragging = false; this._pinchDist = 0; }
-
-  private _dist(t: TouchList): number {
-    const dx = t[0].clientX - t[1].clientX;
-    const dy = t[0].clientY - t[1].clientY;
-    return Math.hypot(dx, dy);
-  }
 
   render() {
     const rotatePath = this._rotatePath;

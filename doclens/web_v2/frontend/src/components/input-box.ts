@@ -49,6 +49,13 @@ async function compressImage(file: Blob): Promise<ChatImage | null> {
 
 @customElement("input-box")
 export class InputBox extends LitElement {
+  /** 卸载清理（AP-11）：菜单开着时组件被移除（视图切换）→ document 上的
+   *  _onDocClick 必须摘除，否则泄漏 + 残留回调写已卸载组件状态。 */
+  disconnectedCallback(): void {
+    document.removeEventListener("click", this._onDocClick);
+    super.disconnectedCallback();
+  }
+
   static styles = css`
     :host {
       display: block;
@@ -282,7 +289,7 @@ export class InputBox extends LitElement {
          向下展开会落到视口之外不可见。 */
       bottom: calc(100% + 4px);
       right: 6px;
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       background: var(--cortex-surface);
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
@@ -323,8 +330,6 @@ export class InputBox extends LitElement {
   @property() placeholder = "";
   @property() buttonLabel = "搜索";
   @property() buttonIcon = "";
-  /** 图标放在文字右侧（true = 文字在前、图标在后） */
-  @property({ type: Boolean }) iconAfter = false;
   @property({ type: Boolean }) multiline = false;
   @property({ type: Boolean }) disabled = false;
   /** 流式中：按钮原地变身为「停止」（发 stop 事件），输入框禁用。仅 chat 用。 */
@@ -333,8 +338,8 @@ export class InputBox extends LitElement {
   /** 对话图片附件（ADR-0034）：true 时启用粘贴/📎/拖拽三入口 + 缩略图暂存行。
    *  仅 chat 输入框开启；文字仍是消息主体（必填），图是附件。 */
   @property({ type: Boolean }) attachments = false;
-  /** 暂存图片（压缩后 base64，不含 data: 前缀）。宿主只读（经 submit 事件带出，
-   *  经 images-restored 事件回填）；增删由组件内部入口驱动。 */
+  /** 暂存图片（压缩后 base64，不含 data: 前缀）。宿主只读（经 submit 事件带出）；
+   *  回填走受控往返（宿主直接置 .images 属性），增删由组件内部入口驱动。 */
   @property({ attribute: false }) images: ChatImage[] = [];
 
   /** 模式选择器：提供 .mode + .modes 时渲染分裂按钮 + caret 下拉；
@@ -401,8 +406,10 @@ export class InputBox extends LitElement {
     this._slashDismissed = false; // 输入变化即复位 Esc 驳回
     this._slashIndex = 0;
     this.dispatchEvent(new CustomEvent("input-change", { detail: { value: this.value } }));
-    // 同步更新按钮 disabled 状态，避免 Lit 异步渲染期间 disabled 按钮拦截 click 事件
-    const btn = this.renderRoot.querySelector("button");
+    // 同步更新按钮 disabled 状态，避免 Lit 异步渲染期间 disabled 按钮拦截 click 事件。
+    // 精确命中提交键（AP-1）：renderRoot 文档序中 thumb-x 删除钮/📎 attach 键
+    // 排在提交键之前，裸 querySelector("button") 会写错目标。
+    const btn = this.renderRoot.querySelector<HTMLButtonElement>("button.submit:not(.caret)");
     if (btn) btn.disabled = !this.trimmed || this.disabled;
     this._autoResize();
   }
@@ -434,7 +441,7 @@ export class InputBox extends LitElement {
     this.value = `/${item.name} `;
     this._slashIndex = 0;
     this.dispatchEvent(new CustomEvent("input-change", { detail: { value: this.value } }));
-    const btn = this.renderRoot.querySelector("button");
+    const btn = this.renderRoot.querySelector<HTMLButtonElement>("button.submit:not(.caret)");
     if (btn) btn.disabled = !this.trimmed || this.disabled;
     this._autoResize();
     this.focus();
@@ -612,14 +619,15 @@ export class InputBox extends LitElement {
         </button>`;
     }
     if (!this._hasModes && !this._hasSkillMenu) {
-      const icon = this.buttonIcon
-        ? html`<doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>`
-        : null;
-      const label = html`<span>${this.buttonLabel}</span>`;
-      return html`
-        <button @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
-          ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
-        </button>`;
+      return this.buttonIcon
+        ? html`
+          <button class="submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+            <doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>
+          </button>`
+        : html`
+          <button class="submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+            <span>${this.buttonLabel}</span>
+          </button>`;
     }
     if (this._hasSkillMenu) {
       // 技能菜单分裂按钮：主键 = 普通发送；caret 弹出技能菜单（空输入也可打开，
@@ -627,11 +635,10 @@ export class InputBox extends LitElement {
       const icon = this.buttonIcon
         ? html`<doclens-icon class="thick" name=${this.buttonIcon} aria-hidden="true"></doclens-icon>`
         : null;
-      const label = html`<span>${this.buttonLabel}</span>`;
       return html`
         <div class="actions split">
-          <button class="primary" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
-            ${this.iconAfter ? html`${label}${icon}` : html`${icon}${label}`}
+          <button class="primary submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+            ${icon ?? html`<span>${this.buttonLabel}</span>`}
           </button>
           <button class="caret" @click=${this._toggleMenu} ?disabled=${this.disabled}
                   aria-label="选择技能" aria-expanded=${this._menuOpen}><doclens-icon name="chevron-down"></doclens-icon></button>
@@ -640,7 +647,7 @@ export class InputBox extends LitElement {
     const cur = this.modes![this.mode];
     return html`
       <div class="actions split">
-        <button class="primary" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
+        <button class="primary submit" @click=${this._submit} ?disabled=${!this.trimmed || this.disabled}>
           ${cur?.icon ? html`<doclens-icon name=${cur.icon} aria-hidden="true"></doclens-icon>` : null}
           <span>${cur?.label ?? this.buttonLabel}</span>
         </button>

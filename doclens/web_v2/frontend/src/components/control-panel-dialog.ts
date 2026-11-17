@@ -1,9 +1,11 @@
 import { LitElement, html, css, nothing } from "lit";
+import { dialogHeadStyles } from "../styles/dialog-frame";
 import { customElement, property } from "lit/decorators.js";
 
 import "./icon";
 import { store, actions } from "../state/store";
 import { watchStatusLabel } from "../utils/watch-status";
+import "./c-dialog";
 
 /**
  * 控制面板对话框（系统菜单「控制面板」入口）：收纳低频维护操作，
@@ -22,68 +24,7 @@ import { watchStatusLabel } from "../utils/watch-status";
  */
 @customElement("control-panel-dialog")
 export class ControlPanelDialog extends LitElement {
-  static styles = css`
-    :host {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      pointer-events: none;
-    }
-    /* 仅在 open 时显示遮罩并捕获点击（modal 行为） */
-    :host([open]) {
-      background: rgba(0, 0, 0, 0.3);
-      pointer-events: auto;
-    }
-    .scrim {
-      position: absolute;
-      inset: 0;
-    }
-    dialog {
-      position: relative;
-      pointer-events: auto;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      min-width: 380px;
-      max-width: 90vw;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--cortex-space-4);
-      padding: var(--cortex-space-4) var(--cortex-space-6);
-      border-bottom: 1px solid var(--cortex-border-muted);
-    }
-    .head h3 {
-      margin: 0;
-      font-size: var(--cortex-fs-md);
-      font-weight: 600;
-      letter-spacing: -0.01em;
-      color: var(--cortex-text);
-    }
-    .close-btn {
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      font-size: var(--cortex-fs-lg);
-      line-height: 1;
-      color: var(--cortex-text-muted);
-      padding: 4px 8px;
-      border-radius: var(--cortex-radius-sm);
-    }
-    .close-btn:hover {
-      background: var(--cortex-surface-muted);
-      color: var(--cortex-text);
-    }
+  static styles = css`${dialogHeadStyles} 
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -130,13 +71,6 @@ export class ControlPanelDialog extends LitElement {
     .action-row .label.dot { color: var(--cortex-success); }
     .action-row .label.busy { color: var(--cortex-primary); }
     .action-row .label.warn { color: var(--cortex-warning); }
-    @media (max-width: 1023px) {
-      dialog {
-        min-width: 0;
-        width: calc(100vw - 16px);
-        max-width: calc(100vw - 16px);
-      }
-    }
   `;
 
   @property({ type: Boolean, reflect: true })
@@ -198,8 +132,7 @@ export class ControlPanelDialog extends LitElement {
     const watchHint =
       changeCount > 0 ? `${label} ·近期变化 ${changeCount}` : label;
     return html`
-      <div class="scrim" @click=${this._close}></div>
-      <dialog open>
+      <c-dialog ?open=${true} @cancel=${this._close}>
         <div class="head">
           <h3>控制面板</h3>
           <button class="close-btn" type="button" @click=${this._close} aria-label="关闭">✕</button>
@@ -233,7 +166,7 @@ export class ControlPanelDialog extends LitElement {
             </span>
           </button>
         </div>
-      </dialog>
+      </c-dialog>
     `;
   }
 }

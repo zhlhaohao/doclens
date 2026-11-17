@@ -132,7 +132,10 @@ describe("file-list", () => {
       expect(btn.querySelector(".btn-label")?.textContent?.trim().length).toBeGreaterThan(0);
     }
     // 样式规则：默认隐藏、hover 浮现为 tooltip
-    const cssText = (el.constructor as any).styles.cssText as string;
+    // AP-2 后 styles 是数组（公共块组合）——拼全体 cssText 断言
+    const cssText = ((el.constructor as any).styles as { cssText: string }[])
+      .map((s) => s.cssText)
+      .join("\n") as string;
     expect(cssText).toMatch(/\.toolbar button \.btn-label\s*\{[^}]*display:\s*none/);
     expect(cssText).toMatch(/\.toolbar button:hover[^\{]*\.btn-label\s*\{/);
     document.body.removeChild(el);

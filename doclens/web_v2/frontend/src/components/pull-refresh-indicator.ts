@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { customElement } from "lit/decorators.js";
+import "./spinner";
 
 /** 下拉刷新浮层指示器（移动端 pull-to-refresh）。
  *
@@ -18,7 +19,9 @@ export class PullRefreshIndicator extends LitElement {
       position: absolute;
       top: 0;
       left: 50%;
-      z-index: 40; /* 低于 app-bar 的 50：初始位置藏在其后 */
+      /* 低于 app-bar 的 raised 一档：初始位置藏在其后（平级会按 DOM 顺序
+       * 反压 app-bar，收起后胶囊仍可见——AP-4 归层回归，2026-11-15 修正） */
+      z-index: calc(var(--cortex-z-raised) - 1);
       transform: translate(-50%, -110%);
       transition: none; /* 跟手阶段由 JS 直写 transform，无过渡 */
       pointer-events: none;
@@ -53,23 +56,11 @@ export class PullRefreshIndicator extends LitElement {
       transform: rotate(180deg);
       color: var(--cortex-primary);
     }
-    /* 刷新中 spinner：视觉配方同 search-results 的 loading::after */
-    .ring {
-      display: none;
-      width: 14px;
-      height: 14px;
-      border: 2px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-    }
-    :host([refreshing]) .ring {
-      display: inline-block;
-      animation: ptr-spin 0.8s linear infinite;
-    }
+    /* 刷新中 spinner：统一走 <c-spinner>（AP-1），本组件只管显隐 */
+    c-spinner { display: none; }
+    :host([refreshing]) c-spinner { display: inline-flex; }
     :host([refreshing]) .arrow { display: none; }
-    @keyframes ptr-spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) {
-      .ring { animation: none; }
       .arrow,
       :host(.settle) { transition: none; }
     }
@@ -126,7 +117,7 @@ export class PullRefreshIndicator extends LitElement {
             stroke-linejoin="round"
           />
         </svg>
-        <span class="ring" aria-hidden="true"></span>
+        <c-spinner size="14"></c-spinner>
         <span class="label">${this._label}</span>
       </div>
     `;

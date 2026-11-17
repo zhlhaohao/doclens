@@ -6,6 +6,7 @@ import { createMathMarked } from "../utils/marked-math";
 import katexStyles from "katex/dist/katex.min.css?inline";
 import type { ChatMessage, ToolStep } from "../state/types";
 import { isCoarsePointer } from "../utils/device";
+import { copyText, createCopiedFlash } from "../utils/clipboard";
 import { traceStepsOf } from "./chat-tool-trace";
 import "./ask-card";
 
@@ -100,7 +101,7 @@ export class ChatMessageEl extends LitElement {
       opacity: 0;
       transition: opacity var(--cortex-duration-fast);
     }
-    /* AI 气泡：白底 + 极浅边框（更轻盈）。多子元素（trace / md / error）
+    /* AI 气泡：白底 + 极浅边框（更轻盈）。多子元素（trace / md）
        仍用普通文档流堆叠。 */
     :host([role="assistant"]) .bubble {
       background: var(--cortex-chat-bubble-ai);
@@ -257,11 +258,6 @@ export class ChatMessageEl extends LitElement {
       border-top: 1px dashed var(--cortex-border);
       margin: 8px 0;
     }
-    .error {
-      color: var(--cortex-danger);
-      font-size: var(--cortex-fs-sm);
-      margin-top: 4px;
-    }
     /* 消息操作钮见下方 .actions/.reask/.rewind/.export/.delete/.copy —— 时间戳与按钮同一行浮现 */
     .reask, .rewind, .export, .delete, .copy {
       display: inline-flex;
@@ -338,7 +334,6 @@ export class ChatMessageEl extends LitElement {
 
   @property({ reflect: true }) role: "user" | "assistant" = "user";
   @property({ attribute: false }) message: ChatMessage | null = null;
-  @property() error: string | null = null;
   /** 流式期间禁用回退钮（本轮快照尚未固化，与输入框禁用同律，ADR-0027）。
    *  重问不受影响（纯拷贝无服务端副作用）。 */
   @property({ type: Boolean }) rewindDisabled = false;
@@ -357,9 +352,10 @@ export class ChatMessageEl extends LitElement {
   @property({ attribute: false }) modelName: string | null = null;
   /** 复制成功后的瞬时反馈：图标由 copy 变 check，1.5s 后恢复 */
   @state() private _copied = false;
-  private _copyTimer?: number;
+  private _copiedFlash = createCopiedFlash(() => { this._copied = false; });
   /** 对话图片全屏预览（ADR-0034）：data URL，非 null 时渲染 dialog 放大图
-   *  （showModal top-layer，见 updated）；kb-img 内联图点击复用同状态。 */
+   *  （showModal top-layer，见 updated；AP-3 例外——灯箱非卡片形态，
+   *   *  自留原生 dialog）；kb-img 内联图点击复用同状态。 */
   @state() private _imgPreview: string | null = null;
   /** 思考流滑窗尾锚 rAF guard（同帧多次 updated 合并为单次） */
   private _thinkingRafPending = false;
@@ -397,7 +393,7 @@ export class ChatMessageEl extends LitElement {
     this.removeEventListener("click", this._onClick);
     this.removeEventListener("mouseenter", this._onHoverChange);
     this.removeEventListener("mouseleave", this._onHoverChange);
-    if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
+    this._copiedFlash.dispose();
   }
 
   private _onHoverChange = (e: MouseEvent): void => {
@@ -522,12 +518,11 @@ export class ChatMessageEl extends LitElement {
     e.stopPropagation();
     const text = this.message?.content ?? "";
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyText(text);
+    if (ok) {
       this._copied = true;
-      if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
-      this._copyTimer = window.setTimeout(() => { this._copied = false; }, 1500);
-    } catch {
+      this._copiedFlash.flash();
+    } else {
       this.dispatchEvent(
         new CustomEvent("copy-failed", { bubbles: true, composed: true }),
       );
@@ -576,6 +571,11 @@ export class ChatMessageEl extends LitElement {
     });
   }
 
+  /** 复制按钮（user/assistant 两分支共用模板，AP-40 归一）。 */
+  private _renderCopyBtn() {
+    return html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`;
+  }
+
   render() {
     if (!this.message) return null;
     const steps = this.message.tool_steps;
@@ -595,10 +595,8 @@ export class ChatMessageEl extends LitElement {
       const ts = formatMsgTime(this.message.created_at);
       // 对话图片（ADR-0034）：缩略图行渲染在正文之上；点击全屏复用 dialog 原生弹层
       const imgs = this.message.images ?? [];
-      return html`<div class="bubble">${imgs.length > 0 ? this._renderImages(imgs) : null}${this.renderBubble(this.message.content)}${this.error
-        ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>`
-        : null}</div><div class="actions">${ts ? html`<span class="ts">${ts}</span>` : null}${canCopy
-        ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
+      return html`<div class="bubble">${imgs.length > 0 ? this._renderImages(imgs) : null}${this.renderBubble(this.message.content)}</div><div class="actions">${ts ? html`<span class="ts">${ts}</span>` : null}${canCopy
+        ? this._renderCopyBtn()
         : null}<button class="reask" type="button" aria-label="重问" title="重问" @click=${this._emitReask}><doclens-icon name="rotate-ccw"></doclens-icon></button>${hasAnchor
         ? html`<button class="export" type="button" aria-label="导出到此为止" title="导出到此为止（只导出这条及之前的对话）" @click=${this._emitExportUpto}><doclens-icon name="download"></doclens-icon></button>`
         : null}${hasAnchor
@@ -619,11 +617,10 @@ export class ChatMessageEl extends LitElement {
           : null}
         ${askStep ? this._renderAskSummary(askStep) : null}
         ${this.renderBubble(this.message.content)}
-        ${this.error ? html`<div class="error"><doclens-icon name="alert-triangle"></doclens-icon> ${this.error}</div>` : null}
       </div>
       ${canCopy || tsAi
         ? html`<div class="actions">${tsAi ? html`<span class="ts">${tsAi}</span>` : null}${canCopy
-          ? html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`
+          ? this._renderCopyBtn()
           : null}</div>`
         : null}
       ${this._renderPreviewDialog()}

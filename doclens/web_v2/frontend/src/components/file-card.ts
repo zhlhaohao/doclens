@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { FileGroup, MatchItem, SearchHit } from "../state/types";
+import { badgeStyles } from "../styles/badge-styles";
 
 /**
  * <file-card> —— 文件分组结果卡（2026-10-18 决议）。
@@ -11,7 +12,7 @@ import type { FileGroup, MatchItem, SearchHit } from "../state/types";
  */
 @customElement("file-card")
 export class FileCard extends LitElement {
-  static styles = css`
+  static styles = [badgeStyles, css`
     :host {
       display: block;
       /* .list-pane 是 flex 列容器：子项默认 flex-shrink:1，内容超高时卡片
@@ -52,14 +53,6 @@ export class FileCard extends LitElement {
       text-overflow: ellipsis;
       white-space: nowrap;
       transition: color 0.15s;
-    }
-    .badge {
-      flex-shrink: 0;
-      margin-left: auto;
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
-      font-family: var(--cortex-font-mono);
-      white-space: nowrap;
     }
     .rows {
       display: flex;
@@ -114,7 +107,7 @@ export class FileCard extends LitElement {
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted);
     }
-  `;
+  `];;
 
   @property({ attribute: false }) group: FileGroup | null = null;
   /** 当前激活命中（引用比较，来自 detailStack 顶部） */
@@ -185,7 +178,7 @@ export class FileCard extends LitElement {
         @keydown=${(e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") this._toggle(e); }}>
         <span class="chevron">▶</span>
         <span class="name">${isPath ? "路径 " : ""}${name}</span>
-        ${!isPath ? html`<span class="badge">${g.total_matches}</span>` : null}
+        ${!isPath ? html`<span class="badge plain">${g.total_matches}</span>` : null}
       </div>
       ${this.expanded ? html`
         <div class="rows">

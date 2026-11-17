@@ -9,9 +9,10 @@ import { listSessions, clearSessions, findOrCreateSession, starSession } from ".
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import "../components/pst-email-list";
 import "../components/preview-pane";
+import type { PreviewPane } from "../components/preview-pane";
 import "../components/pagination-bar";
 import "../components/toast-stack";
-import type { ToastStack } from "../components/toast-stack";
+import { pushLocalToast } from "../utils/toast";
 import {
   PreviewController,
   mapLineViaPredecessor,
@@ -69,7 +70,7 @@ export class SearchView extends LitElement {
     @media (max-width: 1023px) {
       .focus-body.is-covered { pointer-events: none; }
       /* 预览 overlay 打开时隐藏搜索顶栏（chat-view 同款）：focus-header
-         因 backdrop-filter 带 z-index:10，detail-overlay 去掉 z-index 后
+         因 backdrop-filter 带 z-index: var(--cortex-z-raised)，detail-overlay 去掉 z-index 后
          （2026-10-19 PDF portal 修复）会浮在 overlay 之上露出搜索头部；
          预览层的返回由 preview-pane 自带 mobile-header 承担。 */
       .focus-body.is-covered > focus-header { display: none; }
@@ -118,7 +119,7 @@ export class SearchView extends LitElement {
     }
     /* 移动端：详情整页推入覆盖。**不得设 z-index**（2026-10-19 修复：移动端
        点搜索结果开 PDF 预览白屏——只剩 portal 灰底、无文字）——z-index 会
-       创建层叠上下文，把 document.body 下 z-index:1 的 pdf-viewer portal
+       创建层叠上下文，把 document.body 下 z-index: var(--cortex-z-base) 的 pdf-viewer portal
        整个压在下面（canvas 已画好但被 overlay 挡死）。去掉后：overlay
        （absolute 定位）仍画在静态结果列表之上（覆盖语义不变），而 portal
        （fixed + z:1）反超 overlay（z:auto）显露 canvas；preview-pane 内
@@ -276,7 +277,11 @@ export class SearchView extends LitElement {
   private async _loadHistory(page = 1) {
     try {
       const offset = (page - 1) * 200;
-      const { sessions } = await listSessions({ type: "search", limit: 200, offset });
+      const res = await listSessions({ type: "search", limit: 200, offset });
+      // 防御异常响应体（代理错误页 / 字段缺失 → sessions 为 undefined）：
+      // 直接赋值会让「历史列表长度」读取抛 TypeError，整个搜索页白屏
+      // （chat-view 同源缺陷已修，见 chat-history-controller.load）
+      const sessions = Array.isArray(res?.sessions) ? res.sessions : [];
       // 后端固定 starred DESC 返回；混排模式下按时间整理回时间线
       this.historySessions = this._starPin
         ? sessions
@@ -469,15 +474,12 @@ export class SearchView extends LitElement {
       await this._fetchAndShowPreview(hit);
       // Lit 属性去重竞态（2026-10-19）：null→同值在同一轮批处理中被合并为
       // 「值未变」，md-viewer updated() 完全不触发（content/path 也全同）。
-      // 同文件同行重击时显式调用 reLocate 兜底；嵌套组件（preview-pane →
-      // md-viewer）的属性传递异步排队——先等 md-viewer 自身 updateComplete
-      // 才能保证 reLocate 读到最新 line。
+      // 同文件同行重击时显式调用 reLocate 兜底（AP-2：穿透已收敛为
+      // preview-pane 公共方法，内部转发 md-viewer 并自理 updateComplete 时序）。
       if (sameHit && this.previewLanguage === "markdown") {
-        const pp = this.shadowRoot?.querySelector("preview-pane") as any;
+        const pp = this.shadowRoot?.querySelector<PreviewPane>("preview-pane");
         await pp?.updateComplete;
-        const mdv = pp?.shadowRoot?.querySelector("md-viewer") as any;
-        await mdv?.updateComplete;
-        mdv?.reLocate?.();
+        await pp?.reLocate();
       }
     });
   }
@@ -547,6 +549,11 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
     else this._pushToast("复制失败（剪贴板不可用）", "error", 5000);
   };
 
+  /** 预览 md 复制失败（AP-5 遗留接线：md-viewer 的 copy-failed 冒泡穿
+   *  shadow 到宿主，此前预览页无监听——失败无反馈）。 */
+  private _onPreviewCopyFailed = (): void =>
+    this._pushToast("复制失败，请手动选择文本", "error", 5000);
+
   private _onPreviewDownloadFailed = (e: CustomEvent<{ message: string }>) => {
     this._pushToast(`下载失败：${e.detail.message}`, "error", 5000);
   };
@@ -578,8 +585,7 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
   };
 
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number) {
-    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
-    stack?.pushToast(message, level, duration);
+    pushLocalToast(this, message, level, duration);
   }
 
   private _popDetail() {
@@ -638,7 +644,8 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
             @toggle-star=${this._onToggleStar}
             @page-change=${this._onHistoryPage}
             @star-pin-change=${this._onStarPinChange}
-            @clear=${this._onClearHistory}>
+            @clear=${this._onClearHistory}
+            @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
           </history-list>
           <div class="input-row">
             <input-box
@@ -725,6 +732,7 @@ private _onPreviewDirty = (e: CustomEvent<{ dirty: boolean }>) => {
                 @save-failed=${this._onPreviewSaveFailed}
                 @download-success=${this._onPreviewDownloadSuccess}
                 @path-copied=${this._onPathCopied}
+      @copy-failed=${this._onPreviewCopyFailed}
                 @download-failed=${this._onPreviewDownloadFailed}
                 @bookmark-added=${this._onBookmarkAdded}
                 @bookmark-duplicate=${this._onBookmarkDuplicate}

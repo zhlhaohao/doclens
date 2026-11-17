@@ -11,6 +11,7 @@ import { router } from "./router/router";
 import { getStatus } from "./api/status";
 import { setUnauthorizedHandler } from "./api/client";
 import { getAuthStatus } from "./api/auth";
+import { WORKDIR_SWAP_FAILED_EVENT } from "./utils/events";
 
 import "./components/activity-bar";
 import "./components/tab-bar";
@@ -34,6 +35,7 @@ import "./views/login-view";
 import "./components/app-bar";
 import "./components/reindex-dialog";
 import "./components/pull-refresh-indicator";
+import "./components/spinner";
 import { PullToRefreshController } from "./utils/pull-to-refresh";
 import { startWatchStream, stopWatchStream } from "./watch-stream";
 
@@ -76,7 +78,7 @@ export class CortexApp extends LitElement {
     .swap-overlay {
       position: fixed;
       inset: 0;
-      z-index: 2000;
+      z-index: var(--cortex-z-modal);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -87,15 +89,6 @@ export class CortexApp extends LitElement {
       font-family: var(--cortex-font);
       color: var(--cortex-text);
     }
-    .swap-overlay .spin {
-      width: 32px;
-      height: 32px;
-      border: 3px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
-      animation: swap-spin 0.9s linear infinite;
-    }
-    @keyframes swap-spin { to { transform: rotate(360deg); } }
     .swap-overlay .msg { font-size: var(--cortex-fs-md); font-weight: 600; }
     .swap-overlay .sub {
       font-size: var(--cortex-fs-sm);
@@ -160,7 +153,7 @@ export class CortexApp extends LitElement {
     // ADR-0043：工作目录热切换 SSE 终态——成功即整页 reload（切换即重载，
     // 一切状态天然重置）；失败已回滚则解锁遮罩 + 提示。
     window.addEventListener("cortex:workdir-swapped", this._onWorkdirSwapped as EventListener);
-    window.addEventListener("cortex:workdir-swap-failed", this._onWorkdirSwapFailed as EventListener);
+    window.addEventListener(WORKDIR_SWAP_FAILED_EVENT, this._onWorkdirSwapFailed as EventListener);
     window.addEventListener("cortex:workdir-swap-start", this._onWorkdirSwapStart as EventListener);
     // 启动时探测登录闸门：需要登录且未认证 → 只渲染登录页，不启动轮询
     void this._probeAuth();
@@ -242,7 +235,7 @@ export class CortexApp extends LitElement {
   disconnectedCallback() {
     this.removeEventListener("skill-chat", this._onSkillChat as EventListener);
     window.removeEventListener("cortex:workdir-swapped", this._onWorkdirSwapped as EventListener);
-    window.removeEventListener("cortex:workdir-swap-failed", this._onWorkdirSwapFailed as EventListener);
+    window.removeEventListener(WORKDIR_SWAP_FAILED_EVENT, this._onWorkdirSwapFailed as EventListener);
     window.removeEventListener("cortex:workdir-swap-start", this._onWorkdirSwapStart as EventListener);
     this._unsubscribe?.();
     this._unsubAuth?.();
@@ -300,7 +293,6 @@ export class CortexApp extends LitElement {
     }
     return html`
       <app-bar
-        .activeView=${view}
         @navigate=${this._navigate}
       ></app-bar>
       <div class="app-body">
@@ -314,7 +306,7 @@ export class CortexApp extends LitElement {
       <reindex-dialog></reindex-dialog>
       ${this._swapTarget !== null ? html`
         <div class="swap-overlay" role="alert" aria-live="assertive">
-          <div class="spin"></div>
+          <c-spinner size="32" border="3" duration="0.9"></c-spinner>
           <div class="msg">正在切换工作目录…</div>
           ${this._swapTarget ? html`<div class="sub">${this._swapTarget}</div>` : null}
         </div>

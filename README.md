@@ -22,7 +22,7 @@ Structure-aware document retrieval — FTS5/BM25 keyword search over document tr
 | **Multi-format** | Markdown, PDF, DOCX, PPTX, Excel, HTML, JSON, CSV, PST email archives, EPUB, images (vision-parsed), code (Python AST + tree-sitter) |
 | **Zero embeddings** | FTS5/BM25 over document trees — no vector DB, fully offline |
 | **CJK support** | Chinese/Japanese/Korean tokenization via jieba |
-| **Web UI** | Lit + Shoelace PWA — the default interface |
+| **Web UI** | Lit PWA (Meta design system, Lucide icons) — the default interface |
 | **Structured queries** | AND / OR / NOT / PHRASE operators (`search_v2`) |
 | **Regex fallback** | Ripgrep-style regex `grep`; ripgrep fallback when FTS returns nothing |
 
@@ -144,11 +144,11 @@ The bare `doclens` command launches the Web GUI by default.
 
 ## Web UI
 
-The default interface is a PWA built with Lit + Shoelace, served by FastAPI on `http://127.0.0.1:7860` (port auto-increments on conflict — check the startup log).
+The default interface is a PWA built with Lit (Meta design system + Lucide icons), served by FastAPI on `http://127.0.0.1:7860` (port auto-increments on conflict — check the startup log).
 
 - **Search** — keyword search with result cards and snippets
 - **Chat** — the harness agent with SSE streaming, tool traces, and session history (see [AI Agent](#ai-agent-knowledge-base-qa--vibe-coding))
-- **Files** — knowledge-base file tree with upload / rename / move / preview (Markdown, PDF, DOCX, PPTX, Excel, images, PST email lists) and a TOC drawer for long documents
+- **Files** — knowledge-base file tree with upload / rename / move / preview (Markdown, PDF, DOCX, PPTX, Excel, images, PST email lists), sortable columns (name / size / modified), and a TOC drawer for long documents
 - **Diary** — daily fragments with images and weather, summarized into finished entries the next day
 - **Settings** — model presets (LLM / vision / search), access PIN, skills, MCP servers, Git sync
 
@@ -330,7 +330,7 @@ Backend tests:
 
 ```
 ┌─────────────────────────────────────────────────┐
-│            Web UI (Lit + Shoelace PWA)          │
+│            Web UI (Lit PWA · Meta design)          │
 │           FastAPI + SSE streaming               │
 └───────────────────────┬─────────────────────────┘
                         │

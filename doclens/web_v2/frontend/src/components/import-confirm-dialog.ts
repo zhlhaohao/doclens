@@ -1,5 +1,8 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { dialogSlotStyles } from "../utils/dialog-styles";
+import { buttonBaseStyles, confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
+import { confirmStyles } from "../styles/confirm-styles";
 
 /**
  * <import-confirm-dialog> —— 会话导入确认框（2026-10-29 重做，ADR-0038）。
@@ -8,7 +11,7 @@ import { customElement, property } from "lit/decorators.js";
  * 框」开启时 confirm 被静默返回 false——点导入毫无反应且无任何提示；同 id
  * 重复导入时后端 skipped，前端只闪 3 秒 toast，同样像是「没反应」。
  *
- * 三态复用同一个宿主（chat-view 渲染，updated() 里 showModal）：
+ * 三态复用同一个宿主（chat-view 渲染，外壳为 <c-dialog> 公共件，AP-3）：
  *   - confirm：展示文件名 + 标题 + 条目数，确认后冒泡 `import-confirm`
  *     （detail: { asCopy: false }）。
  *   - exists：后端回报同 id 已存在，说明「已导入过」，提供「作为副本导入」
@@ -20,7 +23,13 @@ import { customElement, property } from "lit/decorators.js";
  */
 @customElement("import-confirm-dialog")
 export class ImportConfirmDialog extends LitElement {
-  static styles = css`
+  static styles = [
+    dialogSlotStyles,
+    confirmStyles,
+    buttonBaseStyles,
+    confirmButtonStyles,
+    buttonRowStyles,
+    css`
     :host {
       display: block;
       min-width: 340px;
@@ -28,6 +37,7 @@ export class ImportConfirmDialog extends LitElement {
       font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
     }
+    /* 标题略大 + 图标（本地变体，形态走公共块 confirmStyles） */
     h2 {
       display: flex;
       align-items: center;
@@ -54,51 +64,10 @@ export class ImportConfirmDialog extends LitElement {
       word-break: break-word;
     }
     .session .title { color: var(--cortex-text); }
-    .detail {
-      font-size: var(--cortex-fs-sm);
-      line-height: 1.6;
-      margin-bottom: var(--cortex-space-3);
-    }
-    .note {
-      display: flex;
-      gap: 6px;
-      align-items: flex-start;
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      background: var(--cortex-surface-muted);
-      border-radius: var(--cortex-radius-sm);
-      padding: 8px 10px;
-      margin-bottom: var(--cortex-space-4);
-    }
     .note doclens-icon { color: var(--cortex-primary, var(--cortex-text)); flex: none; }
-    .buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-    }
-    button {
-      padding: 8px 18px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text-muted);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-    }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    button.primary {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border: none;
-    }
-    button.primary:hover:not(:disabled) { opacity: 0.9; }
-    @media (max-width: 1023px) {
-      :host { min-width: 0; }
-      .buttons { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .buttons button { width: 100%; padding: 12px 16px; min-height: 44px; }
-    }
-  `;
+    `,
+  ];
 
   /** 所选文件名（浏览器路径有；WebView 直传路径为空）。 */
   @property({ type: String }) fileName = "";

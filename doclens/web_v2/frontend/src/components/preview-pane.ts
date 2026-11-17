@@ -1,17 +1,14 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { ref } from "lit/directives/ref.js";
 import "./md-viewer";
 import "./code-viewer";
 import "./cm-editor";
 import "./toc-drawer";
 import "./pdf-viewer";
-import "./skill-toolbox-dialog";
-import "./skill-run-dialog";
 import { savePreview, PreviewSaveError, isImageFile } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstEmailPath, isPstFilePath } from "../api/pst";
-import { fetchSkills, type SkillInfo } from "../api/skills";
-import { recordSkillUse } from "../state/recent-skills";
 import { extractHeadings, activeTocIndex, type TocItem } from "../utils/toc";
 import type { CmEditor } from "./cm-editor";
 import type { MdViewer } from "./md-viewer";
@@ -22,18 +19,16 @@ import {
   scrollJumpFabStyles,
 } from "../utils/scroll-jump";
 import { readScrollLine, writeScrollLine } from "../utils/scroll-memory";
-import {
-  addBookmark,
-  bookmarksFor,
-  removeBookmark,
-  type ReadingBookmark,
-} from "../utils/bookmarks";
-import "./bookmark-drawer";
+import { BookmarksController } from "../utils/bookmarks-controller";
 import "./translate-dialog";
 import "./download-overlay";
 import { isWebviewContainer } from "../utils/jsbridge";
+import { formatBytes } from "../utils/format";
+import { SkillToolboxController } from "../utils/skill-toolbox";
 import { downloadServerFile } from "../utils/download";
+import { copyText } from "../utils/clipboard";
 import { getFileTypeBadge } from "../utils/file-type";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import {
   FONT_SCALE_MIN_PCT,
   FONT_SCALE_MAX_PCT,
@@ -56,6 +51,21 @@ import {
   readCodeFontScalePct,
   writeCodeFontScalePct,
 } from "../utils/code-font-scale";
+import {
+  FontScaleController,
+  CodeThemeController,
+  FullscreenController,
+} from "../utils/preview-appearance";
+import {
+  DownloadController,
+  KeywordHighlightController,
+  TranslateController,
+} from "../utils/preview-interactions";
+import {
+  TocDrawerController,
+  ScrollMemoryController,
+  type ActiveViewerEntry,
+} from "../utils/preview-reading";
 
 /** CJK 字符（汉字 / 假名 / 谚文基础区）——用于高亮输入条的分词判定。 */
 const CJK_RE = /[一-鿿぀-ヿ가-힯]/;
@@ -80,6 +90,7 @@ export function normalizeHighlightKeyword(input: string): string {
 export class PreviewPane extends LitElement {
   static styles = [
     scrollJumpFabStyles,
+    emptyStateStyles,
     css`
     :host {
       display: flex;
@@ -179,12 +190,12 @@ export class PreviewPane extends LitElement {
     /* 预览全屏（类视频全屏）：host 变 fixed 覆盖层盖满视口，脱离分栏布局。
        z-index 介于 app-bar(60) 与 toast(1000) 之间——盖过页面 UI，
        toast/下载遮罩仍浮于其上。注意 pdf-viewer 的 portal 挂 document.body
-       且 z-index:1——全屏时由组件把 portal 提到同级覆盖（见 _applyFullscreen
+       且 z-index: var(--cortex-z-base)——全屏时由组件把 portal 提到同级覆盖（见 _applyFullscreen
        的 body class 联动），否则 PDF 分支全屏会白屏。 */
     :host(.preview-fullscreen) {
       position: fixed;
       inset: 0;
-      z-index: 100;
+      z-index: var(--cortex-z-overlay);
       background: var(--cortex-bg);
       border-left: none;
     }
@@ -238,14 +249,6 @@ export class PreviewPane extends LitElement {
     }
     .attachment.disabled:hover {
       background: transparent;
-    }
-    .empty {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-base);
     }
     /* 次级动作按钮：hairline + radius-sm + muted；hover surface-muted + text */
     button.download-btn,
@@ -310,7 +313,7 @@ export class PreviewPane extends LitElement {
       line-height: 1.4;
       padding: 2px 10px;
       border-radius: var(--cortex-radius-pill);
-      z-index: 20;
+      z-index: var(--cortex-z-raised);
       pointer-events: none;
     }
     button.download-btn:hover,
@@ -371,22 +374,9 @@ export class PreviewPane extends LitElement {
       opacity: 0.35;
       cursor: default;
     }
-    /* 技能工具箱对话框（showModal：top layer 全屏居中——不被 PDF portal
-       （document.body z-index 1）遮挡、不受预览栏 overflow 裁剪；
-       样式对齐 files-view 的 dialog） */
-    dialog {
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      box-sizing: border-box;
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      min-width: 360px;
-      max-width: 90vw;
-    }
-    dialog::backdrop {
-      background: rgba(0, 0, 0, 0.4);
-    }
+    /* AP-3：技能工具箱对话框外壳已迁 <c-dialog> 公共件（原生 <dialog>
+       在其 shadow 内，本组件的 dialog 规则不再命中——原先的卡片形态
+       样式随之成为死样式，一并清除）。 */
     /* 高亮输入条/目录抽屉展开中的激活态 */
     button.highlight-btn.active,
     button.toc-btn.active {
@@ -511,7 +501,7 @@ export class PreviewPane extends LitElement {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
       box-shadow: var(--cortex-shadow-lg);
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
       padding: var(--cortex-space-1) 0;
     }
     .mobile-header .mobile-menu button {
@@ -606,9 +596,8 @@ export class PreviewPane extends LitElement {
   @property({ type: Boolean }) writable = false;
   /** 文件字节数（ADR-0046）：超过 EDIT_MAX_BYTES 则禁编辑（仍可预览）。 */
   @property({ type: Number }) sizeBytes: number | null = null;
-  @property({ type: Boolean }) noHeader = false;
-  /** 移动端启用顶部 bar（返回 / 文件名 / more 下拉）。与 noHeader 互不冲突：
-   *  移动端显示自己的 mobile-header，常规 .header 由 noHeader 控制。 */
+  /** 移动端启用顶部 bar（返回 / 文件名 / more 下拉）；桌面 .header 恒显
+   *  （AP-9：noHeader 死属性已删——全仓无 true 传值）。 */
   @property({ type: Boolean }) mobile = false;
   @property({ attribute: false }) pages: PageMarker[] | null = null;
   /** PDF 原生预览（ADR-0031）：页表（后端 page_starts），命中行跳页依据。 */
@@ -627,32 +616,41 @@ export class PreviewPane extends LitElement {
   @state() private _mode: "preview" | "edit" = "preview";
   @state() private _content = "";
   @state() private _showMobileMenu = false;
-  /** 下载进行中（App 内 jsbridge 通道）——屏幕中心遮罩动画 */
-  @state() private _downloading = false;
-  /** markdown 正文字号缩放（百分比档位，60–200 步长 10）；持久化 localStorage。 */
-  @state() private _fontScalePct = readFontScalePct();
-  /** 代码主题（ADR-0036）：行号视图浅/深两态；持久化 localStorage，默认 light。 */
-  /** 代码主题（ADR-0043 三态）：auto=跟随应用主题（深夜→深色），light/dark=显式固定。
-  @state() private _codeTheme: CodeTheme = readCodeTheme();
 
-  /** 行号视图字号档位（60–200 步长 10）；持久化 localStorage（独立于 md 字号）。 */
-  @state() private _codeFontScalePct = readCodeFontScalePct();
-  /** 预览全屏（类视频全屏）：host class preview-fullscreen + body class
-   *  cortex-preview-fs（pdf portal z-index 联动）；Esc / 再点按钮退出。 */
-  @state() private _fullscreen = false;
-  /** 关键词高亮输入条（仅 markdown 预览分支可用） */
-  @state() private _showHighlightBar = false;
-  @state() private _highlightInput = "";
-  private _highlightDebounce: number | undefined;
+  /** 外观域（AP-1 拆分，2026-11-15）：md 字号 / 行号字号 / 代码主题 / 全屏
+   *  四块纯呈现态迁 PreviewAppearanceController 族（utils/preview-appearance.ts），
+   *  本组件只持注入与渲染。 */
+  private _fontScale = new FontScaleController(this, {
+    read: readFontScalePct,
+    write: writeFontScalePct,
+    min: FONT_SCALE_MIN_PCT,
+    max: FONT_SCALE_MAX_PCT,
+    defaultPct: FONT_SCALE_DEFAULT_PCT,
+    step: FONT_SCALE_STEP_PCT,
+  });
+  private _codeFontScale = new FontScaleController(this, {
+    read: readCodeFontScalePct,
+    write: writeCodeFontScalePct,
+    min: CODE_FONT_SCALE_MIN_PCT,
+    max: CODE_FONT_SCALE_MAX_PCT,
+    defaultPct: CODE_FONT_SCALE_DEFAULT_PCT,
+    step: CODE_FONT_SCALE_STEP_PCT,
+  });
+  private _fullscreenCtl = new FullscreenController(this, this);
+
+  /** 交互域（AP-1 拆分，2026-11-15）：下载 / 关键词高亮 / PDF 翻译迁
+   *  utils/preview-interactions.ts 的 controller 族。 */
+  private _download = new DownloadController(this);
+  private _highlight = new KeywordHighlightController(this);
+  private _translate = new TranslateController(this);
 
   /** PDF 缩放控件显示（「适宽」/百分比；pdf-viewer scalechanging 驱动）。 */
   @state() private _pdfZoomLabel = "适宽";
 
-  /** 技能工具箱（预览文件 → AI 技能处理）：对话框态与数据源。 */
-  @state() private _toolbox: "list" | "run" | null = null;
-  @state() private _toolboxSkills: SkillInfo[] | null = null;
-  @state() private _toolboxError: string | null = null;
-  @state() private _pickedSkill: SkillInfo | null = null;
+    /** 技能工具箱域（AP-4 拆分，2026-11-15）：状态机/数据拉取/消息拼装迁
+   *  SkillToolboxController（utils/skill-toolbox.ts），本组件只持入口按钮
+   *  与 skill-chat 派发——沿 2026-10-19 P1-1（行选择迁 code-viewer）先例。 */
+  private _toolbox = new SkillToolboxController(this);
 
   /** 行选择已迁 code-viewer（2026-10-19 P1-1 拆分）：选区态归组件自治，
    *  宿主经 _codeSelection 镜像 + _pathWithRanges 消费；path/content 变化
@@ -706,8 +704,14 @@ export class PreviewPane extends LitElement {
   @state() private _codeSelection = "";
 
   /** 代码主题（ADR-0036/0043 三态）：auto=跟随应用主题；渲染表面解析已随
-   *  code-viewer（组件内订阅应用主题），宿主持状态驱动 header 按钮与 prop。 */
-  @state() private _codeTheme: CodeTheme = readCodeTheme();
+   *  code-viewer（组件内订阅应用主题），宿主持状态驱动 header 按钮与 prop
+   *  （AP-1 拆分：状态机迁 CodeThemeController）。 */
+  private _codeThemeCtl = new CodeThemeController<CodeTheme>(this, {
+    read: readCodeTheme,
+    write: writeCodeTheme,
+    order: ["auto", "light", "dark"] as const,
+  });
+  private get _codeTheme(): CodeTheme { return this._codeThemeCtl.theme; }
 
   /** 是否超过编辑大小上限（ADR-0046）。sizeBytes 未下发时按可编辑处理
    *  （后端未提供该字段的旧路径 / 非文本预览）。 */
@@ -720,18 +724,21 @@ export class PreviewPane extends LitElement {
     return this.writable && !this._tooLarge;
   }
 
-  /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：heading 目录 + 快速跳转 */
-  @state() private _showToc = false;
-
-  /** PDF 翻译弹框（ADR-0039）：仅 pdf 分支可用。 */
-  @state() private _showTranslate = false;
+  /** 目录抽屉（md/docx/pdf 的 markdown 预览分支）：条目双源写入（content
+   *  提取 / pdf toc-change）仍归本组件；显隐/捕获/跳转迁 TocDrawerController。 */
   @state() private _tocItems: TocItem[] = [];
-  /** 打开抽屉时的阅读位置（源行号），用于高亮当前章节 */
-  @state() private _tocCurrentLine = 1;
 
-  /** 阅读书签抽屉（2026-10-01 决议）：显隐 + 当前文件书签列表 */
-  @state() private _showBookmarks = false;
-  @state() private _bookmarkItems: ReadingBookmark[] = [];
+  /** 阅读域（AP-1 批 3 拆分）：TOC 抽屉与滚动位置记忆迁
+   *  utils/preview-reading.ts；活跃 viewer 登记制取代散布 querySelector。 */
+  private _toc = new TocDrawerController(this);
+  private _scrollMem = new ScrollMemoryController(this);
+  /** 当前活跃预览组件（render 时模板登记；分支互斥，至多一个）。 */
+  private _activeViewer: ActiveViewerEntry | null = null;
+
+  /** 阅读书签域（AP-4 拆分，2026-11-15）：显隐/列表/收藏/跳转/删除迁
+   *  BookmarksController（utils/bookmarks-controller.ts），本组件注入
+   *  锚点捕获与跳转回调。 */
+  private _bookmarks = new BookmarksController(this);
 
   /** 模式切换的位置锚点（源行号）：预览↔编辑共用同一种锚点货币。 */
   private _anchorLine = 1;
@@ -750,36 +757,25 @@ export class PreviewPane extends LitElement {
   /** 悬浮跳转按钮（纯文本预览分支；markdown 分支由 md-viewer 自治） */
   private _scrollJump = new ScrollJumpController(this, { behavior: "smooth" });
 
-  /** 滚动位置记忆：当前挂监听器的预览组件（md-viewer / pdf-viewer，随分支生灭） */
-  private _scrollBoundViewer: HTMLElement | null = null;
-  /** 绑定时刻的锚点读取函数（md=行号 / pdf=页号）。 */
-  private _scrollAnchorFn: (() => number) | null = null;
-  private _scrollSaveTimer: number | undefined;
-  /** 待落盘写入所属的 path（滚动发生时的旧 path，flush 时 this.path 可能已切走） */
-  private _pendingScrollPath = "";
-
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has("path")) {
       // 换文档：清空高亮输入并收起输入条，不残留旧文档的高亮
-      this._highlightInput = "";
-      this._showHighlightBar = false;
-      this._clearHighlightDebounce();
+      this._highlight.onPathChanged();
       // 目录抽屉同样不跨文档残留（pdf 的 content 恒空串，content 变化
       // 分支不触发，须在 path 变化时清书签条目）
-      this._showToc = false;
+      this._toc.onPathChanged();
       this._tocItems = [];
-      // 书签抽屉同样不跨文档残留；列表换 path 重读
-      this._showBookmarks = false;
-      this._bookmarkItems = bookmarksFor(this.path);
+      // 书签抽屉同样不跨文档残留；列表换 path 重读（controller 自理）
+      this._bookmarks.onPathChanged(this.path);
       // 行选择清空已随 code-viewer content 变化自清（组件自治）；宿主镜像复位
       this._codeSelection = "";
       // 切文件：旧文档滚动位置立即落盘（不等 debounce 到期）
-      this._flushScrollMemory();
+      this._scrollMem.flushOnPathChange();
     }
     if (changed.has("content")) {
       this._content = this.content;
       this._tocItems = extractHeadings(this._content);
-      this._showToc = false;
+      this._toc.onPathChanged();
       this._mode = "preview";
       // 新文档：锚点失效，不做位置恢复，命中行定位照常
       this._skipRestoreOnce = true;
@@ -793,30 +789,21 @@ export class PreviewPane extends LitElement {
 
   async updated(changed: Map<string, unknown>) {
     super.updated?.(changed);
-    // 工具箱对话框以 showModal 打开（top layer，防 PDF portal 遮挡、
-    // 不受预览栏裁剪）；list↔run 切换时 dialog 节点重建，需重新 showModal
-    if (changed.has("_toolbox") && this._toolbox) {
-      const dlg = this.shadowRoot!.querySelector("dialog") as HTMLDialogElement | null;
-      if (dlg && !dlg.open) dlg.showModal();
-    }
+    // 工具箱对话框的模态开关已迁 <c-dialog> 公共件（AP-3）
+    // （AP-4 拆分）；list↔run 切换重建 dialog 的重开逻辑同迁。
     // 纯文本分支的滚动容器 .body 只在该分支存在：在则绑定，不在则解绑
     const body = this.shadowRoot!.querySelector(".body") as HTMLElement | null;
     if (body) this._scrollJump.attach(body);
     else this._scrollJump.detach();
 
     // 滚动位置记忆：md-viewer（markdown 分支）/ pdf-viewer（pdf 分支，
-    // ADR-0031——内部容器 re-dispatch scroll）跟随分支挂/摘
-    const viewer = this._activePreviewViewer();
-    if (this.rememberScroll && viewer && this._mode === "preview") {
-      if (this._scrollBoundViewer !== viewer.el) {
-        this._detachScrollMemory(); // 先摘旧的（含 flush）
-        viewer.el.addEventListener("scroll", this._onViewerScroll, { passive: true });
-        this._scrollBoundViewer = viewer.el;
-        this._scrollAnchorFn = viewer.top;
-      }
-    } else if (this._scrollBoundViewer) {
-      this._detachScrollMemory();
-    }
+    // ADR-0031——内部容器 re-dispatch scroll）跟随分支挂/摘（AP-1 批 3：
+    // 状态机迁 ScrollMemoryController，注入经 _syncReading）
+    this._syncReading();
+    this._scrollMem.sync(
+      this.rememberScroll && this._mode === "preview" ? this._activeViewer?.el ?? null : null,
+    );
+    const viewer = this._activeViewer;
 
     // 位置恢复：独立分支（打开新文件时 _mode 不变，下面的 _mode 分支不执行）。
     // files-view 从不传 .line → 无需 _suppressLocate；行号锚点是尽力而为语义。
@@ -825,7 +812,7 @@ export class PreviewPane extends LitElement {
       const saved = readScrollLine(this.path);
       if (saved !== null && saved > 1 && this.language === "markdown" && viewer?.kind === "md") {
         const pathAtRestore = this.path;
-        await viewer.el.updateComplete;
+        await (viewer.el as unknown as MdViewer).updateComplete;
         if (this.path !== pathAtRestore) return; // 快速连点：放弃过期恢复
         (viewer.el as MdViewer).scrollToSourceLine(saved, "auto"); // 瞬跳，与锚点恢复一致
       }
@@ -856,7 +843,8 @@ export class PreviewPane extends LitElement {
       this._skipRestoreOnce = false;
       return;
     }
-    const mdViewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    const md = this._activeViewer?.asMd();
+    const mdViewer = md ? this._activeViewer!.el as unknown as MdViewer : null;
     if (mdViewer) {
       await mdViewer.updateComplete;
       if (this._anchorAtBottom) mdViewer.scrollToBottom("auto");
@@ -870,63 +858,73 @@ export class PreviewPane extends LitElement {
     super.connectedCallback();
     // 点击 outside 关闭 more 下拉
     document.addEventListener("click", this._onDocClick, true);
-    // Esc 退出预览全屏（keydown 冒泡阶段，避免与输入框内 Esc 冲突时被拦截）
-    document.addEventListener("keydown", this._onFsKeydown);
     // keep-alive 复挂载：全屏 class 若残留（断连重建）复位
-    if (this._fullscreen) {
-      this._fullscreen = false;
-      this._applyFullscreen();
-    }
+    // （Esc 监听与 class 联动已迁 FullscreenController，AP-1 拆分）
+    this._fullscreenCtl.resetIfStale();
   }
 
   disconnectedCallback() {
     document.removeEventListener("click", this._onDocClick, true);
-    document.removeEventListener("keydown", this._onFsKeydown);
-    this._clearHighlightDebounce();
-    this._detachScrollMemory();
+    this._highlight.clearDebounce();
+    this._scrollMem.detach();
     super.disconnectedCallback();
   }
 
-  // ------------------------------------------------------------ 滚动位置记忆
+  // ------------------------------------------------------------ 阅读域接线
 
-  /** 当前活跃预览组件的滚动锚点（md-viewer=源行号 / pdf-viewer=页号+
-   *  页内偏移编码值，ADR-0031）。 */
-  private _activePreviewViewer():
-    | { kind: "md"; el: MdViewer; top: () => number }
-    | { kind: "pdf"; el: PdfViewer; top: () => number }
-    | null {
-    const md = this.shadowRoot?.querySelector("md-viewer") as MdViewer | null;
-    if (md) return { kind: "md", el: md, top: () => md.topSourceLine() };
-    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-    if (pdf) return { kind: "pdf", el: pdf, top: () => pdf.scrollAnchorValue() };
-    return null;
+  /** 阅读域注入（AP-1 批 3）：TOC / 滚动记忆 / 活跃 viewer 登记。 */
+  private _syncReading() {
+    this._toc.captureAnchor = () => this._activeViewer?.top() ?? 1;
+    this._toc.onJump = (line) => {
+      if (this.language === "pdf") {
+        this._activeViewer?.asPdf()?.scrollToPage(line);
+        return;
+      }
+      this._activeViewer?.asMd()?.jumpToSourceLine(line, "smooth");
+    };
+    this._scrollMem.enabled = () => this.rememberScroll;
+    this._scrollMem.path = () => this.path;
+    this._scrollMem.anchor = () => this._activeViewer?.top ?? null;
+    this._scrollMem.write = writeScrollLine;
   }
 
-  private _onViewerScroll = () => {
-    this._pendingScrollPath = this.path;
-    window.clearTimeout(this._scrollSaveTimer);
-    this._scrollSaveTimer = window.setTimeout(() => this._flushScrollMemory(), 300);
-  };
+  /** render 时模板登记活跃 viewer（md/pdf 分支互斥；编辑/行号/html 分支
+   *  无 viewer，置 null）。 */
+  private readonly _registerMdViewerRef = ref((el) => this._registerMdViewer(el));
+  private readonly _registerPdfViewerRef = ref((el) => this._registerPdfViewer(el));
 
-  /** 把待落盘的滚动位置写入 localStorage（幂等；line<=1 时由 writeScrollLine 删条目）。 */
-  private _flushScrollMemory() {
-    window.clearTimeout(this._scrollSaveTimer);
-    this._scrollSaveTimer = undefined;
-    const viewer = this._scrollBoundViewer;
-    const top = this._scrollAnchorFn;
-    const path = this._pendingScrollPath;
-    this._pendingScrollPath = "";
-    if (!viewer || !top || !path) return;
-    writeScrollLine(path, top());
+  private _registerMdViewer(el: Element | undefined) {
+    this._activeViewer = el
+      ? {
+          kind: "md",
+          el: el as HTMLElement,
+          top: () => (el as unknown as MdViewer).topSourceLine(),
+          asMd: () => el as unknown as MdViewer,
+          asPdf: () => null,
+        }
+      : null;
   }
 
-  /** 摘除 scroll 监听并 flush 未落盘的写入（幂等）。 */
-  private _detachScrollMemory() {
-    if (this._scrollBoundViewer) {
-      this._scrollBoundViewer.removeEventListener("scroll", this._onViewerScroll);
-    }
-    this._flushScrollMemory();
-    this._scrollBoundViewer = null;
+  private _registerPdfViewer(el: Element | undefined) {
+    this._activeViewer = el
+      ? {
+          kind: "pdf",
+          el: el as HTMLElement,
+          top: () => (el as unknown as PdfViewer).scrollAnchorValue(),
+          asMd: () => null,
+          asPdf: () => el as unknown as PdfViewer,
+        }
+      : null;
+  }
+
+  /** 强制重定位到当前行（AP-2：search-view 同文件同行重复点击的兜底，
+   *  取代宿主双层 shadowRoot 穿透直调 md-viewer.reLocate）。内部转发当前
+   *  md-viewer；无 md 预览时 no-op。 */
+  async reLocate(): Promise<void> {
+    const md = this._activeViewer?.asMd();
+    if (!md) return;
+    await (this._activeViewer!.el as unknown as MdViewer).updateComplete;
+    md.reLocate();
   }
 
   /** 移动端返回按钮。父组件监听 @back 自行决定如何导航。 */
@@ -942,83 +940,66 @@ export class PreviewPane extends LitElement {
     this._showMobileMenu = !this._showMobileMenu;
   };
 
-  /** 字号 stepper（mobile-menu 内一行）：− 当前% +，连点不关菜单，边界 disabled。 */
-  private _renderFontScaleStepper() {
-    const atMin = this._fontScalePct <= FONT_SCALE_MIN_PCT;
-    const atMax = this._fontScalePct >= FONT_SCALE_MAX_PCT;
+  /** −/值/+ stepper（mobile-menu 内一行，AP-5 参数化合一：六份渲染方法
+   *  收敛为此一份——值文案/边界判定/三回调注入；PDF 缩放与字号共用）。
+   *  连点不关菜单，边界 disabled；中值按钮点击回默认（100% 或适宽）。 */
+  private _renderStepper(opts: {
+    ariaLabel: string;
+    rowLabel: string;
+    valueText: string;
+    atMin: boolean;
+    atMax: boolean;
+    minusLabel: string;
+    plusLabel: string;
+    resetTitle: string;
+    onMinus: () => void;
+    onReset: () => void;
+    onPlus: () => void;
+  }) {
     return html`
-      <div class="font-scale-row" role="group" aria-label="正文字号">
-        <span class="font-scale-label">字号</span>
+      <div class="font-scale-row" role="group" aria-label=${opts.ariaLabel}>
+        <span class="font-scale-label">${opts.rowLabel}</span>
         <button
           class="font-scale-btn"
           type="button"
-          aria-label="缩小字号"
-          ?disabled=${atMin}
-          @click=${() => this._bumpFontScale(-FONT_SCALE_STEP_PCT)}
+          aria-label=${opts.minusLabel}
+          ?disabled=${opts.atMin}
+          @click=${opts.onMinus}
         ><doclens-icon name="minus"></doclens-icon></button>
         <button
           class="font-scale-value"
           type="button"
           style="background:transparent;border:none;cursor:pointer;font-family:inherit;color:var(--cortex-text-muted)"
-          title="点击回到 100%"
-          @click=${() => this._resetFontScale()}
-        >${this._fontScalePct}%</button>
+          title=${opts.resetTitle}
+          @click=${opts.onReset}
+        >${opts.valueText}</button>
         <button
           class="font-scale-btn"
           type="button"
-          aria-label="放大字号"
-          ?disabled=${atMax}
-          @click=${() => this._bumpFontScale(FONT_SCALE_STEP_PCT)}
+          aria-label=${opts.plusLabel}
+          ?disabled=${opts.atMax}
+          @click=${opts.onPlus}
         ><doclens-icon name="plus"></doclens-icon></button>
       </div>
     `;
   }
 
-  private _bumpFontScale(delta: number) {
-    const next = Math.min(
-      FONT_SCALE_MAX_PCT,
-      Math.max(FONT_SCALE_MIN_PCT, this._fontScalePct + delta),
-    );
-    if (next === this._fontScalePct) return;
-    this._fontScalePct = next;
-    writeFontScalePct(next);
+  /** 字号 stepper（mobile-menu；正文 md 字号）。 */
+  private _renderFontScaleStepper() {
+    return this._renderStepper({
+      ariaLabel: "正文字号",
+      rowLabel: "字号",
+      valueText: `${this._fontScale.pct}%`,
+      atMin: this._fontScale.atMin,
+      atMax: this._fontScale.atMax,
+      minusLabel: "缩小字号",
+      plusLabel: "放大字号",
+      resetTitle: "点击回到 100%",
+      onMinus: () => this._fontScale.stepMinus(),
+      onReset: () => this._fontScale.reset(),
+      onPlus: () => this._fontScale.stepPlus(),
+    });
   }
-
-  /** 点击百分比回默认 100%（对齐 PDF 缩放组「点击回适宽」惯例）。 */
-  private _resetFontScale() {
-    if (this._fontScalePct === FONT_SCALE_DEFAULT_PCT) return;
-    this._fontScalePct = FONT_SCALE_DEFAULT_PCT;
-    writeFontScalePct(FONT_SCALE_DEFAULT_PCT);
-  }
-
-  /** 代码主题切换（ADR-0043 三态）：跟随 ⇄ 浅 ⇄ 深循环，即选即生效 + 落盘
-   *  （auto 落盘 = 清除记录）。 */
-  private _toggleCodeTheme() {
-    const order: CodeTheme[] = ["auto", "light", "dark"];
-    const next = order[(order.indexOf(this._codeTheme) + 1) % order.length];
-    this._codeTheme = next;
-    writeCodeTheme(next);
-  }
-
-  /** 预览全屏切换（类视频全屏）：CSS 覆盖层形态——不用原生 Fullscreen API
-   *  （pdf-viewer 的 portal 挂 document.body，全屏顶层元素是本组件时 portal
-   *  会被排除在外导致 PDF 白屏）。body class 联动提升 portal z-index。 */
-  private _toggleFullscreen() {
-    this._fullscreen = !this._fullscreen;
-    this._applyFullscreen();
-  }
-
-  private _applyFullscreen() {
-    this.classList.toggle("preview-fullscreen", this._fullscreen);
-    document.body.classList.toggle("cortex-preview-fs", this._fullscreen);
-  }
-
-  private _onFsKeydown = (e: KeyboardEvent) => {
-    if (e.key === "Escape" && this._fullscreen) {
-      this._fullscreen = false;
-      this._applyFullscreen();
-    }
-  };
 
   /** 代码主题按钮（桌面 header pill / mobile more 菜单行共用）：
    *  三态循环（跟随/浅/深）：auto 显 contrast 图标、浅显太阳、深显月亮。 */
@@ -1032,164 +1013,129 @@ export class PreviewPane extends LitElement {
       type="button"
       aria-label=${`代码配色：${label}（切换为${nextLabel}）`}
       title=${`代码配色：${label}`}
-      @click=${() => this._toggleCodeTheme()}
+      @click=${() => this._codeThemeCtl.toggle()}
     ><doclens-icon name=${icon}></doclens-icon><span class="btn-label">${label}</span></button>`;
   }
 
   /** 预览全屏按钮（桌面 header，所有预览分支通用）：全屏显 minimize 退出。 */
   private _renderFullscreenBtn() {
-    const fs = this._fullscreen;
+    const fs = this._fullscreenCtl.on;
     return html`<button
       class="fs-btn"
       type="button"
       aria-label=${fs ? "退出全屏" : "全屏预览"}
       title=${fs ? "退出全屏（Esc）" : "全屏预览"}
-      @click=${() => this._toggleFullscreen()}
+      @click=${() => this._fullscreenCtl.toggle()}
     ><doclens-icon name=${fs ? "minimize-2" : "maximize-2"}></doclens-icon><span class="btn-label">${fs ? "退出全屏" : "全屏"}</span></button>`;
   }
 
-  private _bumpCodeFontScale(delta: number) {
-    const next = Math.min(
-      CODE_FONT_SCALE_MAX_PCT,
-      Math.max(CODE_FONT_SCALE_MIN_PCT, this._codeFontScalePct + delta),
-    );
-    if (next === this._codeFontScalePct) return;
-    this._codeFontScalePct = next;
-    writeCodeFontScalePct(next);
+  /** 桌面 header 的 −/比例/+ 联排组（AP-5 参数化合一：zoom-group 样式，
+   *  与 mobile stepper 同参注入；md 字号/行号字号/PDF 缩放共用）。 */
+  private _renderZoomGroup(opts: {
+    ariaLabel: string;
+    valueText: string;
+    atMin: boolean;
+    atMax: boolean;
+    minusLabel: string;
+    plusLabel: string;
+    resetTitle: string;
+    onMinus: () => void;
+    onReset: () => void;
+    onPlus: () => void;
+  }) {
+    return html`
+      <div class="zoom-group" role="group" aria-label=${opts.ariaLabel}>
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label=${opts.minusLabel}
+          ?disabled=${opts.atMin}
+          @click=${opts.onMinus}
+        ><doclens-icon name="minus"></doclens-icon></button>
+        <button
+          class="zoom-label"
+          type="button"
+          title=${opts.resetTitle}
+          @click=${opts.onReset}
+        >${opts.valueText}</button>
+        <button
+          class="zoom-btn"
+          type="button"
+          aria-label=${opts.plusLabel}
+          ?disabled=${opts.atMax}
+          @click=${opts.onPlus}
+        ><doclens-icon name="plus"></doclens-icon></button>
+      </div>
+    `;
   }
 
-  /** 点击百分比回默认 100%（对齐 PDF 缩放组「点击回适宽」惯例）。 */
-  private _resetCodeFontScale() {
-    if (this._codeFontScalePct === CODE_FONT_SCALE_DEFAULT_PCT) return;
-    this._codeFontScalePct = CODE_FONT_SCALE_DEFAULT_PCT;
-    writeCodeFontScalePct(CODE_FONT_SCALE_DEFAULT_PCT);
-  }
-
-  /** 桌面 header 的 md 正文字号组（− 比例 +，复用 PDF zoom-group 联排样式）。
-   *  桌面补齐——原先字号 stepper 只在移动端 more 菜单（_renderFontScaleStepper），
-   *  同一 _fontScalePct 状态两入口共享；点击百分比回 100%。 */
+  /** 桌面 header 的 md 正文字号组（AP-5 合一）。
+   *  桌面补齐——原先字号 stepper 只在移动端 more 菜单，同一 _fontScale
+   *  状态两入口共享；点击百分比回 100%。 */
   private _renderMdFontScaleGroup() {
-    const atMin = this._fontScalePct <= FONT_SCALE_MIN_PCT;
-    const atMax = this._fontScalePct >= FONT_SCALE_MAX_PCT;
-    return html`
-      <div class="zoom-group" role="group" aria-label="字号">
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="缩小字号"
-          ?disabled=${atMin}
-          @click=${() => this._bumpFontScale(-FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="zoom-label"
-          type="button"
-          title="点击回到 100%"
-          @click=${() => this._resetFontScale()}
-        >${this._fontScalePct}%</button>
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="放大字号"
-          ?disabled=${atMax}
-          @click=${() => this._bumpFontScale(FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    return this._renderZoomGroup({
+      ariaLabel: "字号",
+      valueText: `${this._fontScale.pct}%`,
+      atMin: this._fontScale.atMin,
+      atMax: this._fontScale.atMax,
+      minusLabel: "缩小字号",
+      plusLabel: "放大字号",
+      resetTitle: "点击回到 100%",
+      onMinus: () => this._fontScale.stepMinus(),
+      onReset: () => this._fontScale.reset(),
+      onPlus: () => this._fontScale.stepPlus(),
+    });
   }
 
-  /** 行号视图字号 stepper（mobile-menu 内一行，复用 font-scale-row 样式）。 */
+  /** 行号视图字号 stepper（mobile-menu；AP-5 合一）。 */
   private _renderCodeFontScaleStepper() {
-    const atMin = this._codeFontScalePct <= CODE_FONT_SCALE_MIN_PCT;
-    const atMax = this._codeFontScalePct >= CODE_FONT_SCALE_MAX_PCT;
-    return html`
-      <div class="font-scale-row" role="group" aria-label="正文字号">
-        <span class="font-scale-label">字号</span>
-        <button
-          class="font-scale-btn"
-          type="button"
-          aria-label="缩小字号"
-          ?disabled=${atMin}
-          @click=${() => this._bumpCodeFontScale(-CODE_FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="font-scale-value"
-          type="button"
-          style="background:transparent;border:none;cursor:pointer;font-family:inherit;color:var(--cortex-text-muted)"
-          title="点击回到 100%"
-          @click=${() => this._resetCodeFontScale()}
-        >${this._codeFontScalePct}%</button>
-        <button
-          class="font-scale-btn"
-          type="button"
-          aria-label="放大字号"
-          ?disabled=${atMax}
-          @click=${() => this._bumpCodeFontScale(CODE_FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    return this._renderStepper({
+      ariaLabel: "正文字号",
+      rowLabel: "字号",
+      valueText: `${this._codeFontScale.pct}%`,
+      atMin: this._codeFontScale.atMin,
+      atMax: this._codeFontScale.atMax,
+      minusLabel: "缩小字号",
+      plusLabel: "放大字号",
+      resetTitle: "点击回到 100%",
+      onMinus: () => this._codeFontScale.stepMinus(),
+      onReset: () => this._codeFontScale.reset(),
+      onPlus: () => this._codeFontScale.stepPlus(),
+    });
   }
 
-  /** 桌面 header 的行号视图字号组（− 比例 +，复用 PDF zoom-group 联排样式；
-   *  点击百分比回 100%）。 */
+  /** 桌面 header 的行号视图字号组（AP-5 合一；点击百分比回 100%）。 */
   private _renderCodeFontScaleGroup() {
-    const atMin = this._codeFontScalePct <= CODE_FONT_SCALE_MIN_PCT;
-    const atMax = this._codeFontScalePct >= CODE_FONT_SCALE_MAX_PCT;
-    return html`
-      <div class="zoom-group" role="group" aria-label="字号">
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="缩小字号"
-          ?disabled=${atMin}
-          @click=${() => this._bumpCodeFontScale(-CODE_FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="zoom-label"
-          type="button"
-          title="点击回到 100%"
-          @click=${() => this._resetCodeFontScale()}
-        >${this._codeFontScalePct}%</button>
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="放大字号"
-          ?disabled=${atMax}
-          @click=${() => this._bumpCodeFontScale(CODE_FONT_SCALE_STEP_PCT)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    return this._renderZoomGroup({
+      ariaLabel: "字号",
+      valueText: `${this._codeFontScale.pct}%`,
+      atMin: this._codeFontScale.atMin,
+      atMax: this._codeFontScale.atMax,
+      minusLabel: "缩小字号",
+      plusLabel: "放大字号",
+      resetTitle: "点击回到 100%",
+      onMinus: () => this._codeFontScale.stepMinus(),
+      onReset: () => this._codeFontScale.reset(),
+      onPlus: () => this._codeFontScale.stepPlus(),
+    });
   }
 
-  /** PDF 缩放 stepper（mobile-menu 内一行，复用 font-scale-row 样式）：
-   *  − 适宽/百分比 +；点击中值回适宽。 */
+  /** PDF 缩放 stepper（mobile-menu；AP-5 合一）：− 适宽/百分比 +；点击中值回适宽。 */
   private _renderPdfZoomStepper() {
-    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-    return html`
-      <div class="font-scale-row" role="group" aria-label="缩放">
-        <span class="font-scale-label">缩放</span>
-        <button
-          class="font-scale-btn"
-          type="button"
-          aria-label="缩小"
-          ?disabled=${pdf?.atZoomMin()}
-          @click=${() => this._pdfZoom(-1)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="font-scale-value"
-          type="button"
-          style="background:transparent;border:none;cursor:pointer;font-family:inherit;color:var(--cortex-text-muted)"
-          title="点击回到适宽"
-          @click=${() => this._pdfZoom("fit")}
-        >${this._pdfZoomLabel}</button>
-        <button
-          class="font-scale-btn"
-          type="button"
-          aria-label="放大"
-          ?disabled=${pdf?.atZoomMax()}
-          @click=${() => this._pdfZoom(1)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    const pdf = this._activeViewer?.asPdf() ?? null;
+    return this._renderStepper({
+      ariaLabel: "缩放",
+      rowLabel: "缩放",
+      valueText: this._pdfZoomLabel,
+      atMin: pdf?.atZoomMin() ?? false,
+      atMax: pdf?.atZoomMax() ?? false,
+      minusLabel: "缩小",
+      plusLabel: "放大",
+      resetTitle: "点击回到适宽",
+      onMinus: () => this._pdfZoom(-1),
+      onReset: () => this._pdfZoom("fit"),
+      onPlus: () => this._pdfZoom(1),
+    });
   }
 
   private _onDocClick = (e: MouseEvent) => {
@@ -1247,7 +1193,7 @@ export class PreviewPane extends LitElement {
         <span class="mobile-filename" title=${this.path}>${this._basename(this.path)}</span>
         ${this._tocAvailable
           ? html`<button
-              class="mobile-toc ${this._showToc ? "active" : ""}"
+              class="mobile-toc ${this._toc.show ? "active" : ""}"
               type="button"
               aria-label="目录"
               @click=${this._onTocToggle}
@@ -1255,15 +1201,15 @@ export class PreviewPane extends LitElement {
           : null}
         ${this._bookmarkAvailable
           ? html`<button
-              class="mobile-toc mobile-bookmark ${this._showBookmarks ? "active" : ""}"
+              class="mobile-toc mobile-bookmark ${this._bookmarks.open ? "active" : ""}"
               type="button"
               aria-label="书签"
-              @click=${this._onBookmarksToggle}
+              @click=${() => { this._syncBookmarks(); this._bookmarks.toggle(); }}
             ><doclens-icon name="star"></doclens-icon></button>`
           : null}
         ${(this.language === "markdown" || this.language === "pdf") && this._mode === "preview"
           ? html`<button
-              class="mobile-highlight ${this._showHighlightBar ? "active" : ""}"
+              class="mobile-highlight ${this._highlight.show ? "active" : ""}"
               type="button"
               aria-label="关键词高亮"
               @click=${this._onHighlightToggle}
@@ -1291,7 +1237,7 @@ export class PreviewPane extends LitElement {
                   ? html`<button
                       type="button"
                       role="menuitem"
-                      @click=${() => this._toggleCodeTheme()}
+                      @click=${() => this._codeThemeCtl.toggle()}
                     ><doclens-icon name=${this._codeTheme === "auto" ? "contrast" : this._codeTheme === "light" ? "sun" : "moon"}></doclens-icon>${this._codeTheme === "auto" ? "跟随应用" : this._codeTheme === "light" ? "浅色" : "深色"}</button>`
                   : null}
                 ${this._isLineView && this._mode === "preview"
@@ -1313,20 +1259,20 @@ export class PreviewPane extends LitElement {
                   : html`<button
                       type="button"
                       role="menuitem"
-                      ?disabled=${this._downloading}
-                      @click=${() => { this._showMobileMenu = false; this._onDownloadClick(); }}
-                >${this._downloading ? "下载中…" : html`<doclens-icon name="download"></doclens-icon>下载`}</button>
+                      ?disabled=${this._download.downloading}
+                      @click=${() => { this._showMobileMenu = false; this._download.click(); }}
+                >${this._download.downloading ? "下载中…" : html`<doclens-icon name="download"></doclens-icon>下载`}</button>
                 ${this._translateAvailable
                   ? html`<button
                       type="button"
                       role="menuitem"
-                      @click=${() => { this._showMobileMenu = false; this._showTranslate = true; }}
+                      @click=${() => { this._showMobileMenu = false; this._translateCtlShow(); }}
                     ><doclens-icon name="language"></doclens-icon>翻译</button>`
                   : null}
                 <button
                   type="button"
                   role="menuitem"
-                  @click=${() => { this._showMobileMenu = false; void this._onToolboxOpen(); }}
+                  @click=${() => { this._showMobileMenu = false; this._syncToolbox(); void this._toolbox.open_(); }}
                 ><doclens-icon name="sparkles"></doclens-icon>工具箱</button>
                 ${this.path
                   ? html`<button
@@ -1352,7 +1298,7 @@ export class PreviewPane extends LitElement {
   enterEdit() {
     // 捕获预览视口顶部的源行号作为锚点（行级精度；贴底时记录底部锚点）
     // 与文本选区（源文本字符偏移），切换后两侧各自恢复
-    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
+    const viewer = this._activeViewer?.asMd();
     if (viewer) {
       this._anchorLine = viewer.topSourceLine();
       this._anchorAtBottom = viewer.isAtBottom();
@@ -1433,32 +1379,53 @@ export class PreviewPane extends LitElement {
     this._mode = "preview";
   }
 
-  /** 触发原始文件下载（WebView 内 jsbridge 原生通道，浏览器 `<a>` 兜底，
-   *  编排见 utils/download.ts）；文件名由后端 Content-Disposition 决定。 */
-  private _onDownloadClick = () => {
-    if (!this.path || this._downloading) return;
-    void (async () => {
-      this._downloading = true;
-      try {
-        const r = await downloadServerFile(this.path!);
-        if (r.via !== "jsbridge") return;
-        if (r.name) {
-          this.dispatchEvent(
-            new CustomEvent("download-success", { detail: { name: r.name } }),
-          );
-        } else if (r.error) {
-          this.dispatchEvent(new CustomEvent("download-failed", { detail: { message: r.error } }));
-        }
-        // 两字段皆空 = unauthorized 已在公共编排内跳登录，此处静默
-      } finally {
-        this._downloading = false;
+  /** 交互域接线（AP-1 拆分：download/highlight/translate 注入环境回调）。 */
+  private _syncInteractions() {
+    this._download.path = () => this.path;
+    this._download.download = downloadServerFile;
+    this._download.onFeedback = (detail) => {
+      if ("name" in detail) {
+        this.dispatchEvent(new CustomEvent("download-success", { detail }));
+      } else {
+        this.dispatchEvent(new CustomEvent("download-failed", { detail }));
       }
-    })();
+    };
+    this._highlight.normalize = normalizeHighlightKeyword;
+    this._highlight.fallbackKeyword = () => this.keyword;
+    this._highlight.language = () => this.language;
+    this._highlight.focusInput = async () => {
+      await this.updateComplete;
+      const input = this.shadowRoot?.querySelector(
+        ".highlight-bar input",
+      ) as HTMLInputElement | null;
+      input?.focus();
+    };
+    this._highlight.jumpToFirstHit = () => this._jumpToFirstHit();
+    this._highlight.stepHit = (dir) => this._stepHit(dir);
+    this._translate.available = () => this._translateAvailable;
+    this._translate.onFinished = (paths) => {
+      this.dispatchEvent(new CustomEvent("translate-finished", {
+        detail: { paths }, bubbles: true, composed: true,
+      }));
+    };
+  }
+
+  /** mobile 菜单「翻译」入口（关菜单 + 开弹框）。 */
+  private _translateCtlShow() {
+    this._showMobileMenu = false;
+    this._translate.toggle();
   }
 
   private _renderDownloadBtn() {
     if (this._isPst) return null;
-    return html`<button class="download-btn" ?disabled=${this._downloading} @click=${this._onDownloadClick}>${this._downloading ? html`<span class="btn-label">下载中</span>` : html`<doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span>`}</button>`;
+    const busy = this._download.downloading;
+    return html`<button
+      class="download-btn"
+      ?disabled=${busy}
+      @click=${() => this._download.click()}
+    >${busy
+        ? html`<span class="btn-label">下载中</span>`
+        : html`<doclens-icon name="download"></doclens-icon><span class="btn-label">下载</span>`}</button>`;
   }
 
   /** 触发「重新解析」：冒泡 reparse 事件给父组件（files-view 挂 reparse-dialog）。 */
@@ -1488,98 +1455,63 @@ export class PreviewPane extends LitElement {
   // 透传 md-viewer keyword 高亮全部命中，并自动滚动到第一个命中。
   // ------------------------------------------------------------------
 
-  /** md-viewer 生效的关键词：手动输入经 normalizeHighlightKeyword 归一化
-   *  （含 CJK 去空格整串）；未手动输入时透传父组件 keyword 原样。 */
+  /** md-viewer 生效的关键词：手动输入经归一化；未输入时透传 keyword prop。 */
   private get _effectiveKeyword(): string {
-    return this._highlightInput.trim()
-      ? normalizeHighlightKeyword(this._highlightInput)
-      : this.keyword;
+    this._highlight.normalize = normalizeHighlightKeyword;
+    this._highlight.fallbackKeyword = () => this.keyword;
+    return this._highlight.effectiveKeyword;
   }
 
   /** 桌面 header 的高亮按钮（图标 + hover 文字）。 */
   private _renderHighlightBtn() {
     return html`<button
-      class="highlight-btn ${this._showHighlightBar ? "active" : ""}"
+      class="highlight-btn ${this._highlight.show ? "active" : ""}"
       @click=${this._onHighlightToggle}
     ><doclens-icon name="search"></doclens-icon><span class="btn-label">高亮</span></button>`;
   }
 
   /** 高亮输入条（桌面 header 下方 / 移动端 mobile-header 下方共用）。 */
   private _renderHighlightBar() {
-    if (!this._showHighlightBar) return null;
+    if (!this._highlight.show) return null;
     return html`
       <div class="highlight-bar">
         <doclens-icon name="search"></doclens-icon>
         <input
           type="text"
           placeholder="输入关键字高亮（中文整词匹配，英文空格分隔多个）"
-          .value=${this._highlightInput}
+          .value=${this._highlight.input}
           @input=${this._onHighlightInput}
           @keydown=${this._onHighlightKeydown}
         />
         <button
           class="highlight-clear"
           aria-label="清除并关闭"
-          @click=${this._onHighlightClear}
+          @click=${() => this._highlight.clearAll()}
         ><doclens-icon name="x"></doclens-icon></button>
       </div>
     `;
   }
 
   private _onHighlightToggle = async () => {
-    this._showHighlightBar = !this._showHighlightBar;
-    if (this._showHighlightBar) {
-      await this.updateComplete;
-      const input = this.shadowRoot?.querySelector(
-        ".highlight-bar input",
-      ) as HTMLInputElement | null;
-      input?.focus();
-    }
+    await this._highlight.toggle();
   };
 
   private _onHighlightInput = (e: Event) => {
-    this._highlightInput = (e.target as HTMLInputElement).value;
-    // 输入停顿 300ms 后自动跳到第一个命中（Enter 立即跳）
-    this._clearHighlightDebounce();
-    if (!this._highlightInput.trim()) return;
-    this._highlightDebounce = window.setTimeout(() => {
-      this._highlightDebounce = undefined;
-      void this._jumpToFirstHit();
-    }, 300);
+    this._highlight.onInput((e.target as HTMLInputElement).value);
   };
 
   private _onHighlightKeydown = (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
-      // Enter=下一个 / Shift+Enter=上一个（匹配导航，2026-09-28 决议，
-      // 浏览器 find bar 手感）。关键词变化后的自动首跳由输入 debounce 负责。
-      this._clearHighlightDebounce();
-      void this._stepHit(e.shiftKey ? -1 : 1);
-    } else if (e.key === "Escape") {
-      this._onHighlightClear();
-    }
+    this._highlight.onKeydown(e);
   };
-
-  private _onHighlightClear = () => {
-    this._clearHighlightDebounce();
-    this._highlightInput = "";
-    this._showHighlightBar = false;
-  };
-
-  private _clearHighlightDebounce() {
-    if (this._highlightDebounce !== undefined) {
-      window.clearTimeout(this._highlightDebounce);
-      this._highlightDebounce = undefined;
-    }
-  }
 
   /** 等 md-viewer 重渲染并完成关键词高亮后，滚动到第一个命中。
    *  pdf 分支无需处理：findController 的 find 命令默认选中首个命中。 */
   private async _jumpToFirstHit() {
     if (this.language === "pdf") return;
     await this.updateComplete;
-    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
-    if (!viewer) return;
-    await viewer.updateComplete;
+    const viewer = this._activeViewer?.asMd();
+    if (!viewer || this._activeViewer!.kind !== "md") return;
+    await (this._activeViewer!.el as unknown as MdViewer).updateComplete;
     viewer.scrollToFirstKeywordHit();
   }
 
@@ -1588,13 +1520,12 @@ export class PreviewPane extends LitElement {
   private async _stepHit(dir: 1 | -1) {
     await this.updateComplete;
     if (this.language === "pdf") {
-      const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-      pdf?.stepKeywordHit(dir);
+      this._activeViewer?.asPdf()?.stepKeywordHit(dir);
       return;
     }
-    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
-    if (!viewer) return;
-    await viewer.updateComplete;
+    const viewer = this._activeViewer?.asMd();
+    if (!viewer || this._activeViewer!.kind !== "md") return;
+    await (this._activeViewer!.el as unknown as MdViewer).updateComplete;
     viewer.stepKeywordHit(dir);
   }
 
@@ -1637,7 +1568,7 @@ export class PreviewPane extends LitElement {
 
   /** PDF 缩放操作（透传 pdf-viewer；view 事件绑定需箭头包装保持 this）。 */
   private _pdfZoom(delta: 1 | -1 | "fit") {
-    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
+    const pdf = this._activeViewer?.asPdf();
     if (!pdf) return;
     if (delta === "fit") pdf.fitWidth();
     else if (delta === 1) pdf.zoomIn();
@@ -1647,31 +1578,19 @@ export class PreviewPane extends LitElement {
   /** 桌面 header 的 PDF 缩放组（− 比例 +；点击比例回适宽）。 */
   private _renderPdfZoomGroup() {
     if (this.language !== "pdf" || this._mode !== "preview") return null;
-    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-    return html`
-      <div class="zoom-group" role="group" aria-label="缩放">
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="缩小"
-          ?disabled=${pdf?.atZoomMin()}
-          @click=${() => this._pdfZoom(-1)}
-        ><doclens-icon name="minus"></doclens-icon></button>
-        <button
-          class="zoom-label"
-          type="button"
-          title="点击回到适宽"
-          @click=${() => this._pdfZoom("fit")}
-        >${this._pdfZoomLabel}</button>
-        <button
-          class="zoom-btn"
-          type="button"
-          aria-label="放大"
-          ?disabled=${pdf?.atZoomMax()}
-          @click=${() => this._pdfZoom(1)}
-        ><doclens-icon name="plus"></doclens-icon></button>
-      </div>
-    `;
+    const pdf = this._activeViewer?.asPdf() ?? null;
+    return this._renderZoomGroup({
+      ariaLabel: "缩放",
+      valueText: this._pdfZoomLabel,
+      atMin: pdf?.atZoomMin() ?? false,
+      atMax: pdf?.atZoomMax() ?? false,
+      minusLabel: "缩小",
+      plusLabel: "放大",
+      resetTitle: "点击回到适宽",
+      onMinus: () => this._pdfZoom(-1),
+      onReset: () => this._pdfZoom("fit"),
+      onPlus: () => this._pdfZoom(1),
+    });
   }
 
   /** pdf 文档就绪：滚动位置恢复（页号+页内偏移锚点；渲染管线就绪晚于
@@ -1680,15 +1599,14 @@ export class PreviewPane extends LitElement {
     if (!this.rememberScroll || this.language !== "pdf") return;
     const saved = readScrollLine(this.path);
     if (saved === null || saved <= 1) return;
-    const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-    pdf?.restoreScrollAnchorValue(saved);
+    this._activeViewer?.asPdf()?.restoreScrollAnchorValue(saved);
   };
 
   /** 桌面 header 的目录按钮（图标 + hover 文字，同 highlight-btn）。 */
   private _renderTocBtn() {
     if (!this._tocAvailable) return null;
     return html`<button
-      class="toc-btn ${this._showToc ? "active" : ""}"
+      class="toc-btn ${this._toc.show ? "active" : ""}"
       @click=${this._onTocToggle}
     ><doclens-icon name="list-tree"></doclens-icon><span class="btn-label">目录</span></button>`;
   }
@@ -1716,22 +1634,14 @@ export class PreviewPane extends LitElement {
       return null;
     }
     return html`<button
-      class="toc-btn ${this._showTranslate ? "active" : ""}"
+      class="toc-btn ${this._translate.show ? "active" : ""}"
       title="翻译此 PDF（产物写回本目录）"
-      @click=${() => (this._showTranslate = !this._showTranslate)}
+      @click=${() => this._translate.toggle()}
     ><doclens-icon name="language"></doclens-icon><span class="btn-label">翻译</span></button>`;  }
 
   /** 翻译完成：关弹框 + toast 提示产物路径（FileWatcher 会自动入索引）。 */
   private _onTranslateDone = (e: CustomEvent<{ paths: string[] }>) => {
-    this._showTranslate = false;
-    const paths = e.detail?.paths ?? [];
-    this.dispatchEvent(
-      new CustomEvent("translate-finished", {
-        detail: { paths },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    this._translate.done(e.detail?.paths ?? []);
   };
 
   // ------------------------------------------------------------------
@@ -1739,6 +1649,30 @@ export class PreviewPane extends LitElement {
   // （md/epub/docx，源行号锚点）+ pdf-viewer 链路（pdf，页号+页内偏移
   // 锚点）。与滚动记忆（隐式自动）分工并存；与 PDF 原生书签（TOC）无关。
   // ------------------------------------------------------------------
+  // 阅读书签（2026-10-01 决议）：域已迁 BookmarksController（AP-4 拆分，
+  //  2026-11-15）——本组件注入环境参数（入口判定/锚点捕获/标签/跳转），
+  //  toast 反馈事件口径不变（bookmark-added/duplicate/full）。
+  // ------------------------------------------------------------------
+
+  /** 同步书签控制器的环境参数（render 前调用）。 */
+  private _syncBookmarks() {
+    this._bookmarks.available = this._bookmarkAvailable;
+    this._bookmarks.captureAnchor = () => {
+      const viewer = this._activeViewer;
+      return viewer ? { kind: viewer.kind, anchor: viewer.top() } : null;
+    };
+    this._bookmarks.labelFor = (kind, anchor) => this._bookmarkLabel(kind, anchor);
+    this._bookmarks.onJump = (b) => {
+      if (b.kind === "pdf") {
+        this._activeViewer?.asPdf()?.restoreScrollAnchorValue(b.anchor);
+        return;
+      }
+      this._activeViewer?.asMd()?.scrollToSourceLine(b.anchor, "smooth");
+    };
+    this._bookmarks.onFeedback = (kind) => {
+      this.dispatchEvent(new CustomEvent(`bookmark-${kind}`, { bubbles: true, composed: true }));
+    };
+  }
 
   /** 书签支持的扩展名（按预览链路划定：md-viewer 链路 md/epub/docx +
    *  pdf-viewer 链路 pdf；pptx/xlsx/邮件/图像等不提供）。 */
@@ -1766,88 +1700,26 @@ export class PreviewPane extends LitElement {
     return idx >= 0 ? this._tocItems[idx].text : `第 ${anchor} 行`;
   }
 
-  /** 收藏当前位置（header 圆钮一键动作）：捕获当前锚点 + 生成自动标签。
-   *  幂等命中 / 满员经 toast 反馈（bookmark-added 事件，宿主视图 toast，
-   *  与 download-success 同模式）。 */
-  private _onBookmarkAdd = () => {
-    if (!this._bookmarkAvailable) return;
-    const viewer = this._activePreviewViewer();
-    if (!viewer) return;
-    const kind = viewer.kind;
-    const anchor = Math.max(1, Math.floor(viewer.top()));
-    const label = this._bookmarkLabel(kind, anchor);
-    const result = addBookmark({ path: this.path, anchor, kind, label });
-    if (!result.ok) {
-      this.dispatchEvent(new CustomEvent("bookmark-full", { bubbles: true, composed: true }));
-      return;
-    }
-    this._bookmarkItems = bookmarksFor(this.path);
-    if (result.duplicate) {
-      this.dispatchEvent(new CustomEvent("bookmark-duplicate", { bubbles: true, composed: true }));
-    } else {
-      this.dispatchEvent(new CustomEvent("bookmark-added", { bubbles: true, composed: true }));
-    }
-  };
-
-  private _onBookmarksToggle = () => {
-    if (!this._showBookmarks) {
-      this._bookmarkItems = bookmarksFor(this.path);
-    }
-    this._showBookmarks = !this._showBookmarks;
-  };
-
-  private _onBookmarksClose = () => {
-    this._showBookmarks = false;
-  };
-
-  /** 点击书签条目：关闭抽屉 + 跳转（md：平滑滚到源行号；pdf：restore
-   *  页号+页内偏移——与滚动记忆恢复同路径）。 */
-  private _onBookmarkJump = (e: CustomEvent<{ bookmark: ReadingBookmark }>) => {
-    const b = e.detail.bookmark;
-    this._showBookmarks = false;
-    if (b.kind === "pdf") {
-      const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-      pdf?.restoreScrollAnchorValue(b.anchor);
-      return;
-    }
-    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
-    viewer?.scrollToSourceLine(b.anchor, "smooth");
-  };
-
-  /** 删除书签：本地移除并刷新列表（抽屉不关闭，可连续删）。 */
-  private _onBookmarkRemove = (e: CustomEvent<{ bookmark: ReadingBookmark }>) => {
-    const b = e.detail.bookmark;
-    removeBookmark(b.path, b.anchor);
-    this._bookmarkItems = bookmarksFor(this.path);
-  };
-
   /** 桌面 header 的书签按钮（图标 + hover 文字，同 toc-btn）：点击打开
    *  抽屉（收藏动作在抽屉内——右键入口不可发现，2026-10-01 修正）。 */
   private _renderBookmarkBtn() {
+    this._syncBookmarks();
     if (!this._bookmarkAvailable) return null;
     return html`<button
-      class="toc-btn ${this._showBookmarks ? "active" : ""}"
+      class="toc-btn ${this._bookmarks.open ? "active" : ""}"
       title="书签列表"
-      @click=${this._onBookmarksToggle}
+      @click=${() => this._bookmarks.toggle()}
     ><doclens-icon name="star"></doclens-icon><span class="btn-label">书签</span></button>`;
   }
 
   private _renderBookmarkDrawer() {
-    if (!this._showBookmarks) return null;
-    return html`<bookmark-drawer
-      .items=${this._bookmarkItems}
-      .canAdd=${this._bookmarkAvailable}
-      @add=${this._onBookmarkAdd}
-      @jump=${this._onBookmarkJump}
-      @remove=${this._onBookmarkRemove}
-      @close=${this._onBookmarksClose}
-    ></bookmark-drawer>`;
+    return this._bookmarks.renderDrawer();
   }
 
   // ------------------------------------------------------------------
-  // 技能工具箱（对当前预览文件跑 AI 技能）：流程内嵌本组件（对话框
-  // 组件复用 files 页同款），完成后发 skill-chat 组合事件由 cortex-app
-  // 统一消费（新建技能会话 + 切 chat），三个宿主视图零改动。
+  // 技能工具箱（对当前预览文件跑 AI 技能）：域已迁 SkillToolboxController
+  // （AP-4 拆分，2026-11-15）——本组件只保留入口按钮与 skill-chat 派发，
+  // 完成后由 cortex-app 统一消费（新建技能会话 + 切 chat）。
   // ------------------------------------------------------------------
 
   /** 工具箱入口可用：有预览文件且非 PST（派生路径非真实文件）。 */
@@ -1855,72 +1727,39 @@ export class PreviewPane extends LitElement {
     return !!this.path && !this._isPst;
   }
 
-  private async _onToolboxOpen() {
-    if (!this._toolboxAvailable) return;
-    this._pickedSkill = null;
-    this._toolbox = "list";
-    this._toolboxSkills = null;
-    this._toolboxError = null;
-    try {
-      this._toolboxSkills = await fetchSkills();
-    } catch (e) {
-      this._toolboxError = (e as Error)?.message || "技能列表加载失败";
-    }
+  /** 同步工具箱控制器的入口参数（render 时调用；路径/选区变化即生效）。 */
+  private _syncToolbox() {
+    this._toolbox.available = this._toolboxAvailable;
+    this._toolbox.filePaths = () => [this._pathWithRanges];
+    this._toolbox.onRun = (payload) => {
+      this._codeViewer()?.clearSelection(); // 已发送：选区消费完毕，不残留旧区间
+      this._codeSelection = "";
+      this.dispatchEvent(new CustomEvent("skill-chat", {
+        detail: { message: payload.message, title: payload.title },
+        bubbles: true, composed: true,
+      }));
+    };
   }
-
-  private _onSkillPick = (e: CustomEvent<{ skill: SkillInfo }>) => {
-    this._pickedSkill = e.detail.skill;
-    this._toolbox = "run";
-  };
-
-  /** 确认「开始对话」：拼消息 → skill-chat 事件（app 层建会话切 chat）。
-   *  有选中行时文件路径附 `:区间` 后缀（行选择，2026-10-05 决议）。 */
-  private _onSkillRunSubmit = (e: CustomEvent<{ prompt: string }>) => {
-    const skill = this._pickedSkill;
-    this._toolbox = null;
-    if (!skill) return;
-    const lines = [
-      `/${skill.name} 按技能指引处理以下文件`,
-      "",
-      "文件：",
-      `- ${this._pathWithRanges}`,
-      "",
-      `补充要求：${e.detail.prompt || "无"}`,
-    ];
-    recordSkillUse(skill.name);
-    const firstFile = this.path.split("/").pop() ?? this.path;
-    this._codeViewer()?.clearSelection(); // 已发送：选区消费完毕，不残留旧区间
-    this._codeSelection = "";
-    this.dispatchEvent(new CustomEvent("skill-chat", {
-      detail: {
-        message: lines.join("\n"),
-        title: `${skill.name} · ${firstFile}`,
-      },
-      bubbles: true, composed: true,
-    }));
-  };
 
   /** 工具箱按钮（桌面 header，sparkles 图标与 files 工具栏同款）。 */
   private _renderToolboxBtn() {
+    this._syncToolbox();
     if (!this._toolboxAvailable) return null;
     return html`<button
       class="toc-btn"
       title="技能工具箱（对当前文件运行 AI 技能）"
-      @click=${() => void this._onToolboxOpen()}
+      @click=${() => void this._toolbox.open_()}
     ><doclens-icon name="sparkles"></doclens-icon><span class="btn-label">工具箱</span></button>`;
   }
 
   /** 拷贝当前预览路径（相对 workdir）到剪贴板；结果经 path-copied 事件
-   *  由宿主视图 toast（与 download-success 同模式，移动/桌面一致）。 */
+   *  由宿主视图 toast（与 download-success 同模式，移动/桌面一致）。
+   *  AP-5：改走 utils/clipboard 单一入口（含非安全上下文降级）。 */
   private _onCopyPathClick = () => {
     if (!this.path) return;
-    navigator.clipboard.writeText(this.path).then(
-      () => this.dispatchEvent(new CustomEvent("path-copied", {
-        detail: { ok: true, path: this.path },
-        bubbles: true, composed: true,
-      })),
-      () => this.dispatchEvent(new CustomEvent("path-copied", {
-        detail: { ok: false, path: this.path },
+    void copyText(this.path).then((ok) =>
+      this.dispatchEvent(new CustomEvent("path-copied", {
+        detail: { ok, path: this.path },
         bubbles: true, composed: true,
       })),
     );
@@ -1938,69 +1777,39 @@ export class PreviewPane extends LitElement {
 
   /** 工具箱对话框组（list → run 两段式，与 files 页同组件同交互）。
    *  showModal 渲染（top layer）：见 updated() 的打开时机。 */
+  /** 工具箱对话框组（渲染委派 SkillToolboxController，AP-4 拆分）。 */
   private _renderToolboxDialogs() {
-    if (this._toolbox === "list") {
-      return html`<dialog @cancel=${(e: Event) => { e.preventDefault(); this._toolbox = null; }}>
-        <skill-toolbox-dialog
-          .skills=${this._toolboxSkills}
-          .error=${this._toolboxError}
-          @pick=${this._onSkillPick}
-          @cancel=${() => { this._toolbox = null; }}
-        ></skill-toolbox-dialog>
-      </dialog>`;
-    }
-    if (this._toolbox === "run" && this._pickedSkill) {
-      return html`<dialog @cancel=${(e: Event) => { e.preventDefault(); this._toolbox = null; }}>
-        <skill-run-dialog
-          .skill=${this._pickedSkill}
-          .filePaths=${[this.path]}
-          @submit=${this._onSkillRunSubmit}
-          @cancel=${() => { this._toolbox = null; }}
-        ></skill-run-dialog>
-      </dialog>`;
-    }
-    return null;
+    return this._toolbox.renderDialogs();
   }
 
   private _onTocToggle = () => {
-    if (!this._showToc) {
-      // 打开前捕获阅读位置，抽屉据此高亮当前章节（md=行号锚点 / pdf=页号锚点）
-      this._tocCurrentLine = this._activePreviewViewer()?.top() ?? 1;
-    }
-    this._showToc = !this._showToc;
+    this._syncReading();
+    this._toc.toggle();
   };
 
   private _onTocClose = () => {
-    this._showToc = false;
+    this._toc.close();
   };
 
   /** 点击目录节点：关闭抽屉 + 跳转（md：平滑滚到标题行；pdf：line=页号，
-   *  跳到对应页——原生书签目的地，ADR-0031）。 */
+   *  跳到对应页——原生书签目的地，ADR-0031；分派经 controller 注入）。 */
   private _onTocJump = (e: CustomEvent<{ line: number }>) => {
-    this._showToc = false;
-    if (this.language === "pdf") {
-      const pdf = this.shadowRoot?.querySelector("pdf-viewer") as PdfViewer | null;
-      pdf?.scrollToPage(e.detail.line);
-      return;
-    }
-    const viewer = this.shadowRoot!.querySelector("md-viewer") as MdViewer | null;
-    viewer?.jumpToSourceLine(e.detail.line, "smooth");
+    this._syncReading();
+    this._toc.jump(e.detail.line);
   };
 
   private _renderTocDrawer() {
-    if (!this._showToc) return null;
+    if (!this._toc.show) return null;
     return html`<toc-drawer
       .items=${this._tocItems}
-      .currentLine=${this._tocCurrentLine}
+      .currentLine=${this._toc.currentLine}
       @jump=${this._onTocJump}
       @close=${this._onTocClose}
     ></toc-drawer>`;
   }
 
   private _formatSize(size: number): string {
-    if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
-    if (size >= 1024) return `${Math.round(size / 1024)} KB`;
-    return `${size} B`;
+    return formatBytes(size);
   }
 
   /** PST 邮件附件下载区：stored 的可点击下载，未落盘的仅展示名称。 */
@@ -2029,16 +1838,21 @@ export class PreviewPane extends LitElement {
   }
 
   render() {
-    if (this.loading) return html`<div class="empty">加载中...</div>`;
+    // 交互域环境注入（AP-1 拆分）：render 入口统一同步——渲染分支众多
+    // （桌面 header / mobile 菜单 / 高亮条 / 翻译弹框），挂在各渲染方法内
+    // 会漏掉只渲染其中某个分支的场景（mobile 无桌面 header → download
+    // 注入缺失）。
+    this._syncInteractions();
+    if (this.loading) return html`<div class="empty fill">加载中...</div>`;
     // 空态守卫按 path 判定：空文件（新建 笔记.md 等）的 content 是合法空串，
     // 不等于「无预览」；各视图清空预览时都会把 path 重置为 ""。
     // pdf 分支无需豁免——其 content 恒空串但 path 非空，守卫天然放行。
     if (!this.path)
-      return html`<div class="empty">点击左侧结果查看预览</div>`;
+      return html`<div class="empty fill">点击左侧结果查看预览</div>`;
 
     // 移动端用自己的顶部 bar，常规 .header 不再渲染（避免双 bar）
     const renderMobileBar = this.mobile ? this._renderMobileHeader() : null;
-    const showDesktopHeader = !this.mobile && !this.noHeader;
+    const showDesktopHeader = !this.mobile;
 
     /** 可编辑语言：md 格式化预览 + 行号视图全家（代码/txt/未知后缀——
      *  cm-editor 是通用编辑器内核（ADR-0046），保存走同一条 savePreview
@@ -2090,12 +1904,13 @@ export class PreviewPane extends LitElement {
         ` : null}
         ${this._renderHighlightBar()}
         <md-viewer
+          ${this._registerMdViewerRef}
           .content=${this._content}
           .line=${this.line}
           .keyword=${this._effectiveKeyword}
           .pages=${this.pages}
           .docPath=${this.path}
-          .fontScale=${fontScaleFromPct(this._fontScalePct)}
+          .fontScale=${fontScaleFromPct(this._fontScale.pct)}
           ?suppressLocate=${this._suppressLocate}
         ></md-viewer>
         ${this._renderAttachments()}
@@ -2129,6 +1944,7 @@ export class PreviewPane extends LitElement {
         ` : null}
         ${this._renderHighlightBar()}
         <pdf-viewer
+          ${this._registerPdfViewerRef}
           .docPath=${this.path}
           .keyword=${this._effectiveKeyword}
           .locateLine=${this.line}
@@ -2139,10 +1955,10 @@ export class PreviewPane extends LitElement {
         ></pdf-viewer>
         ${this._renderTocDrawer()}
         ${this._renderBookmarkDrawer()}
-        ${this._showTranslate
+        ${this._translate.show
           ? html`<translate-dialog
               .path=${this.path}
-              @translate-close=${() => (this._showTranslate = false)}
+              @translate-close=${() => this._translate.toggle()}
               @translate-done=${this._onTranslateDone}
             ></translate-dialog>`
           : null}
@@ -2202,7 +2018,7 @@ export class PreviewPane extends LitElement {
       <code-viewer
         .content=${this._content}
         .tokens=${this.tokens}
-        .fontScalePct=${this._codeFontScalePct}
+        .fontScalePct=${this._codeFontScale.pct}
         .theme=${this._codeTheme}
         @selection-change=${this._onCodeSelectionChange}
       ></code-viewer>
@@ -2215,7 +2031,7 @@ export class PreviewPane extends LitElement {
    *  显隐由组件 open 属性自理（false 不渲染），不再条件挂载——漏传
    *  open 即「preview 没转圈」回归的根因。 */
   private _renderDownloadOverlay() {
-    return html`<download-overlay ?open=${this._downloading} label="下载中…"></download-overlay>`;
+    return html`<download-overlay ?open=${this._download.downloading} label="下载中…"></download-overlay>`;
   }
 }
 

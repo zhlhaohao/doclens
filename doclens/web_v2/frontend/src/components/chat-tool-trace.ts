@@ -2,6 +2,8 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { TemplateResult } from "lit";
 import type { ToolStep } from "../state/types";
+import { copyText, createCopiedFlash } from "../utils/clipboard";
+import "./spinner";
 
 const TOOL_ICON: Record<string, string> = {
   search: "search",
@@ -250,17 +252,7 @@ export class ChatToolTrace extends LitElement {
       display: none;
     }
     .res .more, .arg .more { color: var(--cortex-primary); cursor: pointer; display: inline-block; margin-top: 3px; }
-    .spin {
-      width: 12px; height: 12px;
-      border: 2px solid var(--cortex-primary);
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin .8s infinite linear;
-      display: inline-block;
-    }
     .running-text { color: var(--cortex-primary); font-size: var(--cortex-fs-xs); }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
     .copy-btn {
       margin-left: auto;
       /* 背景融入 .summary 容器（transparent + 无边框），仅 hover/已复制 给轻反馈 */
@@ -332,6 +324,20 @@ export class ChatToolTrace extends LitElement {
   private _userToggled = false;
   @state() private _fullResultIds = new Set<string>();
   @state() private _copied = false;
+  /** 复制反馈复位（AP-41：句柄化 + 卸载清理，统一走 utils/clipboard）。 */
+  private _copiedFlash = createCopiedFlash(() => { this._copied = false; });
+
+  /** 置 _copied（复位由 _copiedFlash 统一安排，单一定时器入口）。 */
+  private _flashCopied(): void {
+    this._copied = true;
+    this._copiedFlash.flash();
+  }
+
+  disconnectedCallback(): void {
+    this._copiedFlash.dispose();
+    super.disconnectedCallback();
+  }
+
   /** 已上报给宿主的展开态（避免每次 updated 重复派发同一状态） */
   private _reportedExpanded: boolean | null = null;
   /** lineDiff 结果记忆化（tool_use_id + 两文本长度 → 行）：流式期间每次
@@ -397,27 +403,7 @@ export class ChatToolTrace extends LitElement {
   private async _onCopy(e: Event) {
     e.stopPropagation();
     const text = buildFullText(this.steps);
-    try {
-      await navigator.clipboard.writeText(text);
-      this._copied = true;
-      setTimeout(() => { this._copied = false; }, 2000);
-    } catch (err) {
-      // clipboard 不可用（权限/非安全上下文）时降级：使用隐藏 textarea + execCommand
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        ta.style.position = "fixed";
-        ta.style.opacity = "0";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-        this._copied = true;
-        setTimeout(() => { this._copied = false; }, 2000);
-      } catch (err2) {
-        console.warn("copy failed:", err2);
-      }
-    }
+    if (await copyText(text)) this._flashCopied();
   }
 
   private _renderArgs(s: ToolStep): TemplateResult {
@@ -494,7 +480,7 @@ export class ChatToolTrace extends LitElement {
     return html`
       <div class="step ${running ? "running" : ""} ${error ? "error" : ""}">
         <div class="head">
-          ${running ? html`<span class="spin"></span>` : html`<doclens-icon name=${icon}></doclens-icon>`}
+          ${running ? html`<c-spinner class="spin" size="12" variant="reverse"></c-spinner>` : html`<doclens-icon name=${icon}></doclens-icon>`}
           <span class="name" title=${s.name}>${mcpName ?? s.name}</span>
           ${running ? html`<span class="running-text">${mcpName ? `正在调用 ${mcpName.split(" / ")[0]}` : (TOOL_ACTION[s.name] ?? "正在调用")}...</span>` : null}
           <span class="meta">

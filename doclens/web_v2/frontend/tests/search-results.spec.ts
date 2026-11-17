@@ -6,7 +6,10 @@ describe("<search-results> styles", () => {
     // 回归：shadow DOM 不受全局 box-sizing reset 影响；content-box 下
     // .list-pane 的 flex-basis(360px) 不含 padding(24px)+border(1px)，
     // 面板实际宽 385px 溢出宿主，卡片右边框被相邻预览区裁掉。
-    const cssText = SearchResults.styles.cssText;
+    // AP-2 后 styles 是数组（公共块组合）——拼全体 cssText 断言。
+    const cssText = (SearchResults.styles as unknown as { cssText: string }[])
+      .map((s) => s.cssText)
+      .join("\n");
     expect(cssText).toContain("box-sizing: border-box");
   });
 });

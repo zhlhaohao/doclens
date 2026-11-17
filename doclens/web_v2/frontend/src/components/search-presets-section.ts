@@ -1,4 +1,7 @@
+import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
+import { settingsSectionStyles } from "../styles/settings-section-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -69,32 +72,12 @@ const FIELDS: { key: keyof Omit<FormState, "name">; label: string; hint: string;
  * 物化写 global .env），kind=search。切换即时热生效（无副作用）。
  */
 @customElement("search-presets-section")
-export class SearchPresetsSection extends LitElement {
-  static styles = css`
+export class SearchPresetsSection extends ToastFlashMixin(LitElement) {
+  static styles = [settingsSectionStyles, formStyles, css`
     :host {
       display: block;
       font-family: var(--cortex-font);
       color: var(--cortex-text);
-    }
-    .wrap {
-      margin-bottom: var(--cortex-space-6);
-    }
-    .head {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--cortex-space-3);
-      margin-bottom: var(--cortex-space-2);
-    }
-    .head h2 {
-      margin: 0;
-      font-size: var(--cortex-fs-lg);
-      font-weight: 700;
-      letter-spacing: -0.015em;
-    }
-    .head .hint {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-muted);
     }
     .group {
       margin-top: var(--cortex-space-5);
@@ -150,15 +133,6 @@ export class SearchPresetsSection extends LitElement {
       align-items: center;
       gap: var(--cortex-space-2);
     }
-    .badge {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-primary);
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-primary);
-      border-radius: var(--cortex-radius-pill);
-      padding: 1px var(--cortex-space-2);
-    }
     .preset-meta {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
@@ -168,54 +142,6 @@ export class SearchPresetsSection extends LitElement {
       display: flex;
       gap: var(--cortex-space-1);
       flex-shrink: 0;
-    }
-    .icon-btn {
-      padding: 4px 10px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-xs);
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .icon-btn:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-text-muted); }
-    .icon-btn.primary {
-      background: var(--cortex-btn-primary-bg);
-      border-color: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      font-weight: 600;
-    }
-    .icon-btn.primary:hover { filter: brightness(1.05); }
-    .icon-btn.danger:hover {
-      background: var(--cortex-danger);
-      border-color: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-    }
-    .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .empty {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
-      padding: var(--cortex-space-2) 0;
-    }
-
-    .form {
-      margin-top: var(--cortex-space-3);
-      padding: var(--cortex-space-4);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-surface);
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--cortex-space-3);
-    }
-    .form .full { grid-column: 1 / -1; }
-    .field-label {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      margin-bottom: 2px;
     }
     .field-label .field-range {
       font-weight: 400;
@@ -229,47 +155,13 @@ export class SearchPresetsSection extends LitElement {
       margin-top: 2px;
       line-height: 1.4;
     }
-    .input {
-      padding: 8px 10px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-bg);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-      color: var(--cortex-text);
-      width: 100%;
-      box-sizing: border-box;
-      font-variant-numeric: tabular-nums;
-    }
-    .input:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
-    }
-    .form-actions {
-      grid-column: 1 / -1;
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-    }
-    .form-error {
-      grid-column: 1 / -1;
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-danger);
-    }
-    .msg {
-      font-size: var(--cortex-fs-xs);
-      padding: var(--cortex-space-2) var(--cortex-space-3);
-      border-radius: var(--cortex-radius-md);
-      margin-top: var(--cortex-space-3);
-    }
-    .msg.ok { background: var(--cortex-primary-soft); color: var(--cortex-primary); }
-    .msg.err { background: var(--cortex-danger-soft, rgba(220,38,38,0.1)); color: var(--cortex-danger); }
+    /* 数字输入用等宽数位（本地变体，形态走公共块） */
+    .input { font-variant-numeric: tabular-nums; }
 
     @media (max-width: 1023px) {
       .form { grid-template-columns: 1fr; }
     }
-  `;
+  `];;
 
   /** 当前激活搜索预设名（来自 .env CORTEX_ACTIVE_SEARCH_PRESET）。 */
   @property() activeSearch = "";
@@ -279,11 +171,9 @@ export class SearchPresetsSection extends LitElement {
   @state() private _editing: EditingState | null = null;
   @state() private _busy = false;
   @state() private _error: string | null = null;
-  @state() private _toast: string | null = null;
   @state() private _confirmDeleteId: string | null = null;
   @state() private _formError: string | null = null;
 
-  private _toastTimer?: number;
 
   connectedCallback() {
     super.connectedCallback();
@@ -291,7 +181,6 @@ export class SearchPresetsSection extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
     super.disconnectedCallback();
   }
 
@@ -310,18 +199,8 @@ export class SearchPresetsSection extends LitElement {
     return this.activeSearch === p.name;
   }
 
-  private _setFlash(msg: string) {
-    this._toast = msg;
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
-    this._toastTimer = window.setTimeout(() => { this._toast = null; }, 3000);
-  }
-
   private _errMsg(e: unknown): string {
-    if (e instanceof PresetsApiError) {
-      const body = e.body as { detail?: string } | null;
-      return body?.detail ?? `HTTP ${e.status}`;
-    }
-    return (e as Error).message;
+    return apiErrMsg(e, PresetsApiError);
   }
 
   private _openNew() {

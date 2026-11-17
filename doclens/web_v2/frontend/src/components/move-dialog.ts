@@ -1,11 +1,13 @@
 import { LitElement, html, css } from "lit";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, state } from "lit/decorators.js";
 import { store } from "../state/store";
 import "./tree-node";
 
 @customElement("move-dialog")
 export class MoveDialog extends LitElement {
-  static styles = css`
+  static styles = [buttonBaseStyles, buttonRowStyles, formStyles, css`
     :host { display: block; min-width: 360px; }
     h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
     .tree {
@@ -22,26 +24,6 @@ export class MoveDialog extends LitElement {
       margin-bottom: var(--cortex-space-2);
       word-break: break-all;
     }
-    .actions {
-      display: flex; justify-content: flex-end;
-      gap: var(--cortex-space-2);
-    }
-    button {
-      padding: 6px 16px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
-    }
-    button.primary {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border: none;
-      border-radius: var(--cortex-radius-pill);
-    }
-    button.primary:hover:not(:disabled) { opacity: 0.9; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
     label.opt {
       display: flex; gap: var(--cortex-space-2); align-items: center;
       font-size: var(--cortex-fs-sm);
@@ -50,10 +32,8 @@ export class MoveDialog extends LitElement {
     @media (max-width: 1023px) {
       :host { min-width: 0; }
       .tree { max-height: 50vh; }
-      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
-  `;
+  `];;
 
   @state() private _dest = "";
   @state() private _overwrite = false;
@@ -99,6 +79,9 @@ export class MoveDialog extends LitElement {
             .expanded=${expanded.has(d.path)}
             .selected=${this._dest === d.path}
             .childEntries=${treeCache[d.path] || []}
+            .expandedPaths=${expandedPaths}
+            .currentDir=${""}
+            .treeCache=${treeCache}
             @pick-dir=${this._onPickDir}
             @toggle=${this._onToggle}
           ></tree-node>

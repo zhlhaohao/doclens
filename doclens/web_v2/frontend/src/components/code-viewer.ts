@@ -144,7 +144,7 @@ export class CodeViewer extends LitElement {
       margin-top: var(--cortex-space-2);
       padding: 4px 12px;
       border: 1px solid var(--cortex-border);
-      border-radius: 100px;
+      border-radius: var(--cortex-btn-radius);
       background: var(--cortex-surface);
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-xs);

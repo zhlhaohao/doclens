@@ -6,6 +6,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import viewerCssUrl from "pdfjs-dist/web/pdf_viewer.css?url";
 import type { TocItem } from "../utils/toc";
 import { encodePdfScrollAnchor, decodePdfScrollAnchor } from "../utils/scroll-memory";
+import { installPdfCompatPolyfill } from "../utils/pdf-compat";
 import "./icon";
 
 /**
@@ -19,6 +20,11 @@ let viewerModulePromise: Promise<PdfViewerModule> | null = null;
 function loadViewerModule(): Promise<PdfViewerModule> {
   if (!viewerModulePromise) {
     viewerModulePromise = (async () => {
+      // 旧浏览器兼容补丁须在 import pdf.js **之前**安装：pdf.js v6 产物
+      // 顶层引用 Iterator.prototype.join，Firefox 112 等旧版缺 Iterator
+      // 全局 → 模块求值即 ReferenceError → 整个 import 失败 →
+      // 「PDF 渲染引擎加载失败」（详见 utils/pdf-compat.ts）。
+      installPdfCompatPolyfill();
       const pdfjs = await import("pdfjs-dist");
       const workerUrl = (
         await import("pdfjs-dist/build/pdf.worker.min.mjs?url")
@@ -122,6 +128,8 @@ export function lineToPage(line: number, pageStarts: number[] | null): number | 
 }
 
 /** 缩放上下限（PDFViewer 的 scale 是相对 PDF 原始尺寸的倍率）。 */
+import { pinchScaleFrom, ZOOM_STEP_FACTOR, clampScale } from "../utils/pinch-gesture";
+
 const SCALE_MIN = 0.3;
 const SCALE_MAX = 5;
 
@@ -133,7 +141,7 @@ const COMPONENT_CSS = `
 .cortex-pdf-portal {
   position: fixed;
   /* 尺寸/位置由组件按占位 rect 同步（left/top/width/height 内联） */
-  z-index: 1;
+  z-index: var(--cortex-z-base);
   overflow: hidden;
   background: var(--cortex-surface-muted);
 }
@@ -141,7 +149,7 @@ const COMPONENT_CSS = `
    （低于页面组件，允许 app-bar 等覆盖），全屏时提到 101——恰好压在
    preview-pane 覆盖层（z-index 100）之上、toast（1000）之下 */
 body.cortex-preview-fs .cortex-pdf-portal {
-  z-index: 101;
+  z-index: var(--cortex-z-overlay);
 }
 .cortex-pdf-wrap {
   position: relative;
@@ -169,7 +177,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
   position: absolute;
   right: 16px;
   bottom: 72px;
-  z-index: 6;
+  z-index: var(--cortex-z-base);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -217,7 +225,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
   color: var(--cortex-text-muted);
   background: var(--cortex-surface);
   border: 1px solid var(--cortex-border);
-  border-radius: 999px;
+  border-radius: var(--cortex-radius-pill);
   padding: 1px 8px;
   box-shadow: var(--cortex-shadow-md);
   white-space: nowrap;
@@ -465,6 +473,7 @@ export class PdfViewer extends LitElement {
     cancelAnimationFrame(this._portalRaf);
     this._portalRaf = 0;
     this._portalLastRect = "";
+    this._unbindPortalInteractions(); // AP-8：portal 销毁一并摘交互监听
     this._portal?.remove();
     this._portal = null;
     this._fabs = null;
@@ -644,12 +653,16 @@ export class PdfViewer extends LitElement {
     const viewerEl = this._portalViewerEl();
     if (!host || !viewerEl) return; // portal 构建异常（守卫）
 
-    // portal 内滚动容器的交互绑定（每次重建 portal 后重挂）
+    // portal 内滚动容器的交互绑定（挂/卸对称，AP-8）：监听器存句柄，
+    // 重复 _loadDocument（portal 复用时换文档）先摘旧再挂新——原先每次
+    // 换文档在同一 host 上叠加 touch/wheel/scroll 份数（缩放一次触发 N 次）。
+    this._unbindPortalInteractions();
     this._bindPinch(host);
     this._bindWheel(host);
-    host.addEventListener("scroll", () => {
+    this._portalScrollHandler = () => {
       this.dispatchEvent(new CustomEvent("scroll", { bubbles: true, composed: true }));
-    }, { passive: true });
+    };
+    host.addEventListener("scroll", this._portalScrollHandler, { passive: true });
 
     try {
       const pdfjs = await import("pdfjs-dist");
@@ -882,15 +895,36 @@ export class PdfViewer extends LitElement {
     // find 初查（type 省略）会自动滚到**文档首个匹配**——当首个字面匹配
     // 不在 locateLine 换算的定位页（如 arxiv 正文页码 ≠ 物理页码）时，
     // 抢走搜索命中的定位。debounce 后把滚动权夺回定位页（高亮保留）。
+    // 代数守卫（AP-9）：400ms 内换文档时放弃旧定位——避免在新文档上执行
+    // 旧文档的 locateToLine（同函数其余异步路径均有 _loadSeq 守卫）。
     if (this.locateLine != null) {
-      setTimeout(() => this.locateToLine(this.locateLine!), 400);
+      const seq = this._loadSeq;
+      setTimeout(() => {
+        if (seq !== this._loadSeq) return;
+        this.locateToLine(this.locateLine!);
+      }, 400);
     }
   }
 
   // ---------------------------------------------------------------- 缩放交互
 
+  /** portal 交互监听句柄（AP-8：挂/卸对称——换文档先摘旧再挂新）。 */
+  private _portalHandlers: Array<[HTMLElement, string, EventListener]> = [];
+  private _portalScrollHandler: (() => void) | null = null;
+
+  private _unbindPortalInteractions(): void {
+    for (const [el, type, fn] of this._portalHandlers) {
+      el.removeEventListener(type, fn);
+    }
+    this._portalHandlers = [];
+    if (this._portalScrollHandler) {
+      this._portalHost()?.removeEventListener("scroll", this._portalScrollHandler);
+      this._portalScrollHandler = null;
+    }
+  }
+
   private _bindPinch(host: HTMLElement): void {
-    host.addEventListener("touchstart", (e: TouchEvent) => {
+    const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
         const [a, b] = [e.touches[0], e.touches[1]];
         this._pinchBase = {
@@ -898,32 +932,39 @@ export class PdfViewer extends LitElement {
           scale: this._viewer?.currentScale ?? 1,
         };
       }
-    }, { passive: true });
-    host.addEventListener("touchmove", (e: TouchEvent) => {
+    };
+    const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 2 || !this._pinchBase || !this._viewer) return;
       e.preventDefault();
       const [a, b] = [e.touches[0], e.touches[1]];
       const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      const ratio = dist / (this._pinchBase.dist || 1);
       this._fitWidthMode = false;
-      this._viewer.currentScale = Math.min(
-        SCALE_MAX, Math.max(SCALE_MIN, this._pinchBase.scale * ratio),
-      );
-    }, { passive: false });
-    host.addEventListener("touchend", () => {
+      this._viewer.currentScale = pinchScaleFrom(this._pinchBase, dist, SCALE_MIN, SCALE_MAX);
+    };
+    const onTouchEnd = () => {
       this._pinchBase = null;
-    }, { passive: true });
+    };
+    host.addEventListener("touchstart", onTouchStart, { passive: true });
+    host.addEventListener("touchmove", onTouchMove, { passive: false });
+    host.addEventListener("touchend", onTouchEnd, { passive: true });
+    this._portalHandlers.push(
+      [host, "touchstart", onTouchStart as EventListener],
+      [host, "touchmove", onTouchMove as EventListener],
+      [host, "touchend", onTouchEnd as EventListener],
+    );
   }
 
   private _bindWheel(host: HTMLElement): void {
-    host.addEventListener("wheel", (e: WheelEvent) => {
+    const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey || !this._viewer) return;
       e.preventDefault();
       const cur = this._viewer.currentScale ?? 1;
-      const next = e.deltaY < 0 ? cur * 1.1 : cur / 1.1;
+      const next = e.deltaY < 0 ? cur * ZOOM_STEP_FACTOR : cur / ZOOM_STEP_FACTOR;
       this._fitWidthMode = false;
-      this._viewer.currentScale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, next));
-    }, { passive: false });
+      this._viewer.currentScale = clampScale(next, SCALE_MIN, SCALE_MAX);
+    };
+    host.addEventListener("wheel", onWheel, { passive: false });
+    this._portalHandlers.push([host, "wheel", onWheel as EventListener]);
   }
 
   private _bindKeys(): void {

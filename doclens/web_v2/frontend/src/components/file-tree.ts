@@ -24,7 +24,7 @@ export class FileTree extends LitElement {
       position: sticky; top: 0;
       background: var(--cortex-surface);
       border-bottom: 1px solid var(--cortex-border-muted);
-      z-index: 1;
+      z-index: var(--cortex-z-base);
     }
   `;
 
@@ -99,7 +99,9 @@ export class FileTree extends LitElement {
         .expanded=${expanded.has("")}
         .selected=${currentDir === ""}
         .childEntries=${rootEntries}
-        .loading=""
+        .expandedPaths=${expandedPaths}
+        .currentDir=${currentDir}
+        .treeCache=${treeCache}
         @toggle=${this._onToggle}
         @select-dir=${this._onSelectDir}
       ></tree-node>

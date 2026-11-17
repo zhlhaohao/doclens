@@ -1,4 +1,8 @@
+import { ToastFlashMixin } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
+import { settingsSectionStyles } from "../styles/settings-section-styles";
+import { badgeStyles } from "../styles/badge-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, state } from "lit/decorators.js";
 
 import {
@@ -33,14 +37,13 @@ interface InstallDialogState {
  * ≥44px，安装弹窗全屏。
  */
 @customElement("skills-section")
-export class SkillsSection extends LitElement {
-  static styles = css`
+export class SkillsSection extends ToastFlashMixin(LitElement) {
+  static styles = [settingsSectionStyles, badgeStyles, formStyles, css`
     :host {
       display: block;
       font-family: var(--cortex-font);
       color: var(--cortex-text);
     }
-    .wrap { margin-bottom: var(--cortex-space-6); }
     /* 列表底部工具条：刷新靠左、安装靠右（顶替原 risk-note 区域） */
     .toolbar {
       display: flex;
@@ -89,17 +92,6 @@ export class SkillsSection extends LitElement {
       gap: var(--cortex-space-2);
       font-family: var(--cortex-font-mono);
     }
-    .badge {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-pill);
-      padding: 1px var(--cortex-space-2);
-      font-family: var(--cortex-font);
-    }
-    .badge.github { color: var(--cortex-primary); }
     .skill-desc {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
@@ -154,7 +146,7 @@ export class SkillsSection extends LitElement {
     .toggle .track {
       position: absolute;
       inset: 0;
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       background: var(--cortex-surface-muted);
       border: 1px solid var(--cortex-border);
       transition: background 0.15s;
@@ -180,45 +172,15 @@ export class SkillsSection extends LitElement {
       gap: var(--cortex-space-1);
       flex-shrink: 0;
     }
+    /* 本 section 的 icon-btn 为「图标 + 文字」内联排（共享块只给基础形态） */
     .icon-btn {
-      padding: 4px 10px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-xs);
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.15s, border-color 0.15s;
       min-height: 28px;
       display: inline-flex;
       align-items: center;
       gap: 4px;
     }
-    .icon-btn:hover {
-      background: var(--cortex-surface-muted);
-      border-color: var(--cortex-text-muted);
-    }
-    .icon-btn.primary {
-      background: var(--cortex-btn-primary-bg);
-      border-color: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      font-weight: 600;
-    }
-    .icon-btn.primary:hover { filter: brightness(1.05); }
-    .icon-btn.danger:hover {
-      background: var(--cortex-danger);
-      border-color: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-    }
-    .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     /* 纯图标按钮：直径对齐左侧 Toggle（track 高 20px）的视觉尺度 */
     .icon-btn.icon-only { padding: 2px 4px; min-height: 20px; }
-    .empty {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
-      padding: var(--cortex-space-2) 0;
-    }
     /* 更多面板（行内展开，避免移动端下拉定位问题） */
     .more-panel {
       margin-top: var(--cortex-space-2);
@@ -237,14 +199,6 @@ export class SkillsSection extends LitElement {
       color: var(--cortex-text-subtle);
       margin-left: var(--cortex-space-2);
     }
-    .msg {
-      font-size: var(--cortex-fs-xs);
-      padding: var(--cortex-space-2) var(--cortex-space-3);
-      border-radius: var(--cortex-radius-md);
-      margin-top: var(--cortex-space-3);
-    }
-    .msg.ok { background: var(--cortex-primary-soft); color: var(--cortex-primary); }
-    .msg.err { background: var(--cortex-danger-soft, rgba(220,38,38,0.1)); color: var(--cortex-danger); }
     /* 安装弹窗：桌面居中卡片 / 移动端全屏 */
     .overlay {
       position: fixed;
@@ -253,7 +207,7 @@ export class SkillsSection extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: var(--cortex-z-toast);
       padding: var(--cortex-space-4);
       box-sizing: border-box;
     }
@@ -275,28 +229,8 @@ export class SkillsSection extends LitElement {
       font-size: var(--cortex-fs-lg);
       font-weight: 700;
     }
-    .field-label {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      margin-bottom: 2px;
-    }
-    .input {
-      padding: 8px 10px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-bg);
-      font-size: var(--cortex-fs-sm);
-      font-family: var(--cortex-font-mono);
-      color: var(--cortex-text);
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .input:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
-    }
+    /* GitHub 安装地址输入：等宽字体（本地变体，形态走公共块） */
+    .input { font-family: var(--cortex-font-mono); }
     .preview-list {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-md);
@@ -324,10 +258,6 @@ export class SkillsSection extends LitElement {
       display: flex;
       justify-content: flex-end;
       gap: var(--cortex-space-2);
-    }
-    .form-error {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-danger);
     }
 
     /* ===== 移动端：卡片堆叠 + 大命中区 + 全屏弹窗 ===== */
@@ -365,18 +295,16 @@ export class SkillsSection extends LitElement {
         flex: 1;
       }
     }
-  `;
+  `];;
 
   @state() private _skills: SkillManageItem[] = [];
   @state() private _loading = true;
   @state() private _busy = false;
   @state() private _error: string | null = null;
-  @state() private _toast: string | null = null;
   @state() private _expandedName: string | null = null;
   @state() private _confirmDeleteName: string | null = null;
   @state() private _install: InstallDialogState | null = null;
 
-  private _toastTimer?: number;
 
   connectedCallback() {
     super.connectedCallback();
@@ -384,7 +312,6 @@ export class SkillsSection extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
     super.disconnectedCallback();
   }
 
@@ -397,12 +324,6 @@ export class SkillsSection extends LitElement {
     } finally {
       this._loading = false;
     }
-  }
-
-  private _setFlash(msg: string) {
-    this._toast = msg;
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
-    this._toastTimer = window.setTimeout(() => { this._toast = null; }, 3000);
   }
 
   /** 就地更新列表中的单条（不可变替换）。 */
@@ -553,7 +474,7 @@ export class SkillsSection extends LitElement {
         <div class="skill-row deleted">
           <span class="skill-icon"><doclens-icon name=${s.icon}></doclens-icon></span>
           <div class="skill-main">
-            <div class="skill-name">${s.name}<span class="badge">已删除 · 内置</span></div>
+            <div class="skill-name">${s.name}<span class="badge neutral">已删除 · 内置</span></div>
             ${s.description ? html`<div class="skill-desc">${s.description}</div>` : nothing}
           </div>
           <div class="row-actions">
@@ -573,8 +494,8 @@ export class SkillsSection extends LitElement {
           <div class="skill-name">
             ${s.name}
             ${s.builtin
-              ? html`<span class="badge">内置</span>`
-              : html`<span class="badge github">GitHub</span>`}
+              ? html`<span class="badge neutral">内置</span>`
+              : html`<span class="badge primary">GitHub</span>`}
           </div>
           ${s.description ? html`<div class="skill-desc">${s.description}</div>` : nothing}
           ${s.source_url ? html`<div class="skill-source" title=${s.source_url}>${s.source_url}</div>` : nothing}

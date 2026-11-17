@@ -1,4 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
+import { dialogHeadStyles } from "../styles/dialog-frame";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -7,7 +9,9 @@ import {
   type SessionBackupInfo,
   type CorruptFileInfo,
 } from "../api/sessions";
+import { formatBytes } from "../utils/format";
 import "./icon";
+import "./c-dialog";
 
 /**
  * 会话备份对话框（控制面板「会话备份」行入口，ADR-0047）：列出 sessions.db
@@ -19,65 +23,7 @@ import "./icon";
  */
 @customElement("backup-dialog")
 export class BackupDialog extends LitElement {
-  static styles = css`
-    :host {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      pointer-events: none;
-    }
-    :host([open]) {
-      background: rgba(0, 0, 0, 0.3);
-      pointer-events: auto;
-    }
-    .scrim {
-      position: absolute;
-      inset: 0;
-    }
-    dialog {
-      position: relative;
-      pointer-events: auto;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      width: min(520px, 90vw);
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-    }
-    .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--cortex-space-4);
-      padding: var(--cortex-space-4) var(--cortex-space-6);
-      border-bottom: 1px solid var(--cortex-border-muted);
-    }
-    .head h3 {
-      margin: 0;
-      font-size: var(--cortex-fs-md);
-      font-weight: 600;
-      color: var(--cortex-text);
-    }
-    .close-btn {
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      font-size: var(--cortex-fs-lg);
-      line-height: 1;
-      color: var(--cortex-text-muted);
-      padding: 4px 8px;
-      border-radius: var(--cortex-radius-sm);
-    }
-    .close-btn:hover {
-      background: var(--cortex-surface-muted);
-      color: var(--cortex-text);
-    }
+  static styles = [dialogHeadStyles, emptyStateStyles, css`
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -147,7 +93,7 @@ export class BackupDialog extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 10;
+      z-index: var(--cortex-z-raised);
     }
     .confirm-card {
       background: var(--cortex-surface);
@@ -190,18 +136,7 @@ export class BackupDialog extends LitElement {
       opacity: 0.5;
       cursor: not-allowed;
     }
-    .empty {
-      font-size: var(--cortex-fs-sm);
-      color: var(--cortex-text-muted);
-      text-align: center;
-      padding: var(--cortex-space-6) 0;
-    }
-    @media (max-width: 1023px) {
-      dialog {
-        width: calc(100vw - 16px);
-      }
-    }
-  `;
+  `];
 
   @property({ type: Boolean, reflect: true })
   open = false;
@@ -272,12 +207,6 @@ export class BackupDialog extends LitElement {
     }
   }
 
-  private _fmtSize(bytes: number): string {
-    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${bytes} B`;
-  }
-
   private _fmtTime(iso: string): string {
     try {
       const d = new Date(iso);
@@ -290,8 +219,7 @@ export class BackupDialog extends LitElement {
   render() {
     if (!this.open) return nothing;
     return html`
-      <div class="scrim" @click=${this._close}></div>
-      <dialog open>
+      <c-dialog ?open=${true} @cancel=${this._close}>
         <div class="head">
           <h3>会话备份</h3>
           <button class="close-btn" type="button" @click=${this._close} aria-label="关闭">✕</button>
@@ -314,7 +242,7 @@ export class BackupDialog extends LitElement {
                         <span class="when">
                           <span class="ts">${this._fmtTime(b.created_at)}</span>
                           <span class="meta">
-                            ${this._fmtSize(b.size_bytes)} · ${b.session_count ?? "?"} 个会话
+                            ${formatBytes(b.size_bytes)} · ${b.session_count ?? "?"} 个会话
                           </span>
                         </span>
                         <button
@@ -338,7 +266,7 @@ export class BackupDialog extends LitElement {
                   ${this._corrupt.map(
                     (c) => html`
                       <div class="muted">
-                        ${c.file} · ${this._fmtSize(c.size_bytes)} · ${this._fmtTime(c.created_at)}
+                        ${c.file} · ${formatBytes(c.size_bytes)} · ${this._fmtTime(c.created_at)}
                       </div>
                     `,
                   )}
@@ -375,7 +303,7 @@ export class BackupDialog extends LitElement {
               </div>
             `
           : nothing}
-      </dialog>
+      </c-dialog>
     `;
   }
 }

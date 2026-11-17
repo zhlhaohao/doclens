@@ -2,10 +2,12 @@ import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { FileEntry } from "../api/files";
 import { getFileTypeBadge } from "../utils/file-type";
+import { formatBytes } from "../utils/format";
+import { formStyles } from "../styles/form-styles";
 
 @customElement("file-row")
 export class FileRow extends LitElement {
-  static styles = css`
+  static styles = [formStyles, css`
     :host { display: block; }
     /* 移动端：host 跟随 .row 的 max-content 宽（file-list :host overflow
        hidden 会裁 display:block 的 host），行底线/行点击区贯穿滑出列 */
@@ -51,14 +53,6 @@ export class FileRow extends LitElement {
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
     }
-    .badge {
-      display: inline-block;
-      padding: 1px 6px;
-      font-size: var(--cortex-fs-xs);
-      border-radius: var(--cortex-radius-sm);
-      background: var(--cortex-primary-soft);
-      color: var(--cortex-primary);
-    }
     .type-badge {
       display: inline-flex;
       align-items: center;
@@ -91,22 +85,14 @@ export class FileRow extends LitElement {
       }
       .size { font-size: var(--cortex-fs-2xs, var(--cortex-fs-xs)); }
     }
-  `;
+  `];;
 
   @property({ type: Object }) entry!: FileEntry;
   @property({ type: Boolean }) selected = false;
   /** 当前预览/焦点的文件行 —— 由行体单击触发，区别于 checkbox 的多选 */
   @property({ type: Boolean }) active = false;
-  /** 外部浏览态（ADR-0049）：隐藏 checkbox 与索引徽标（外部恒只读未索引）。 */
-  @property({ type: Boolean }) hideCheckbox = false;
   /** 移动端：时间列用短格式（MM-DD HH:mm），窄列不折行（file-list 传入）。 */
   @property({ type: Boolean }) mobile = false;
-
-  private _fmtSize(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  }
 
   private _fmtTime(s: string): string {
     if (!s) return "";
@@ -154,13 +140,12 @@ export class FileRow extends LitElement {
         class="row ${this.active ? "active" : ""}"
         @click=${this._onRowClick}>
         <span class="checkbox">
-          ${this.hideCheckbox
-            ? null
-            : html`<input
-                type="checkbox"
-                .checked=${this.selected}
-                @click=${this._onCheckboxClick}
-              />`}
+          <input
+            type="checkbox"
+            aria-label=${`选中 ${this.entry.name}`}
+            .checked=${this.selected}
+            @click=${this._onCheckboxClick}
+          />
         </span>
         <span class="cell-icon">
           ${this.entry.is_dir
@@ -180,7 +165,7 @@ export class FileRow extends LitElement {
                 ? "已登记（文件名可搜索；内容不参与全文检索）"
                 : "未索引（不参与搜索）"}
         >${this.entry.name}</span>
-        <span class="size">${this.entry.is_dir ? "" : this._fmtSize(this.entry.size)}</span>
+        <span class="size">${this.entry.is_dir ? "" : formatBytes(this.entry.size)}</span>
         <span class="time">${this._fmtTime(this.entry.modified_at)}</span>
       </div>
     `;

@@ -1,16 +1,17 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, state } from "lit/decorators.js";
 import { unsafeSVG } from "lit/directives/unsafe-svg.js";
 
 import appLogoSvg from "../assets/app_icon.svg?raw";
 
 import "./toast-stack";
+import { pushLocalToast } from "../utils/toast";
 import "./control-panel-dialog";
 import "./backup-dialog";
 import "./watch-changes-dialog";
 import "./about-dialog";
 import { store, actions } from "../state/store";
-import type { ViewId, SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
+import type { SettingsScope, GitSyncStatus, WatcherStatus } from "../state/types";
 import { logout } from "../api/auth";
 import { closeWebview, isWebviewContainer } from "../utils/jsbridge";
 import { router } from "../router/router";
@@ -39,7 +40,7 @@ export class AppBar extends LitElement {
       border-bottom: 1px solid var(--cortex-border);
       flex-shrink: 0;
       position: relative;
-      z-index: 50;
+      z-index: var(--cortex-z-raised);
       font-family: var(--cortex-font);
     }
     .brand {
@@ -149,7 +150,7 @@ export class AppBar extends LitElement {
       font-family: inherit;
       color: var(--cortex-text-muted);
       border: 1px solid var(--cortex-border);
-      border-radius: 999px;
+      border-radius: var(--cortex-btn-radius);
       background: var(--cortex-surface-muted);
       white-space: nowrap;
       cursor: pointer;
@@ -238,7 +239,7 @@ export class AppBar extends LitElement {
       box-shadow: var(--cortex-shadow-md);
       padding: var(--cortex-space-2);
       display: none;
-      z-index: 60;
+      z-index: var(--cortex-z-raised);
     }
     .user-menu.open { display: block; }
     .menu-item {
@@ -276,8 +277,6 @@ export class AppBar extends LitElement {
       margin-top: 2px;
     }
   `;
-
-  @property() activeView: ViewId = "search";
 
   @state() private _menuOpen = false;
   @state() private _showSaveAndRevert = false;
@@ -442,9 +441,7 @@ export class AppBar extends LitElement {
   }
 
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number): void {
-    const stack = this.shadowRoot?.querySelector("toast-stack") as
-      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number) => void }) | null;
-    stack?.pushToast?.(message, level, duration);
+    pushLocalToast(this, message, level, duration);
   }
 
   connectedCallback() {

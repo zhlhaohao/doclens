@@ -13,22 +13,12 @@ export const FONT_SCALE_DEFAULT_PCT = 100;
 
 /** 读取持久化的百分比档位；无记录或值非法时返回默认 100。 */
 export function readFontScalePct(): number {
-  const raw = localStorage.getItem(KEY);
-  // Number("") = 0 会被 isFinite 放行 → 空串显式视为无记录
-  if (raw === null || raw.trim() === "") return FONT_SCALE_DEFAULT_PCT;
-  const pct = Number(raw);
-  if (!Number.isFinite(pct)) return FONT_SCALE_DEFAULT_PCT;
-  return clampFontScalePct(pct);
+  return readPctFromStorage(KEY, clampFontScalePct, FONT_SCALE_DEFAULT_PCT);
 }
 
 /** 写入百分比档位（越界收敛到边界；非有限数静默忽略）。 */
 export function writeFontScalePct(pct: number): void {
-  if (!Number.isFinite(pct)) return;
-  try {
-    localStorage.setItem(KEY, String(clampFontScalePct(pct)));
-  } catch {
-    // 配额满等写入失败：静默降级，不影响预览
-  }
+  writePctToStorage(KEY, pct, clampFontScalePct);
 }
 
 /** 百分比收敛到合法范围。档位只由 stepper ±10 产出（恒为整 10 倍数），
@@ -40,4 +30,42 @@ export function clampFontScalePct(pct: number): number {
 /** 百分比 → CSS 乘数（如 130 → 1.3）。 */
 export function fontScaleFromPct(pct: number): number {
   return clampFontScalePct(pct) / 100;
+}
+
+// ------------------------------------------------------------ 共用存储件
+// （AP-5：font-scale 与 code-font-scale 的读/写原为两份复制且已漂移——
+//  异常处理不对称 + code 侧误用 md 版 clamp。收敛为参数化公共件。）
+
+/** 读持久化百分比档位：禁 localStorage 环境 / 无记录 / 非法值 → defaultPct；
+ *  合法值经 clamp 到各自域的 [min,max]。 */
+export function readPctFromStorage(
+  key: string,
+  clamp: (pct: number) => number,
+  defaultPct: number,
+): number {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(key);
+  } catch {
+    return defaultPct; // 禁 cookie/隐私模式：视为无记录
+  }
+  // Number("") = 0 会被 isFinite 放行 → 空串显式视为无记录
+  if (raw === null || raw.trim() === "") return defaultPct;
+  const pct = Number(raw);
+  if (!Number.isFinite(pct)) return defaultPct;
+  return clamp(pct);
+}
+
+/** 写百分比档位（clamp 后落盘；非有限数/配额满静默降级）。 */
+export function writePctToStorage(
+  key: string,
+  pct: number,
+  clamp: (pct: number) => number,
+): void {
+  if (!Number.isFinite(pct)) return;
+  try {
+    localStorage.setItem(key, String(clamp(pct)));
+  } catch {
+    // 配额满等写入失败：静默降级，不影响预览
+  }
 }

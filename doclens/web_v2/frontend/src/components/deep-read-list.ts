@@ -9,6 +9,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { fetchBookSkills, type BookSkillItem } from "../api/skills";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import "../components/icon";
 
 function formatDate(sec: number | null): string {
@@ -22,7 +23,7 @@ function formatDate(sec: number | null): string {
 
 @customElement("deep-read-list")
 export class DeepReadList extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -150,18 +151,6 @@ export class DeepReadList extends LitElement {
       color: var(--cortex-danger);
       background: color-mix(in srgb, var(--cortex-danger) 10%, transparent);
     }
-    .empty {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: var(--cortex-space-2);
-      padding: var(--cortex-space-8);
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-base);
-      text-align: center;
-    }
     .error {
       flex: 1;
       display: flex;
@@ -172,7 +161,7 @@ export class DeepReadList extends LitElement {
       font-size: var(--cortex-fs-base);
       text-align: center;
     }
-  `;
+  `];;
 
   @state() private _books: BookSkillItem[] | null = null;
   @state() private _error: string | null = null;
@@ -241,9 +230,9 @@ export class DeepReadList extends LitElement {
       ${this._error
         ? html`<div class="error">${this._error}</div>`
         : this._loading && this._books === null
-          ? html`<div class="empty">获取书目…</div>`
+          ? html`<div class="empty fill">获取书目…</div>`
           : this._books !== null && this._books.length === 0
-            ? html`<div class="empty">
+            ? html`<div class="empty fill">
                 还没有深读书目<br>
                 <span style="font-size: var(--cortex-fs-sm)">在对话中发送 /deep-read 生成第一本</span>
               </div>`

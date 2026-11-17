@@ -2,6 +2,8 @@ import { LitElement, html, css } from "lit";
 import { customElement } from "lit/decorators.js";
 import { store, actions } from "../state/store";
 import type { IndexedDocument } from "../state/types";
+import { formatBytes } from "../utils/format";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 
 const MAX_RESULTS = 100;
 
@@ -26,9 +28,7 @@ function dirOf(path: string): string {
 }
 
 function formatSize(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return formatBytes(n);
 }
 
 function formatRelative(s: string): string {
@@ -47,7 +47,7 @@ function formatRelative(s: string): string {
 
 @customElement("file-search-results")
 export class FileSearchResults extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -138,17 +138,6 @@ export class FileSearchResults extends LitElement {
       padding: 0 2px;
       border-radius: 2px;
     }
-    .empty {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: var(--cortex-space-8) var(--cortex-space-4);
-      color: var(--cortex-text-subtle);
-      text-align: center;
-      gap: var(--cortex-space-2);
-    }
     .empty .icon-big { font-size: 32px; opacity: 0.5; }
     .overflow-hint {
       padding: var(--cortex-space-2) var(--cortex-space-3);
@@ -159,7 +148,7 @@ export class FileSearchResults extends LitElement {
       border-top: 1px solid var(--cortex-border-muted);
       flex-shrink: 0;
     }
-  `;
+  `];;
 
   private get _state() {
     return store.getState().files.filenameSearch;
@@ -235,7 +224,7 @@ export class FileSearchResults extends LitElement {
     const { query, results, selectedPath, totalMatches } = this._state;
     if (results.length === 0) {
       return html`
-        <div class="empty">
+        <div class="empty fill">
           <doclens-icon class="icon-big" name="search"></doclens-icon>
           <div>未匹配到任何文件名包含 "<b>${query}</b>" 的文档</div>
         </div>

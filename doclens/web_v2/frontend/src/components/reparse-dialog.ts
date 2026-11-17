@@ -1,6 +1,8 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { getVisionPrompt, reparseImage, saveManualNote, ReparseError } from "../api/vision";
+import { formStyles } from "../styles/form-styles";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 
 type Mode = "ai" | "manual";
 
@@ -17,7 +19,7 @@ type Mode = "ai" | "manual";
  */
 @customElement("reparse-dialog")
 export class ReparseDialog extends LitElement {
-  static styles = css`
+  static styles = [buttonBaseStyles, buttonRowStyles, formStyles, css`
     :host { display: block; min-width: 360px; max-width: 560px; }
     .mode-tabs { display: flex; gap: var(--cortex-space-2); margin-bottom: var(--cortex-space-3); }
     .mode-tabs .tab {
@@ -42,20 +44,12 @@ export class ReparseDialog extends LitElement {
       display: block; font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted); margin-bottom: 4px;
     }
+    /* 重解析输入区：高 + 紧凑字号（本地尺寸覆盖，形态走公共块） */
     textarea {
-      width: 100%; min-height: 180px; padding: 8px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
+      width: 100%;
+      min-height: 180px;
+      padding: 8px;
       font-size: var(--cortex-fs-sm);
-      box-sizing: border-box;
-      font-family: inherit;
-      resize: vertical;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    textarea:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
     }
     textarea.invalid { border-color: var(--cortex-danger); }
     .err { color: var(--cortex-danger); font-size: var(--cortex-fs-sm); margin-top: 4px; }
@@ -65,28 +59,14 @@ export class ReparseDialog extends LitElement {
       margin-top: var(--cortex-space-4);
     }
     .actions .spacer { flex: 1; }
-    button {
-      padding: 6px 16px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
-    }
-    button.primary {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border: none;
-    }
-    button.primary:hover:not(:disabled) { opacity: 0.9; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    /* 按钮形态走公共块（AP-4）——此处仅保留本对话框的按钮排特例 */
     @media (max-width: 1023px) {
       :host { min-width: 0; }
       .actions { flex-wrap: wrap; gap: var(--cortex-space-3); }
       .actions .spacer { flex-basis: 100%; }
       .actions button { flex: 1; padding: 12px 16px; min-height: 44px; }
     }
-  `;
+  `];;
 
   /** 要重新解析的图像相对路径（由父组件传入）。 */
   @property() path = "";

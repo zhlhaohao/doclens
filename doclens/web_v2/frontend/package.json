@@ -31,7 +31,6 @@
     "@codemirror/state": "^6.7.6",
     "@codemirror/view": "^6.43.15",
     "@lezer/highlight": "^1.2.5",
-    "@shoelace-style/shoelace": "^2.15.0",
     "dompurify": "^3.4.13",
     "katex": "^0.17.0",
     "lit": "^3.2.0",

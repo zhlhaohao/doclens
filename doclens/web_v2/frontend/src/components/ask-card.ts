@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import { splitRecommended } from "../api/ask";
 import type { AskAnswer, AskQuestionPayload } from "../api/ask";
+import { badgeStyles } from "../styles/badge-styles";
 
 /** 门禁确认卡本地超时（毫秒）：比后端 GUARD_TIMEOUT_SECONDS（120s）多 2s
  *  缓冲——后端先超时（fail-closed 拒绝、流恢复），前端到点把交互卡转为
@@ -26,7 +27,7 @@ const GUARD_CARD_DISMISS_MS = 122_000;
  */
 @customElement("ask-card")
 export class AskCard extends LitElement {
-  static styles = css`
+  static styles = [badgeStyles, css`
     :host {
       display: block;
       width: 100%;
@@ -79,7 +80,7 @@ export class AskCard extends LitElement {
       font-weight: 600;
       color: var(--cortex-text-subtle);
       border: 1px solid var(--cortex-border);
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       padding: 1px 8px;
       margin-right: 6px;
       vertical-align: 1px;
@@ -111,16 +112,6 @@ export class AskCard extends LitElement {
       margin-top: 2px;
       line-height: 1.45;
     }
-    .badge {
-      display: inline-block;
-      font-size: var(--cortex-fs-xs, 11px);
-      color: var(--cortex-primary);
-      border: 1px solid currentColor;
-      border-radius: 999px;
-      padding: 0 6px;
-      margin-left: 6px;
-      vertical-align: 1px;
-    }
     .other-row {
       display: flex;
       align-items: center;
@@ -151,7 +142,7 @@ export class AskCard extends LitElement {
     }
     button.primary {
       padding: 6px 18px;
-      border-radius: 999px;
+      border-radius: var(--cortex-btn-radius);
       border: none;
       background: var(--cortex-btn-primary-bg);
       color: var(--cortex-btn-primary-text);
@@ -195,7 +186,7 @@ export class AskCard extends LitElement {
       color: var(--cortex-danger);
       font-size: var(--cortex-fs-sm, 13px);
     }
-  `;
+  `];;
 
   /** 悬置问题载荷（requestId + questions） */
   @property({ attribute: false }) ask: {
@@ -225,6 +216,7 @@ export class AskCard extends LitElement {
         this._others = this.ask.questions.map(() => null);
         this._status = "pending";
         this._answers = [];
+        this._doneDispatched = false; // 新问题：重置单次派发守卫（AP-10）
         this._armGuardTimeout();
       }
     }
@@ -326,12 +318,19 @@ export class AskCard extends LitElement {
       this._answers = answers;
     } finally {
       this._submitting = false;
-      // 事件派发放到状态落定之后，且只派一次（避免 catch/finally 重入）
+      // 事件派发放到状态落定之后，且只派一次（避免 catch/finally 重入）。
+      // 竞态守卫（AP-10）：超时回调若已派发过 ask-done（_status 已离开
+      // pending），在途 respond 的落定不再二次派发、不覆盖已展示的超时摘要。
+      if (this._doneDispatched) return;
       this._dispatchDone(toast);
     }
   }
 
+  /** ask-done 是否已派发（超时与在途提交的先到者独占，AP-10 单次派发守卫）。 */
+  private _doneDispatched = false;
+
   private _dispatchDone(toast: string | null = null) {
+    this._doneDispatched = true;
     this.dispatchEvent(
       new CustomEvent("ask-done", {
         detail: { requestId: this.ask?.requestId ?? "", toast },
@@ -362,7 +361,7 @@ export class AskCard extends LitElement {
                 @change=${() => this._toggle(i, opt.label, q.multiSelect)}
               />
               <span class="opt-body">
-                <span class="opt-label">${label}${recommended ? html`<span class="badge">推荐</span>` : nothing}</span>
+                <span class="opt-label">${label}${recommended ? html`<span class="badge primary">推荐</span>` : nothing}</span>
                 <div class="opt-desc">${opt.description}</div>
               </span>
             </label>

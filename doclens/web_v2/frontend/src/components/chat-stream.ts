@@ -4,12 +4,14 @@ import type { TimelineNode } from "../views/chat-timeline";
 import { ScrollJumpController, scrollJumpFabStyles } from "../utils/scroll-jump";
 import { traceStepsOf } from "./chat-tool-trace";
 import "./chat-message";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 
 /** 展开的折叠条集合（boundarySeq 集合；默认全部折叠，点击展开/收起）。 */
 @customElement("chat-stream")
 export class ChatStream extends LitElement {
   static styles = [
     scrollJumpFabStyles,
+    emptyStateStyles,
     css`
       :host {
         display: flex;
@@ -25,12 +27,9 @@ export class ChatStream extends LitElement {
       :host::-webkit-scrollbar {
         display: none;
       }
-      .empty {
-        color: var(--cortex-text-subtle);
-        font-size: var(--cortex-fs-base);
-        text-align: center;
-        align-self: center;
-        margin: auto;
+      /* 空态在流容器内垂直水平居中（复用公共块 .empty.fill 变体） */
+      .empty.fill {
+        padding: 0;
       }
       /* 回退折叠条（ADR-0027）：纯查看的已回退段。 */
       .rewind-divider {
@@ -385,7 +384,7 @@ export class ChatStream extends LitElement {
 
   render() {
     if (this.nodes.length === 0) {
-      return html`<div class="empty">向助手提出你的第一个问题</div>`;
+      return html`<div class="empty fill">向助手提出你的第一个问题</div>`;
     }
     // 三钮组放在内容**开头**：sticky top:50% 需要静态位置在内容顶部才能
     // 被钳制到视口中央（放末尾只能配 sticky bottom 钉住下缘）

@@ -9,6 +9,7 @@
  */
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 
 interface DiffRow {
   type: "add" | "del" | "ctx" | "hunk" | "skip";
@@ -74,7 +75,7 @@ export function parseUnifiedDiff(diff: string): DiffRow[] {
 
 @customElement("diff-viewer")
 export class DiffViewer extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -131,7 +132,7 @@ export class DiffViewer extends LitElement {
       font-size: var(--cortex-fs-xs);
       position: sticky;
       top: 0;
-      z-index: 1;
+      z-index: var(--cortex-z-base);
     }
     tr.skip td {
       color: var(--cortex-text-subtle);
@@ -141,28 +142,27 @@ export class DiffViewer extends LitElement {
       background: var(--cortex-bg);
       user-select: none;
     }
-    .empty {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--cortex-text-subtle);
-      font-family: var(--cortex-font);
-      font-size: var(--cortex-fs-base);
-      padding: var(--cortex-space-8);
-    }
-  `;
+  `];;
 
   /** unified diff 文本（空 = 无差异/占位）。 */
   @property({ attribute: false }) diff = "";
 
+  /** 解析记忆化（AP-37）：diff 未变时复用 parseUnifiedDiff 结果——原先每次
+   *  render（含无关 @state 更新）都全量逐行正则重解析。 */
+  private _rowsCache: ReturnType<typeof parseUnifiedDiff> | null = null;
+  private _rowsCacheFor = "";
+
   render() {
     if (!this.diff) {
-      return html`<div class="empty">无差异内容</div>`;
+      return html`<div class="empty fill">无差异内容</div>`;
     }
-    const rows = parseUnifiedDiff(this.diff);
+    if (this._rowsCache === null || this._rowsCacheFor !== this.diff) {
+      this._rowsCacheFor = this.diff;
+      this._rowsCache = parseUnifiedDiff(this.diff);
+    }
+    const rows = this._rowsCache;
     if (rows.length === 0) {
-      return html`<div class="empty">无差异内容</div>`;
+      return html`<div class="empty fill">无差异内容</div>`;
     }
     return html`
       <div class="diff-body">

@@ -1,4 +1,8 @@
+import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
 import { LitElement, html, css, nothing } from "lit";
+import { settingsSectionStyles } from "../styles/settings-section-styles";
+import { badgeStyles } from "../styles/badge-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, state } from "lit/decorators.js";
 
 import {
@@ -95,15 +99,12 @@ function formatLines(obj: Record<string, string>): string {
  * 连接由后端异步 reconcile 建立，状态 5s 轮询同步。
  */
 @customElement("mcp-servers-section")
-export class McpServersSection extends LitElement {
-  static styles = css`
+export class McpServersSection extends ToastFlashMixin(LitElement) {
+  static styles = [settingsSectionStyles, badgeStyles, formStyles, css`
     :host {
       display: block;
       font-family: var(--cortex-font);
       color: var(--cortex-text);
-    }
-    .wrap {
-      margin-bottom: var(--cortex-space-6);
     }
     /* 列表底部工具条：添加按钮靠右（顶替原 head/risk-note 区域） */
     .toolbar {
@@ -141,15 +142,6 @@ export class McpServersSection extends LitElement {
       display: flex;
       align-items: center;
       gap: var(--cortex-space-2);
-    }
-    .badge {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-pill);
-      padding: 1px var(--cortex-space-2);
     }
     .server-meta {
       font-size: var(--cortex-fs-xs);
@@ -198,34 +190,6 @@ export class McpServersSection extends LitElement {
       gap: var(--cortex-space-1);
       flex-shrink: 0;
     }
-    .icon-btn {
-      padding: 4px 10px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-xs);
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .icon-btn:hover {
-      background: var(--cortex-surface-muted);
-      border-color: var(--cortex-text-muted);
-    }
-    .icon-btn.primary {
-      background: var(--cortex-btn-primary-bg);
-      border-color: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      font-weight: 600;
-    }
-    .icon-btn.primary:hover { filter: brightness(1.05); }
-    .icon-btn.danger:hover {
-      background: var(--cortex-danger);
-      border-color: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-    }
-    .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     /* 启用开关（复用 .switch 视觉语言的最小实现） */
     .toggle {
       position: relative;
@@ -244,7 +208,7 @@ export class McpServersSection extends LitElement {
     .toggle .track {
       position: absolute;
       inset: 0;
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       background: var(--cortex-surface-muted);
       border: 1px solid var(--cortex-border);
       transition: background 0.15s;
@@ -264,11 +228,6 @@ export class McpServersSection extends LitElement {
     }
     .toggle input:checked ~ .track { background: var(--cortex-primary); border-color: var(--cortex-primary); }
     .toggle input:checked ~ .thumb { left: 16px; }
-    .empty {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
-      padding: var(--cortex-space-2) 0;
-    }
     /* 工具清单展开区 */
     .tools-panel {
       margin-top: var(--cortex-space-2);
@@ -293,85 +252,26 @@ export class McpServersSection extends LitElement {
     .tools-panel .tool-desc {
       color: var(--cortex-text-muted);
     }
-    /* 内联编辑表单 */
-    .form {
-      margin-top: var(--cortex-space-3);
-      padding: var(--cortex-space-4);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-surface);
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--cortex-space-3);
-    }
-    .form .full { grid-column: 1 / -1; }
-    .field-label {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      margin-bottom: 2px;
-    }
-    .input, .select, .textarea {
-      padding: 8px 10px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-bg);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-      color: var(--cortex-text);
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .textarea {
-      min-height: 64px;
-      resize: vertical;
-      font-family: var(--cortex-font-mono);
-    }
-    .input.mono { font-family: var(--cortex-font-mono); }
-    .input:focus, .select:focus, .textarea:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
-    }
-    .form-actions {
-      grid-column: 1 / -1;
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-    }
-    .form-error {
-      grid-column: 1 / -1;
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-danger);
-    }
-    .msg {
-      font-size: var(--cortex-fs-xs);
-      padding: var(--cortex-space-2) var(--cortex-space-3);
-      border-radius: var(--cortex-radius-md);
-      margin-top: var(--cortex-space-3);
-    }
-    .msg.ok { background: var(--cortex-primary-soft); color: var(--cortex-primary); }
-    .msg.err { background: var(--cortex-danger-soft, rgba(220,38,38,0.1)); color: var(--cortex-danger); }
+    /* env 值域用等宽字体（本地变体，形态走公共块） */
+    .textarea { font-family: var(--cortex-font-mono); }
     @media (max-width: 1023px) {
       /* 移动端 scroll-area 无顶 padding，补齐与 .section 一致的顶部间距，避免标题行顶到 tab 条分隔线 */
       .wrap { margin-top: var(--cortex-space-4); }
       .form { grid-template-columns: 1fr; }
       .status .err-text { max-width: 120px; }
     }
-  `;
+  `];
 
   @state() private _servers: McpServer[] = [];
   @state() private _loading = true;
   @state() private _editing: EditingState | null = null;
   @state() private _busy = false;
   @state() private _error: string | null = null;
-  @state() private _toast: string | null = null;
   @state() private _confirmDeleteId: string | null = null;
   @state() private _formError: string | null = null;
   @state() private _expandedToolsId: string | null = null;
   @state() private _toolsCache: Record<string, McpToolInfo[]> = {};
 
-  private _toastTimer?: number;
   private _pollTimer?: number;
 
   connectedCallback() {
@@ -382,7 +282,6 @@ export class McpServersSection extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
     if (this._pollTimer !== undefined) window.clearInterval(this._pollTimer);
     super.disconnectedCallback();
   }
@@ -412,18 +311,8 @@ export class McpServersSection extends LitElement {
     }
   }
 
-  private _setFlash(msg: string) {
-    this._toast = msg;
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
-    this._toastTimer = window.setTimeout(() => { this._toast = null; }, 3000);
-  }
-
   private _errMsg(e: unknown): string {
-    if (e instanceof McpApiError) {
-      const body = e.body as { detail?: string } | null;
-      return body?.detail ?? `HTTP ${e.status}`;
-    }
-    return (e as Error).message;
+    return apiErrMsg(e, McpApiError);
   }
 
   private _openNew() {
@@ -571,7 +460,9 @@ export class McpServersSection extends LitElement {
     }
   }
 
-  /** 展开/收起工具清单（点击行主体切换）。 */
+  /** 展开/收起工具清单（点击行主体切换）。
+   *  失败不缓存（AP-21）：catch 里缓存空数组会把「加载失败」永久钉死成
+   *  「暂无工具」且重展开不重试——改为记录错误、下次展开重拉。 */
   private async _toggleTools(s: McpServer) {
     if (this._expandedToolsId === s.id) {
       this._expandedToolsId = null;
@@ -582,8 +473,10 @@ export class McpServersSection extends LitElement {
       try {
         const r = await listMcpServerTools(s.id);
         this._toolsCache = { ...this._toolsCache, [s.id]: r.tools };
-      } catch {
-        this._toolsCache = { ...this._toolsCache, [s.id]: [] };
+      } catch (e) {
+        console.warn("[mcp-servers] tools load failed:", e);
+        // 不写缓存：cache 判据是 id in cache，缺失即保持「加载中…」提示；
+        // 收起再展开即重试。
       }
     }
   }
@@ -625,7 +518,7 @@ export class McpServersSection extends LitElement {
         <div class="server-main" @click=${() => this._toggleTools(s)} title="点击展开工具清单">
           <div class="server-name">
             ${s.name}
-            <span class="badge">${TRANSPORT_LABEL[s.transport]}</span>
+            <span class="badge neutral">${TRANSPORT_LABEL[s.transport]}</span>
           </div>
           <div class="server-meta">
             ${s.transport === "stdio"

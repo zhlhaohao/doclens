@@ -10,6 +10,9 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { gitApi } from "../api/git";
 import type { GitChange } from "../api/git";
+import { formatBytes } from "../utils/format";
+import { emptyStateStyles } from "../styles/empty-state-styles";
+import { badgeStyles } from "../styles/badge-styles";
 import "../components/icon";
 import "./diff-viewer";
 
@@ -37,15 +40,12 @@ export function sortChanges(changes: GitChange[]): GitChange[] {
 }
 
 function formatSize(size: number | null): string {
-  if (size === null) return "—";
-  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
-  return `${size} B`;
+  return size === null ? "—" : formatBytes(size);
 }
 
 @customElement("git-changes-list")
 export class GitChangesList extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, badgeStyles, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -122,14 +122,6 @@ export class GitChangesList extends LitElement {
     }
     .row:hover { background: var(--cortex-surface-muted); }
     .row.active { background: var(--cortex-primary-soft); }
-    .badge {
-      flex-shrink: 0;
-      font-size: var(--cortex-fs-xs);
-      padding: 1px 8px;
-      border-radius: var(--cortex-radius-pill);
-      border: 1px solid var(--cortex-border);
-      white-space: nowrap;
-    }
     .badge.added { color: var(--cortex-diff-add); border-color: color-mix(in srgb, var(--cortex-diff-add) 45%, transparent); }
     .badge.modified { color: var(--cortex-primary); border-color: color-mix(in srgb, var(--cortex-primary) 45%, transparent); }
     .badge.deleted { color: var(--cortex-diff-del); border-color: color-mix(in srgb, var(--cortex-diff-del) 45%, transparent); }
@@ -158,18 +150,6 @@ export class GitChangesList extends LitElement {
       font-family: var(--cortex-font-mono);
       white-space: nowrap;
     }
-    .empty {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: var(--cortex-space-2);
-      padding: var(--cortex-space-8);
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-base);
-      text-align: center;
-    }
     .error {
       flex: 1;
       display: flex;
@@ -180,7 +160,7 @@ export class GitChangesList extends LitElement {
       font-size: var(--cortex-fs-base);
       text-align: center;
     }
-  `;
+  `];;
 
   /** 当前选中（预览 diff）的路径 —— 该行加 active 高亮。 */
   @property() activePath = "";
@@ -254,9 +234,9 @@ export class GitChangesList extends LitElement {
       ${this._error
         ? html`<div class="error">${this._error}</div>`
         : this._loading && this._changes === null
-          ? html`<div class="empty">获取改动列表…</div>`
+          ? html`<div class="empty fill">获取改动列表…</div>`
           : this._changes !== null && this._changes.length === 0
-            ? html`<div class="empty">
+            ? html`<div class="empty fill">
                 工作区干净<br>
                 <span style="font-size: var(--cortex-fs-sm)">所有改动均已提交</span>
               </div>`
@@ -269,7 +249,7 @@ export class GitChangesList extends LitElement {
                       @click=${() => this._onRowClick(c.path)}
                       title=${c.path}
                     >
-                      <span class="badge ${c.kind}">${KIND_LABEL[c.kind] ?? c.kind}</span>
+                      <span class="badge outline ${c.kind}">${KIND_LABEL[c.kind] ?? c.kind}</span>
                       <span class="path">${dir
                         ? html`<span class="dir">${dir}</span>${name}`
                         : name}</span>

@@ -1,11 +1,13 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { FileGroup, SearchHit } from "../state/types";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import "./file-card";
+import "./spinner";
 
 @customElement("search-results")
 export class SearchResults extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: flex;
       gap: var(--cortex-space-4);
@@ -27,31 +29,16 @@ export class SearchResults extends LitElement {
       display: flex;
       flex-direction: column;
     }
-    .empty {
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-base);
-      text-align: center;
-      padding: var(--cortex-space-8);
-    }
     .loading {
       color: var(--cortex-text-muted);
       font-size: var(--cortex-fs-base);
       text-align: center;
       padding: var(--cortex-space-8);
     }
-    .loading::after {
-      content: "";
-      display: inline-block;
-      width: 14px;
-      height: 14px;
+    .loading c-spinner {
       margin-left: 8px;
-      border: 2px solid var(--cortex-border);
-      border-top-color: var(--cortex-primary);
-      border-radius: 50%;
       vertical-align: middle;
-      animation: cortex-spin 0.8s linear infinite;
     }
-    @keyframes cortex-spin { to { transform: rotate(360deg); } }
     /* 桌面：双栏，列表 + 预览；移动：单栏，点击触发 push */
     @media (max-width: 1023px) {
       :host { flex-direction: column; flex: 1; }
@@ -60,7 +47,7 @@ export class SearchResults extends LitElement {
         border-right: none;
       }
     }
-  `;
+  `];;
 
   @property({ attribute: false }) groups: FileGroup[] = [];
   /** 当前激活命中（detailStack 顶部引用）——path+line 匹配对应行加亮。 */
@@ -83,14 +70,13 @@ export class SearchResults extends LitElement {
     return html`
       <div class="list-pane">
         ${this.loading && this.groups.length === 0
-          ? html`<div class="loading">搜索中</div>`
+          ? html`<div class="loading">搜索中<c-spinner size="14"></c-spinner></div>`
           : this.groups.length === 0
             ? html`<div class="empty">无搜索结果</div>`
             : this.groups.map((g) => html`
                 <file-card
                   .group=${g}
                   .activeHit=${this.activeHit}
-                  ?expanded=${false}
                   @hit-select=${this._onHitSelect}>
                 </file-card>`)}
       </div>

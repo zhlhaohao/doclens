@@ -1,25 +1,19 @@
 import { LitElement, html, css } from "lit";
+import { buttonBaseStyles, confirmButtonStyles, buttonRowStyles } from "../styles/button-styles";
+import { formStyles } from "../styles/form-styles";
+import { confirmStyles } from "../styles/confirm-styles";
 import { customElement, state } from "lit/decorators.js";
 import { store } from "../state/store";
 import { filesApi } from "../api/files";
+import { formatBytes } from "../utils/format";
 
 type Phase = "loading-stats" | "confirming" | "deleting";
 
 @customElement("delete-dialog")
 export class DeleteDialog extends LitElement {
-  static styles = css`
+  static styles = [buttonBaseStyles, confirmButtonStyles, buttonRowStyles, confirmStyles, formStyles, css`
     :host { display: block; min-width: 360px; }
     h3 { margin: 0 0 var(--cortex-space-3) 0; font-size: var(--cortex-fs-md); word-break: break-all; font-weight: 600; letter-spacing: -0.01em; color: var(--cortex-text); }
-    .warn {
-      padding: var(--cortex-space-3);
-      background: rgba(247, 185, 40, 0.10);
-      border: 1px solid rgba(247, 185, 40, 0.35);
-      border-left: 3px solid var(--cortex-warning);
-      border-radius: var(--cortex-radius-md);
-      color: var(--cortex-text);
-      font-size: var(--cortex-fs-sm);
-      margin-bottom: var(--cortex-space-3);
-    }
     .stats {
       font-size: var(--cortex-fs-sm);
       color: var(--cortex-text-muted);
@@ -28,27 +22,6 @@ export class DeleteDialog extends LitElement {
     }
     .stats ul { list-style: none; padding: 0; margin: var(--cortex-space-2) 0; }
     .stats li { padding: 2px 0; }
-    .actions {
-      display: flex; justify-content: flex-end;
-      gap: var(--cortex-space-2);
-      margin-top: var(--cortex-space-4);
-    }
-    button {
-      padding: 6px 16px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
-    }
-    button.danger {
-      background: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-      border: none;
-      border-radius: var(--cortex-radius-pill);
-    }
-    button.danger:hover:not(:disabled) { filter: brightness(1.05); }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
     label.opt {
       display: flex; gap: var(--cortex-space-2); align-items: center;
       padding: var(--cortex-space-2) 0;
@@ -57,10 +30,8 @@ export class DeleteDialog extends LitElement {
     .spinner { color: var(--cortex-text-muted); padding: var(--cortex-space-4); text-align: center; }
     @media (max-width: 1023px) {
       :host { min-width: 0; }
-      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
-  `;
+  `];;
 
   @state() private _phase: Phase = "confirming";
   @state() private _stats: { file_count: number; dir_count: number; total_size_bytes: number } | null = null;
@@ -99,12 +70,6 @@ export class DeleteDialog extends LitElement {
     this._phase = "confirming";
   }
 
-  private _fmtSize(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  }
-
   private _delete() {
     if (!this._confirmed) return;
     this._phase = "deleting";
@@ -125,14 +90,14 @@ export class DeleteDialog extends LitElement {
     }
     return html`
       <h3>删除 ${count > 1 ? `${count} 项` : this._selected[0]}？</h3>
-      <div class="warn"><doclens-icon name="alert-triangle"></doclens-icon> 此操作不可恢复</div>
+      <div class="warn danger"><doclens-icon name="alert-triangle"></doclens-icon> 此操作不可恢复</div>
       ${this._stats ? html`
         <div class="stats">
           将永久删除：
           <ul>
             <li>• ${this._stats.file_count} 个文件</li>
             ${this._stats.dir_count > 0 ? html`<li>• ${this._stats.dir_count} 个子文件夹</li>` : ""}
-            ${this._stats.total_size_bytes > 0 ? html`<li>• 总计 ${this._fmtSize(this._stats.total_size_bytes)}</li>` : ""}
+            ${this._stats.total_size_bytes > 0 ? html`<li>• 总计 ${formatBytes(this._stats.total_size_bytes)}</li>` : ""}
           </ul>
         </div>
       ` : html`<div class="stats">将永久删除 ${count} 个项目。</div>`}

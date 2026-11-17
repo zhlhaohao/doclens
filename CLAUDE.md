@@ -32,6 +32,8 @@ python -m playwright install chromium --only-shell   # webfetch 二级降级需�
 
 规则 1、2 由 `tests/test_architecture.py` 守护——任何改动先过它。规则 1 的守卫同时覆盖**动态 import**（`importlib.import_module` / `__import__` 指向高层）、框架代码里的**宿主名**、以及框架读**宿主命名空间**（`CORTEX_*`）——用动态 import 把静态依赖藏进字符串不构成豁免（见 ADR-0053）。
 
+**中间件顺序**：`add_middleware` 是 `user_middleware.insert(0, ...)`——**后注册者最外层**。auth 必须最外层（AP-33：切换窗口内未登录 LAN 客户端必须拿 401 而非 503）。GZipMiddleware（2026-11-17 加）注册在 auth/swap **之前**= 最内层，保住该不变量；`/assets/*` 仍被压缩（auth/swap 只拦 `/api/*`）。守卫见 `tests/test_middleware_order.py` + `tests/test_web_gzip.py`。
+
 ## 项目结构
 
 ```
@@ -40,6 +42,11 @@ doclens/                    # 业务宿主：config / index_manager / kb_tools /
 treesearch/                 # 索引引擎：fts.py（FTS5）/ indexer / search / tokenizer / tree / tree_searcher / heuristics / ghost / ripgrep + parsers/（pdf/docx/excel/html/mhtml/markitdown/anydoc/pst/email/ast/treesitter/image_* + registry）
 planify/                    # AI 框架：bootstrap / streaming/（runner 主循环）/ core/（config/runtime/runtime_manager/llm Provider 抽象 + timeouts/trace）/ tools/（registry+内置工具）/ managers/（task/background/teammate/todo）/ skills/ / subagent/ / messaging/ / context/（compact 压缩）/ agent/（旧 REPL）——详见 planify/docs/ARCHITECTURE.md
 ```
+
+前端 `doclens/web_v2/frontend/src/` 的两层新结构（2026-11 反模式审计批处理建立）：
+
+- **`utils/*-controller.ts`** — ReactiveController 外迁层：视图组件的职责域（会话操作/历史/技能、预览交互/阅读/外观、文件模式、书签、滚动记忆…）从组件本体迁到独立 controller，由组件 `new XxxController(this)` 注册。**组件只留视图与装配**。既有：chat-history / chat-session-ops / chat-skills / files-modes / bookmarks / preview-{appearance,interactions,reading} / probe / scroll-memory / pull-to-refresh / pinch-gesture / side-drawer / toast。
+- **`styles/*.ts`** — 样式层公共块（Lit `static styles = [公共块, css`…`]` 数组组合，后者覆盖前者）：button-styles / dialog-frame / settings-section-styles / chat-view-styles / shared-styles。**弹窗一律原生 `<dialog>` + `showModal()`**，样式走公共块而非逐字复制。
 
 - 核心组件：CortexApp（TUI）、IndexManager（封装 TreeSearch）、CortexAgent（封装 Planify）、FileWatcher＋EventBus（增量索引）、Scoring、Ripgrep 降级。
 - 数据流：输入 → 命令路由 → 搜索（FTS5→Scoring→Formatting）/ AI（Planify→LLM）/ 索引；文件变化 → FileWatcher → EventBus → 增量 reindex。
@@ -60,6 +67,12 @@ planify/                    # AI 框架：bootstrap / streaming/（runner 主循
 
 前端设计标尺：`doclens/web_v2/frontend/docs/DESIGN.md`（META 设计系统）。弹窗用原生 `<dialog>` + `showModal()`；样式只用 tokens.css 已有 CSS 变量（`--cortex-accent` 不存在，主按钮用 `--cortex-btn-primary-*`）。
 
+**z-index 分层（tokens.css 五档，禁裸数字）**：`--cortex-z-base`(1) / `raised`(10) / `overlay`(100) / `toast`(1000) / `modal`(9999)。浮层需**低于**某层时用 `calc(var(--cortex-z-raised) - 1)` 显式降档——**不得与被遮挡元素同档**（同档按 DOM 顺序决胜，后写的反压先写的）。实证：2026-11-15 AP-4 归层时 app-bar 与 ptr-indicator 同归 raised，导致下拉刷新胶囊盖住 app-bar 收起不消失（2026-11-17 修正）。
+
+**组件规模红线**：单组件文件 >1000 行即视为 God Object 信号，动手拆 `utils/*-controller.ts`（职责域外迁）或 `styles/*.ts`（样式公共块）。实例：chat-view 2532→1651 行（会话操作/历史/技能三域外迁）、preview-pane 2226→2063 行（外观/交互/阅读三域外迁 + 3 个 controller）；file-list 992→1000 行（改动/深读模式域外迁 FilesModesController，文件数换行数持平——**职责域减了不等于行数减了**）。
+
+**已弃用**：Shoelace（2026-07 Meta 改造后全仓零 `<sl-*>` 标签，2026-11-17 清 import + `--sl-*` token + npm 依赖）。图标走 `components/icon.ts`（lucide-static 内联），弹窗走原生 `<dialog>`。**勿再引入**。
+
 ## 分层回归测试纪律
 
 改代码必须按触及层跑回归；pytest 一律 `../cortex/.venv/Scripts/python.exe -m pytest`。方案全貌见 `tests/e2e/e2e-search-test-plan.md`。
@@ -75,9 +88,12 @@ planify/                    # AI 框架：bootstrap / streaming/（runner 主循
 | planify LLM/流式/压缩（`streaming/`、`context/`、`core/llm/`） | `pytest tests/test_stream_usage.py tests/test_thinking_stream.py tests/test_compact.py tests/test_anthropic_provider.py -q` |
 | planify 工具层（`tools/**`） | `pytest tests/test_grep_tool.py tests/test_glob_tool.py tests/test_basic_read_edit.py tests/test_guard.py tests/test_guard_pipeline.py -q` |
 | 会话/对话（`sessions_store.py`、`api/{chat,sessions}.py`） | `pytest tests/test_chat_disconnect.py tests/test_session_export_import.py tests/test_sessions_store_history.py tests/test_rewind.py -q` |
+| Web 静态资源 / 中间件（`web_v2/app.py`） | `pytest tests/test_web_gzip.py tests/test_middleware_order.py -q` |
 | 索引/监控（`file_watcher.py`、增量链路） | `pytest tests/test_change_detection.py tests/test_file_watcher_exclude.py tests/test_index_chunking.py -q` |
 | 技能系统（`doclens/skills/`、`planify/skills/`） | `pytest tests/test_skill_hot_reload.py tests/test_skills_config.py tests/test_slash_skill_invoke.py -q` |
 | 前端搜索 UI（search-view / md-viewer / file-card / preview-pane / pdf-viewer / api） | `npm run test -- tests/search-highlight-units.spec.ts tests/md-viewer.spec.ts tests/file-card.spec.ts tests/preview-pane.spec.ts`（cwd=frontend）＋ `npm run build` |
+| 前端流程级测试（对话/搜索/文件三视图旅程） | `npm run test -- tests/chat-flow.spec.ts tests/search-flow.spec.ts tests/files-flow.spec.ts`（cwd=frontend）——**动 chat-view/search-view/files-view 之前先跑**，是 controller 外迁的安全网 |
+| 前端 controller 层（utils/*-controller.ts） | 同名 spec：`tests/chat-history-controller.spec.ts` / `chat-session-ops-controller.spec.ts` / `chat-skills-controller.spec.ts` / `files-modes-controller.spec.ts` / `preview-controller.spec.ts` |
 | 前端其他组件 | 同名 spec |
 | 前端定位/滚动/分页/预览（跨前后端旅程） | `npm run test:e2e:search`（自动语料 + 7890 后端） |
 | 任何层改完 | `pytest tests/test_architecture.py -q`（红线守卫） |

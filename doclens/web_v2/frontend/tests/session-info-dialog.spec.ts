@@ -57,7 +57,10 @@ describe("<session-info-dialog> 会话 ID 行", () => {
     const el = await mount({ sessionId: "01ARZ3NDEKTSV4RRFFQ69G5FAV" });
     const btn = el.shadowRoot!.querySelector<HTMLButtonElement>("button.copy-btn")!;
     btn.click();
+    // copyText 是 async（主路径一个微任务即返回）；waitFor 默认回调含
+    // 微任务刷新，await 到 writeSpy 被调后组件 _copied 已在下一微任务置位
     await vi.waitFor(() => expect(writeSpy).toHaveBeenCalled());
+    await vi.waitFor(() => expect(btn.querySelector("doclens-icon")?.getAttribute("name")).toBe("check"));
     await el.updateComplete;
 
     expect(writeSpy).toHaveBeenCalledTimes(1);

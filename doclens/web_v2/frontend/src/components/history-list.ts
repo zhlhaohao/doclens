@@ -2,10 +2,11 @@ import { LitElement, html, css } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { Session } from "../state/types";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 
 @customElement("history-list")
 export class HistoryList extends LitElement {
-  static styles = css`
+  static styles = [emptyStateStyles, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -96,12 +97,6 @@ export class HistoryList extends LitElement {
       align-items: center;
       gap: 2px;
     }
-    .empty {
-      color: var(--cortex-text-subtle);
-      font-size: var(--cortex-fs-sm);
-      text-align: center;
-      padding: var(--cortex-space-6);
-    }
     .pager {
       display: flex;
       justify-content: center;
@@ -134,7 +129,7 @@ export class HistoryList extends LitElement {
       min-width: 48px;
       text-align: center;
     }
-  `;
+  `];;
 
   @property() title = "历史会话";
   @property({ attribute: false }) sessions: Session[] = [];

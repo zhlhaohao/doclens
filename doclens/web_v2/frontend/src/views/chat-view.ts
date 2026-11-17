@@ -1,4 +1,17 @@
-import { LitElement, html, css, nothing } from "lit";
+import { LitElement, html, nothing } from "lit";
+import { chatViewStyles } from "../styles/chat-view-styles";
+import {
+  renderCompactDialog,
+  renderDeleteTurnDialog,
+  renderForkDialog,
+  renderImportDialog,
+  renderInfoDialog,
+  renderInterjectDialog,
+  renderRenameDialog,
+  renderRewindDialog,
+  renderSkillDialog,
+  renderVisionGateDialog,
+} from "./chat-dialogs";
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
@@ -8,15 +21,16 @@ import { chatStream, stopChat, interject } from "../api/chat";
 import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
-import { createSession, listSessions, clearSessions, renameSession, starSession, rewindSession, deleteTurn, fetchSessionDetail, compactSession, exportSession, sessionExportUrl, sessionExportFileName, importSession, sessionImportUploadUrl, duplicateSession, fetchChatTrace } from "../api/sessions";
+import { createSession, fetchSessionDetail, fetchChatTrace } from "../api/sessions";
 import { router } from "../router/router";
 import { PreviewController } from "../utils/preview-controller";
+import { ChatSessionOpsController } from "../utils/chat-session-ops-controller";
+import { ChatHistoryController } from "../utils/chat-history-controller";
+import { ChatSkillsController } from "../utils/chat-skills-controller";
+// 向后兼容再导出：checkSlashSubmit 已迁至 chat-skills-controller（纯函数模块）
+export { checkSlashSubmit } from "../utils/chat-skills-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
-import { downloadFromUrl } from "../utils/download";
-import { jsbridgeDownloadAvailable, jsbridgeUploadAvailable, pickAndUploadFiles } from "../utils/jsbridge";
-import { listSkillsManage } from "../api/skills";
 import type { SkillInfo } from "../api/skills";
-import { getRecentSkillNames, recordSkillUse, RECENT_SKILLS_MENU_CAP } from "../state/recent-skills";
 import { buildChatTimeline, mergeTimeline } from "./chat-timeline";
 import type { RewindDivider } from "./chat-timeline";
 import type { ChatStream } from "../components/chat-stream";
@@ -30,31 +44,13 @@ import "../components/rewind-dialog";
 import "../components/turn-delete-dialog";
 import "../components/compact-confirm-dialog";
 import "../components/import-confirm-dialog";
+import "../components/vision-gate-dialog";
+import "../components/interject-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
 import "../components/toast-stack";
-import type { ToastStack } from "../components/toast-stack";
+import { pushLocalToast } from "../utils/toast";
 import type { FocusHeaderAction } from "../components/focus-header";
-
-/** 斜杠技能调用的提交校验结果（checkSlashSubmit）：
- *  non-slash = 普通消息直接发送；ok = 合法斜杠调用（记录最近技能后发送）；
- *  unknown = 未知技能名，阻断发送并提示（后端对漏网斜杠按普通文本处理）。 */
-export type SlashCheck =
-  | { type: "non-slash" }
-  | { type: "ok"; name: string }
-  | { type: "unknown"; name: string };
-
-/** 提交校验：首字符 / 即技能模式，技能名 = 首个空白前的片段；
- *  合法集合 = 对话技能候选（启用 ∧ 未删除 ∧ 用户可调用，与引导菜单同源）。 */
-export function checkSlashSubmit(
-  message: string,
-  candidates: { name: string }[] | null,
-): SlashCheck {
-  if (!message.startsWith("/")) return { type: "non-slash" };
-  const name = message.slice(1).split(/\s/, 1)[0];
-  if ((candidates ?? []).some((c) => c.name === name)) return { type: "ok", name };
-  return { type: "unknown", name };
-}
 
 /** 流事件归属判定（导出供单测）：本次流只许写回发起它的会话。
  *  用户中途切到别的对话/回欢迎页后，事件静默丢弃——否则别的对话会实时
@@ -267,253 +263,7 @@ export class ChatView extends LitElement {
   static readonly PREVIEW_PANE_WIDTH_MIN = 300;
   static readonly PREVIEW_PANE_WIDTH_MAX = 900;
 
-  static styles = css`
-    /* 视觉能力拦截对话框（ADR-0034） */
-    .vision-gate { max-width: 360px; padding: 4px; }
-    .vision-gate h3 { margin: 0 0 8px; font-size: 16px; }
-    .vision-gate p { margin: 0 0 8px; color: var(--cortex-text-muted); font-size: 14px; line-height: 1.5; }
-    .vision-gate .vision-gate-hint { color: var(--cortex-text-subtle); font-size: 13px; }
-    .vision-gate-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-    .vision-gate-actions button {
-      border: none; border-radius: var(--cortex-radius-pill, 100px);
-      padding: 8px 18px; font-size: 14px; cursor: pointer;
-    }
-    .vision-gate-actions .secondary { background: transparent; color: var(--cortex-text-muted); border: 1px solid var(--cortex-border); }
-    .vision-gate-actions .primary { background: var(--cortex-primary); color: var(--cortex-on-primary); }
-    /* 插话输入框（ADR-0048）：与 vision-gate 同规格的小 dialog */
-    .interject-dialog { max-width: 380px; padding: 4px; display: block; }
-    .interject-dialog h3 { margin: 0 0 8px; font-size: 16px; }
-    .interject-dialog .interject-hint {
-      margin: 0 0 10px; color: var(--cortex-text-subtle); font-size: 13px; line-height: 1.5;
-    }
-    .interject-dialog textarea {
-      width: 100%; box-sizing: border-box; resize: vertical;
-      border: 1px solid var(--cortex-border); border-radius: var(--cortex-radius-md);
-      padding: 8px 10px; font-size: 14px; font-family: var(--cortex-font);
-      background: var(--cortex-surface); color: var(--cortex-text);
-    }
-    .interject-dialog textarea:focus-visible { outline: 2px solid var(--cortex-primary); outline-offset: -1px; }
-    .interject-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
-    .interject-actions button {
-      border: none; border-radius: var(--cortex-radius-pill, 100px);
-      padding: 8px 18px; font-size: 14px; cursor: pointer;
-    }
-    .interject-actions .secondary { background: transparent; color: var(--cortex-text-muted); border: 1px solid var(--cortex-border); }
-    .interject-actions .primary { background: var(--cortex-primary); color: var(--cortex-on-primary); }
-    .interject-actions .primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    :host {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-      background: var(--cortex-view-bg);
-      /* shadow 内不受全局 border-box reset 影响，须显式声明：
-         content-box 下 .input-bar 的 max-width:token 不含 padding(48px)，
-         输入框比 initial 态 .input-row 里的宽 48px，两态切换时跳动 */
-      box-sizing: border-box;
-    }
-    *, *::before, *::after { box-sizing: border-box; }
-    .initial-stack {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-      /* 顶部蓝色光晕：让白色卡片从背景中浮出，增加层次感 */
-      background:
-        radial-gradient(720px 280px at 50% -80px, color-mix(in srgb, var(--cortex-primary) 8%, transparent), transparent 70%);
-    }
-    .input-row {
-      /* 底部留白与搜索页 .input-row 一致（space-4=16px），保证两页输入框距底边等高 */
-      padding: 6px var(--cortex-space-6) var(--cortex-space-4);
-      flex-shrink: 0;
-    }
-    /* 输入框对齐日记记录页的紧凑尺寸（默认 ≈48px/11px 偏大） */
-    .text-input {
-      --min-h: calc(var(--cortex-fs-md) * 1.5 + 14px);   /* ≈36px，随字号缩放 */
-      --cortex-input-pad-y: 6px;
-    }
-    .focus-body {
-      display: flex;
-      flex-direction: column;
-      flex: 1;
-      min-height: 0;
-    }
-    .input-bar {
-      /* 底部留白与搜索页输入框一致（space-4=16px），顶部保持 space-3 */
-      padding: var(--cortex-space-3) var(--cortex-space-6) var(--cortex-space-4);
-      border-top: 1px solid var(--cortex-border-muted);
-      flex-shrink: 0;
-      background: var(--cortex-view-bg);
-    }
-    .focus-main {
-      display: flex;
-      flex: 1;
-      min-height: 0;
-      flex-direction: column;
-    }
-    /* 悬置卡（ask-card）可收缩内滚后，多问堆叠时会把消息区压到 0——
-       留最小保底，答题期间仍可见最后一两条消息上下文。row 布局
-       （桌面有预览）下列高本就 stretch，此规则无实际影响。 */
-    .focus-main chat-stream {
-      min-height: 96px;
-    }
-    /* 桌面 preview 关闭：chat-stream 与 ask-card 同步居中限宽（卡片不超消息区） */
-    @media (min-width: 1024px) {
-      .focus-main:not(.has-preview) chat-stream,
-      .focus-main:not(.has-preview) ask-card {
-        max-width: var(--content-max-width, 1080px);
-        margin: 0 auto;
-        width: 100%;
-      }
-    }
-    /* 桌面 preview 打开：水平排布，chat-stream 让位 */
-    @media (min-width: 1024px) {
-      .focus-main.has-preview {
-        flex-direction: row;
-        padding: var(--cortex-space-3);
-      }
-      .focus-main.has-preview chat-stream,
-      .focus-main.has-preview ask-card {
-        flex: 1 1 0;
-        min-width: 0;
-        max-width: none;
-      }
-    }
-    .focus-main .splitter {
-      flex: 0 0 4px;
-      cursor: col-resize;
-      background: var(--cortex-border-muted);
-      transition: background 0.15s;
-    }
-    .focus-main .splitter:hover,
-    .focus-main .splitter:active {
-      background: var(--cortex-primary);
-    }
-    .focus-main .preview-pane-wrap {
-      flex: 0 1 var(--preview-pane-width, 420px);
-      min-width: 180px;
-      max-width: 900px;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      position: relative;
-      background: var(--cortex-card-bg);
-      border-radius: var(--cortex-radius-lg);
-      border: 1px solid var(--cortex-border-muted);
-    }
-    .focus-main .preview-close {
-      position: absolute;
-      top: 6px;
-      right: 8px;
-      z-index: 2;
-      width: 26px;
-      height: 26px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text-muted);
-      cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      padding: 0;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-    .focus-main .preview-close:hover {
-      background: var(--cortex-primary-soft);
-      color: var(--cortex-primary);
-      border-color: var(--cortex-primary);
-    }
-    .focus-main .not-indexed-hint {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--cortex-surface-muted);
-      border-radius: var(--cortex-radius-md);
-      color: var(--cortex-text-muted);
-      padding: var(--cortex-space-6);
-      margin: var(--cortex-space-3);
-      text-align: center;
-    }
-    /* 移动端：桌面 splitter / preview-pane-wrap 隐藏 */
-    @media (max-width: 1023px) {
-      .focus-main .splitter,
-      .focus-main .preview-pane-wrap,
-      .focus-main .desktop-only {
-        display: none;
-      }
-      /* 输入框贴近屏幕左右（原 space-6=24px 留白偏宽）；
-         initial 态 .input-row 与 focus 态 .input-bar 同步收紧，保证两态等宽 */
-      .input-row,
-      .input-bar { padding-left: var(--cortex-space-2); padding-right: var(--cortex-space-2); }
-      /* 移动端对话框占满屏幕宽度，与 files-view 决议一致 */
-      dialog {
-        width: 100vw;
-        max-width: 100vw;
-        max-height: calc(100vh - 16px);
-        border-radius: var(--cortex-radius-md);
-      }
-      dialog > * { padding: var(--cortex-space-4); }
-    }
-    /* 技能选择对话框宿主 chrome（Meta 平铺浮层：hairline 边框 + 24px 圆角 + level-2 阴影），
-       与 files-view/diary-view 的 dialog 规格一致；此前无样式，吃的是浏览器默认外观 */
-    dialog {
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      box-sizing: border-box;
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      max-width: 90vw;
-    }
-    dialog::backdrop { background: rgba(0, 0, 0, 0.3); }
-    dialog > * { display: block; padding: var(--cortex-space-6); }
-    /* 移动端预览 overlay。**不得设 z-index**（2026-09-29 修复：对话页
-       参考资料 PDF 在移动浏览器灰屏的真根因）——z-index 会创建层叠
-       上下文，把 document.body 下 z-index:1 的 pdf-viewer portal 整个
-       压在下面（canvas 画好但被挡死）。去掉后：overlay（absolute 定位）
-       仍画在静态消息流之上（背景遮罩语义不变），而 portal（定位 + z:1）
-       反超 overlay（z:auto）显露 canvas；toc-drawer（z:30）等内部浮层
-       在根上下文直接比较，仍正确盖住 canvas。 */
-    .preview-overlay {
-      position: absolute;
-      inset: 0;
-      background: var(--cortex-card-bg);
-      display: flex;
-      flex-direction: column;
-    }
-    /* 移动端预览打开时隐藏对话顶栏：focus-header 因 backdrop-filter 需
-       z-index:10，会浮在 z:auto 的 preview-overlay 之上（预览界面露出
-       顶栏的「新会话」返回钮——点了回 initial 而非关闭预览，2026-09-29
-       修复）。预览层的返回由 preview-pane 自带 mobile-header 承担。 */
-    @media (max-width: 1023px) {
-      .focus-body.has-preview > focus-header {
-        display: none;
-      }
-    }
-    @media (min-width: 1024px) {
-      .preview-overlay {
-        display: none;
-      }
-    }
-    @media (min-width: 1024px) {
-      /* 桌面端：居中列布局，避免全宽拉伸。initial 与 focus 两态共用同一
-         列宽（--content-max-width），保证发送首条消息切换状态时输入框不跳动 */
-      .initial-stack {
-        max-width: var(--content-max-width, 1080px);
-        margin: 0 auto;
-        width: 100%;
-      }
-      .input-bar {
-        max-width: var(--content-max-width, 1080px);
-        margin: 0 auto;
-        width: 100%;
-      }
-    }
-  `;
+  static styles = chatViewStyles;
 
   @state() private draft = "";
   /** 待回填输入框的图片附件（ADR-0034）：重问/回退锚点带的图，经绑定
@@ -525,34 +275,148 @@ export class ChatView extends LitElement {
   /** 当前渲染的 ask 卡片载荷（交互态→摘要态由卡片内部管理；
    *  与 store.pendingAsk 分离：提交后输入恢复但摘要保留至流结束） */
   @state() private _activeAsk: PendingAsk | null = null;
-  @state() private historySessions: Session[] = [];
-  /** 历史分页当前页（1-based）；hasMore = 本页满 200 条 */
-  @state() private _historyPage = 1;
-  /** 星标置顶开关（localStorage 持久化；false = 加星条目按时间混排） */
-  @state() private _starPin = localStorage.getItem(ChatView.STAR_PIN_KEY) !== "0";
-  /** 会话列表高亮 id：重启恢复的「上次会话」（纯展示，不拉消息流）；
-   *  进入会话后跟随真实 id，返回 initial 清空。 */
-  @state() private _highlightSessionId: string | null = null;
-  @state() private _clearing = false;
-  /** WebView 原生导入进行中（防重复拉起选择器）。 */
-  private _importing = false;
   /** 导入确认框状态（2026-10-29：替代 window.confirm——后者被浏览器
    *  「阻止此页面创建更多对话框」静默返回 false 时，导入表现为毫无反应）。
    *  phase=exists 表示后端回报同 id 已存在，等待用户选择「作为副本导入」。 */
-  @state() private _importDialog: {
-    fileName: string;
-    title: string;
-    count: number;
-    phase: "confirm" | "exists" | "busy";
-    /** 浏览器路径持有的解析结果（WebView 直传路径为 null，副本需重选文件）。 */
-    data: unknown | null;
-    webview: boolean;
-  } | null = null;
   @state() private previewOpen = false;
   /** 预览状态机（P1-2 收敛，同 search 策略：只回填 content+tokens）。 */
   private _preview = new PreviewController(this, {
     getPane: () => this.shadowRoot?.querySelector("preview-pane") ?? null,
   });
+
+  /** 会话操作域（AP-1 外迁）：改名 / 压缩 / 导出 / 导入 / 孪生复制 /
+   *  回退 / 删轮的状态与副作用在 controller，视图只留事件接线。 */
+  private _ops = new ChatSessionOpsController(this, {
+    toast: (message, level, duration) => this._pushToast(message, level, duration),
+    reloadHistory: () => this._history.load(),
+    reloadSession: () => {
+      const cur = this.viewState.currentSession;
+      return cur ? this._loadSession(cur) : Promise.resolve();
+    },
+    restoreDraft: (content, images) => {
+      this.draft = content;
+      this._pendingImages = images ?? [];
+    },
+    applyRenamedTitle: (title) => {
+      const session = this.viewState.currentSession;
+      if (!session) return;
+      // 同步当前会话与历史列表（updated_at 不动，历史顺序不变）
+      actions.setChatState({ currentSession: { ...session, title } });
+      this._history.sessions = this._history.sessions.map((s) =>
+        s.id === session.id ? { ...s, title } : s);
+    },
+    currentSessionId: () => this.viewState.currentSession?.id ?? null,
+    currentSessionTitle: () => this.viewState.currentSession?.title ?? "",
+    messages: () => this.viewState.messages,
+    streaming: () => this.viewState.streaming,
+    refreshCompaction: () => this._refreshCompaction(),
+    enterSession: (session) => this._loadSession(session as unknown as Session),
+  });
+
+  /** 会话历史域（AP-1 外迁）：取数/分页/星标/清空/高亮在 controller。 */
+  private _history = new ChatHistoryController(this, {
+    toast: (message, level, duration) => this._pushToast(message, level, duration),
+    storageKey: ChatView.STAR_PIN_KEY,
+    currentSessionId: () => this.viewState.currentSession?.id ?? null,
+    syncCurrentSessionStar: (sessionId, starred) => this._history.syncStarToStore(sessionId, starred),
+  });
+
+  /** 对话技能域（AP-1 外迁）：候选取数/最近项求交/斜杠校验/技能直发。 */
+  private _skills = new ChatSkillsController(this, {
+    prefillSkill: (name) => this._prefillSkill(name),
+    sendWithSkill: (name) => this._sendWithSkill(name),
+  });
+
+  /** 预填技能前缀 `/name `（尾随空格，斜杠下拉不会误弹），聚焦输入框续写问题。 */
+  private _prefillSkill(name: string) {
+    this.draft = `/${name} `;
+    this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
+  }
+
+  /** 对话框模板适配器（AP-1 模板域外迁）：把视图状态与回调接到
+   *  views/chat-dialogs.ts 的纯模板函数——视图不再持有模板细节。 */
+  private _dialogs = {
+    skill: () => renderSkillDialog({
+      open: this._skills.dialogOpen,
+      skills: this._skills.candidates,
+      error: this._skills.error,
+      onPick: (e: CustomEvent<{ skill: SkillInfo }>) => this._skills.pickFromDialog(e.detail.skill, !!this.draft.trim()),
+      onCancel: () => this._skills.cancelDialog(),
+    }),
+    rename: () => renderRenameDialog({
+      open: this._ops.renameDialogOpen,
+      session: this.viewState.currentSession,
+      onSubmit: (e) => this._ops.submitRename(e),
+      onCancel: () => this._ops.cancelRename(),
+    }),
+    visionGate: () => renderVisionGateDialog({
+      open: this._visionGateOpen,
+      modelName: store.getState().status?.model_name ?? "",
+      onGotoSettings: this._gotoModelSettings,
+      onCancel: () => { this._visionGateOpen = false; },
+    }),
+    interject: () => renderInterjectDialog({
+      open: this._interjectDialogOpen,
+      onSubmit: this._onInterjectSubmit,
+      onCancel: this._onInterjectCancel,
+    }),
+    info: () => {
+      if (!this._infoDialogOpen || !this.viewState.currentSession) return nothing;
+      // 占用口径：压缩晚于最近一次 LLM 调用时，最近实测已不代表当前上下文
+      // （历史已被摘要替换）——显示压缩后估算并标注；下轮对话实测覆盖
+      const usage = this._sessionUsage;
+      const compaction = this._sessionCompaction;
+      const useEstimate =
+        compaction !== null &&
+        compaction.lastPostTokens > 0 &&
+        compaction.lastSeq > (usage?.lastSeq ?? -1);
+      return renderInfoDialog({
+        open: true,
+        info: {
+          sessionId: this.viewState.currentSession.id,
+          used: useEstimate ? compaction!.lastPostTokens : usage?.used ?? null,
+          usedIsEstimate: useEstimate,
+          contextWindow: usage?.contextWindow ?? 0,
+          cacheReadTotal: usage?.cacheReadTotal ?? null,
+          inputTotal: usage?.inputTotal ?? null,
+          calls: usage?.calls ?? 0,
+          lastCallRead: usage ? usage.lastRead : null,
+          lastCallUsed: usage?.lastUsed ?? 0,
+          compactionCount: compaction?.count ?? 0,
+          lastCompactedAt: compaction?.lastAt ?? null,
+          lastPreTokens: compaction?.lastPreTokens ?? null,
+        },
+        onClose: this._onInfoClose,
+        onCopyFailed: () => this._pushToast("复制失败，请手动选择文本", "error", 5000),
+      });
+    },
+    rewind: () => renderRewindDialog({
+      state: this._ops.rewindDialog,
+      sessionId: this.viewState.currentSession?.id ?? null,
+      onConfirm: (e) => this._ops.confirmRewind(e),
+      onCancel: () => this._ops.cancelRewind(),
+    }),
+    deleteTurn: () => renderDeleteTurnDialog({
+      state: this._ops.deleteTurnDialog,
+      onConfirm: (e) => this._ops.confirmDeleteTurn(e),
+      onCancel: () => this._ops.cancelDeleteTurn(),
+    }),
+    compact: () => renderCompactDialog({
+      state: this._ops.compactDialog,
+      onConfirm: () => void this._ops.confirmCompact(),
+      onCancel: () => this._ops.cancelCompact(),
+    }),
+    fork: () => renderForkDialog({
+      session: this._ops.forkSession as unknown as Session | null,
+      onConfirm: () => void this._ops.confirmFork(),
+      onCancel: () => this._ops.cancelFork(),
+    }),
+    import: () => renderImportDialog({
+      state: this._ops.importDialog,
+      onConfirm: (e) => void this._ops.confirmImport(e),
+      onCancel: () => this._ops.cancelImport(),
+    }),
+  };
   private get previewContent() { return this._preview.content; }
   private get previewPath() { return this._preview.path; }
   private get previewLanguage() { return this._preview.language; }
@@ -565,31 +429,10 @@ export class ChatView extends LitElement {
   /** 文件字节数（ADR-0046 编辑阈值判定用）。 */
   private get previewSizeBytes() { return this._preview.sizeBytes; }
   @state() private _previewPaneWidth = ChatView.PREVIEW_PANE_WIDTH_DEFAULT;
-  /** 对话技能候选（ADR-0016 §1：全部启用技能）；null = 未加载/加载中 */
-  @state() private _skillCandidates: SkillInfo[] | null = null;
-  @state() private _skillCandidatesError: string | null = null;
-  /** 技能选择对话框开关（caret 菜单「选择技能…」触发） */
-  @state() private _skillDialogOpen = false;
-  @state() private _renameDialogOpen = false; // 会话标题改名对话框（focus-header more 菜单）
-  /** 孪生复制确认框待复制的源会话（null = 关闭）；确认后执行复制。 */
-  @state() private _forkDialogSession: Session | null = null;
   @state() private _infoDialogOpen = false;   // 会话信息对话框（more 菜单，2026-09-17）
   /** 压缩上下文模态框（more 菜单「压缩上下文」）：单框三态——确认 →
    *  压缩中（模态 spinner，禁止操作页面）→ 完成/失败（框内展示效果）。
    *  null = 关闭。 */
-  @state() private _compactDialog: {
-    phase: "confirm" | "running" | "done" | "error";
-    preTokens: number;
-    postTokens: number;
-    errorMessage: string;
-    /** 压缩产物可读转录（done 态 copy 按钮拷贝供人审核，2026-10-10） */
-    compactedText: string;
-    /** auto = 回合末自动压缩（SSE compact 事件驱动，ADR-0044）；
-     *  手动入口（confirm 态）为 undefined。 */
-    auto?: boolean;
-  } | null = null;
-  /** 手动压缩进行中（防重复触发；LLM 摘要调用可达数十秒） */
-  private _compacting = false;
   /** 当前会话 usage（占用口径 = 最近一次调用总输入；命中率口径 = 全会话累计）；
    *  SSE usage 事件逐条累加，恢复会话时从 items 的 kind="usage" 条目聚合。 */
   @state() private _sessionUsage: SessionUsageState | null = null;
@@ -600,16 +443,6 @@ export class ChatView extends LitElement {
    *  新会话 / 返回 initial 清空。 */
   @state() private _rewindDividers: RewindDivider[] = [];
   /** 回退确认框载荷（null = 关闭）：seq 锚点 / content 回填内容 / deadCount 折叠数。 */
-  @state() private _rewindDialog: {
-    seq: number; content: string; deadCount: number;
-    /** 锚点图片（ADR-0034）：确认后回填附件暂存区 */
-    images?: { data: string; media_type: string }[];
-  } | null = null;
-  /** 删轮确认框载荷（null = 关闭）：seq 锚点 / 内容预览 / 本轮消息数 / 错误。 */
-  @state() private _deleteTurnDialog: {
-    seq: number; content: string; turnMessageCount: number;
-    submitting: boolean; errorMessage: string;
-  } | null = null;
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
   private _abortController: AbortController | null = null;
@@ -637,7 +470,7 @@ export class ChatView extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this._loadHistory();
+    void this._history.load();
     // 会话库恢复完成（ADR-0047 SSE sessions_restored）：重拉历史列表；
     // 当前打开的会话若已不存在（比备份旧），清空消息流回到欢迎页。
     window.addEventListener("cortex:sessions-restored", this._onSessionsRestored);
@@ -655,13 +488,13 @@ export class ChatView extends LitElement {
     // 启动恢复：上次会话在列表中高亮（幂等纯读；消息流不自动拉）。
     // 例外（ADR-0028）：上次会话仍在后台生成 → 自动进入恢复态（占位 +
     // 轮询），用户不用手点也能看到续跑结果。
-    this._highlightSessionId = loadSessionMemory().chat?.sessionId ?? null;
-    if (this._highlightSessionId) {
-      void this._autoResumeIfGenerating(this._highlightSessionId);
+    this._history.setHighlight(loadSessionMemory().chat?.sessionId ?? null);
+    if (this._history.highlightSessionId) {
+      void this._autoResumeIfGenerating(this._history.highlightSessionId);
     }
     this._consumePendingSkillChat();
     // 预拉技能候选（caret 菜单要展示最近技能，与候选求交）
-    void this._loadSkillCandidates();
+    void this._skills.loadCandidates();
     // 视口跨断点切换（桌面 ↔ 移动）：决定会话导航动作放悬浮三钮组还是菜单
     this._mqMobileViewport = typeof window.matchMedia === "function"
       ? window.matchMedia("(max-width: 1023px)")
@@ -669,79 +502,6 @@ export class ChatView extends LitElement {
     this._mqMobileViewport?.addEventListener("change", this._onMobileViewportChange);
   }
 
-  updated() {
-    // 对话框用 showModal（top-layer + backdrop + ESC 关闭），与 files-view 一致。
-    // 可能有多个 dialog 宿主（技能选择 / 会话改名），逐个处理。
-    for (const dlg of this.renderRoot.querySelectorAll("dialog")) {
-      if (!dlg.open) dlg.showModal();
-    }
-  }
-
-  /** 拉取对话技能候选 = 全部启用且未删除的技能（ADR-0016 §1，与工具箱白名单独立）。 */
-  private async _loadSkillCandidates() {
-    try {
-      const items = await listSkillsManage();
-      this._skillCandidates = items
-        .filter((s) => s.enabled && !s.deleted)
-        .map((s) => ({ name: s.name, description: s.description, icon: s.icon }));
-      this._skillCandidatesError = null;
-    } catch (e) {
-      this._skillCandidatesError = (e as Error)?.message || "技能列表加载失败";
-    }
-  }
-
-  /** 传给 input-box 的最近技能项：与候选求交（停用/删除静默消失）取前 3；
-   *  候选全空 → null（caret 隐藏，退化为普通发送按钮，ADR-0016 §5）。 */
-  private get _recentSkillItems(): { name: string; icon?: string }[] | null {
-    const cands = this._skillCandidates;
-    if (cands !== null && cands.length === 0) return null;
-    if (!cands) return []; // 未加载：caret 可用，菜单暂只显示「选择技能…」
-    const byName = new Map(cands.map((c) => [c.name, c]));
-    return getRecentSkillNames()
-      .filter((n) => byName.has(n))
-      .slice(0, RECENT_SKILLS_MENU_CAP)
-      .map((n) => ({ name: n, icon: byName.get(n)!.icon }));
-  }
-
-  /** caret 菜单打开：刷新候选（设置页可能刚改过启用状态），recents 重算随之更新。 */
-  private _onSkillMenuOpen = () => {
-    void this._loadSkillCandidates();
-  };
-
-  /** 预填技能前缀 `/name `（尾随空格，斜杠下拉不会误弹），聚焦输入框续写问题。 */
-  private _prefillSkill(name: string) {
-    this.draft = `/${name} `;
-    this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
-  }
-
-  /** 空输入时从 caret 菜单选技能：预填 `/name `（用户续写问题后发送），
-   *  而非直接发送——没有可发送的问题（2026-10-21：caret 空输入不再禁用）。 */
-  private _onSkillPickEmpty = (e: CustomEvent<{ name: string }>) => {
-    this._prefillSkill(e.detail.name);
-  };
-
-  /** 菜单「选择技能…」→ 弹技能选择对话框（刷新候选保证最新）。 */
-  private _onSkillBrowse = () => {
-    this._skillDialogOpen = true;
-    void this._loadSkillCandidates();
-  };
-
-  private _onSkillDialogPick = (e: CustomEvent<{ skill: SkillInfo }>) => {
-    this._skillDialogOpen = false;
-    if (!this.draft.trim()) {
-      this._prefillSkill(e.detail.skill.name);
-      return;
-    }
-    void this._sendWithSkill(e.detail.skill.name);
-  };
-
-  private _onSkillDialogCancel = () => {
-    this._skillDialogOpen = false;
-  };
-
-  private _onSkillMenuPick = (e: CustomEvent<{ name: string }>) => {
-    void this._sendWithSkill(e.detail.name);
-  };
 
   /** 移动端会话导航动作（顶栏「更多」菜单）：桌面由 chat-stream 悬浮
    *  三钮组承担，移动端空间不足收进菜单（2026-11-06）。
@@ -797,24 +557,19 @@ export class ChatView extends LitElement {
       {
         label: "重命名会话",
         icon: "pencil",
-        onClick: () => { this._renameDialogOpen = true; },
+        onClick: () => { this._ops.openRename(); },
       },
       {
         label: "压缩上下文",
         icon: "archive",
         // 先弹确认框（压缩不可逆替换上下文 + 摘要调用耗时数十秒）
-        onClick: () => {
-          this._compactDialog = {
-            phase: "confirm", preTokens: 0, postTokens: 0, errorMessage: "",
-            compactedText: "",
-          };
-        },
+        onClick: () => { this._ops.openCompactConfirm(); },
       },
       {
         label: "导出会话",
         icon: "download",
         // ADR-0038：全保真 JSON 浏览器下载（跨实例记忆转移）；纯读不互斥流式
-        onClick: () => { void this._exportSession(); },
+        onClick: () => { void this._ops.exportSession(); },
       },
       {
         label: "会话信息",
@@ -830,54 +585,9 @@ export class ChatView extends LitElement {
 
   /** 手动压缩当前会话历史（ADR-0026 手动入口）：LLM 摘要落库 compacted
    *  条目，下轮起上下文从摘要开始；对话流展示不受影响。压缩期间模态框
-   *  保持打开（running 态）锁定页面交互，完成/失败切换框内结果展示。 */
-  private async _compactSession() {
-    const session = this.viewState.currentSession;
-    if (!session || this._compacting) return;
-    this._compacting = true;
-    this._compactDialog = {
-      phase: "running", preTokens: 0, postTokens: 0, errorMessage: "",
-      compactedText: "",
-    };
-    try {
-      const body = await compactSession(session.id);
-      this._compactDialog = {
-        phase: "done",
-        preTokens: body.pre_tokens ?? 0,
-        postTokens: body.post_tokens ?? 0,
-        errorMessage: "",
-        compactedText: body.compacted_text ?? "",
-      };
-      void this._refreshCompaction();
-    } catch (err) {
-      this._compactDialog = {
-        phase: "error", preTokens: 0, postTokens: 0,
-        errorMessage: (err as Error)?.message || String(err),
-        compactedText: "",
-      };
-    } finally {
-      this._compacting = false;
-    }
-  }
-
-  /** 确认压缩：切换模态框为 running 态后执行（_compactSession 自带防重入）。 */
-  private _onCompactConfirm = (): void => {
-    void this._compactSession();
-  };
-
-  private _onCompactCancel = (): void => {
-    // running 态不允许关闭（拦截 ESC/backdrop；模态 spinner 必须停留到出结果）
-    if (this._compactDialog?.phase === "running") return;
-    this._compactDialog = null;
-  };
 
   /** auto 压缩模态兜底收尾（ADR-0044）：SSE done 已到而压缩 done 事件
    *  丢失/未发（未触发压缩、网络丢包）时撤下 running 模态，防止卡死
-   *  页面；正常路径 done 事件已先行切换为 done 态，此处 no-op。 */
-  private _finalizeAutoCompactDialog(): void {
-    const d = this._compactDialog;
-    if (d?.auto && d.phase === "running") this._compactDialog = null;
-  }
 
   /** 重新拉取 detail 并聚合压缩信息（会话信息弹窗打开时刷新）。 */
   private async _refreshCompaction() {
@@ -891,80 +601,16 @@ export class ChatView extends LitElement {
     }
   }
 
-  private _onRenameSubmit = async (e: CustomEvent<{ title: string }>) => {
-    const session = this.viewState.currentSession;
-    this._renameDialogOpen = false;
-    if (!session) return;
-    try {
-      const res = await renameSession(session.id, e.detail.title);
-      // 同步当前会话与历史列表（updated_at 不动，历史顺序不变）
-      actions.setChatState({ currentSession: { ...session, title: res.title } });
-      this.historySessions = this.historySessions.map((s) =>
-        s.id === session.id ? { ...s, title: res.title } : s);
-      this._pushToast("已重命名", "success", 2500);
-    } catch (err) {
-      this._pushToast(`重命名失败：${(err as Error)?.message || err}`, "error", 5000);
-    }
-  };
-
-  private _onRenameCancel = () => {
-    this._renameDialogOpen = false;
-  };
 
   /** 历史列表星标切换：乐观翻转 starred，但保持列表顺序不变（重排在下次
    *  加载历史时自然发生），失败回滚。 */
-  private _onToggleStar = async (e: CustomEvent<{ session: Session; starred: boolean }>) => {
-    const { session, starred } = e.detail;
-    const prev = this.historySessions;
-    this.historySessions = prev
-      .map((s) => (s.id === session.id ? { ...s, starred } : s));
-    try {
-      await starSession(session.id, starred);
-      // 同步当前会话对象（加星态跟随，如 header/恢复逻辑消费）
-      const cur = this.viewState.currentSession;
-      if (cur && cur.id === session.id) {
-        actions.setChatState({ currentSession: { ...cur, starred } });
-      }
-    } catch (err) {
-      this.historySessions = prev;
-      this._pushToast(`加星失败：${(err as Error)?.message || err}`, "error", 5000);
-    }
-  };
 
-  /** 会话改名对话框宿主（<dialog> 由 updated() showModal）。 */
-  private _renderRenameDialog() {
-    const session = this.viewState.currentSession;
-    if (!this._renameDialogOpen || !session) return nothing;
-    return html`
-      <dialog @cancel=${this._onRenameCancel}>
-        <session-rename-dialog
-          .currentTitle=${session.title}
-          @submit=${this._onRenameSubmit}
-          @cancel=${this._onRenameCancel}
-        ></session-rename-dialog>
-      </dialog>`;
-  }
+  /** 会话改名对话框宿主（<c-dialog> 公共件外壳，AP-3）。 */
 
-  /** 视觉能力拦截对话框（ADR-0034 L3）：当前模型不支持视觉，消息未发送、
-   *  草稿与附件保留——「前往设置」跳模型 tab 手动切换（预设热生效）。 */
-  private _renderVisionGateDialog() {
-    if (!this._visionGateOpen) return nothing;
-    return html`
-      <dialog @cancel=${() => (this._visionGateOpen = false)}>
-        <div class="vision-gate">
-          <h3>当前模型不支持图像</h3>
-          <p>这条消息带有图片，但当前对话模型（${store.getState().status?.model_name || "未命名"}）
-            未声明视觉能力，发送会被模型忽略或报错。</p>
-          <p class="vision-gate-hint">在设置 → 模型中切换到支持视觉的模型预设
-            （或编辑当前预设勾选「支持视觉」），切换即时生效，回来重新发送即可。
-            消息与图片已保留在输入框。</p>
-          <div class="vision-gate-actions">
-            <button class="secondary" @click=${() => (this._visionGateOpen = false)}>取消</button>
-            <button class="primary" @click=${this._gotoModelSettings}>前往设置</button>
-          </div>
-        </div>
-      </dialog>`;
-  }
+
+  /** 视觉能力拦截对话框（ADR-0034 L3）：当前模型不支持视觉时弹出，引导
+   *  跳设置页切换；拦截的消息/图保留在草稿与暂存区。 */
+
 
   /** 跳设置页模型 tab（ADR-0034）：写 pendingSettingsTab 再导航，keep-alive
    *  下由 store 订阅消费。 */
@@ -976,30 +622,26 @@ export class ChatView extends LitElement {
 
   // ---- 插话（ADR-0048）----
 
-  /** 插话输入框草稿（dialog 打开期间）。 */
-  @state() private _interjectDraft = "";
-
   /** trace 标题栏「插话」按钮 → 打开原生 dialog（ADR-0048 决策 7）。
    *  入口在生成中才渲染（组件侧控制）；恢复态（无本地流但 generating）
    *  同样可达——按钮显隐由 chat-tool-trace 按 running 步骤判定。 */
   private _onInterjectRequest = (): void => {
-    this._interjectDraft = "";
     this._interjectDialogOpen = true;
   };
 
   private _onInterjectCancel = (): void => {
     this._interjectDialogOpen = false;
-    this._interjectDraft = "";
   };
 
   /** 提交插话：写会话单槽位，按钮转「已插入」等检查点送达（ack 回落）。
    *  拒绝路径（占用/不在生成）toast 提示，dialog 关闭。 */
-  private _onInterjectSubmit = async (): Promise<void> => {
+  private _onInterjectSubmit = async (
+    e: CustomEvent<{ text: string }>,
+  ): Promise<void> => {
     const session = store.getState().chat.currentSession;
-    const text = this._interjectDraft.trim();
+    const text = e.detail.text;
     if (!session || !text) return;
     this._interjectDialogOpen = false;
-    this._interjectDraft = "";
     const r = await interject(session.id, text);
     if (r === "ok") {
       this._interjectPending = true;
@@ -1013,72 +655,11 @@ export class ChatView extends LitElement {
     }
   };
 
-  /** 插话输入 dialog（原生 <dialog>，仓库惯例 showModal）。 */
-  private _renderInterjectDialog() {
-    if (!this._interjectDialogOpen) return nothing;
-    return html`
-      <dialog @cancel=${this._onInterjectCancel}>
-        <div class="interject-dialog">
-          <h3>插话</h3>
-          <p class="interject-hint">向正在执行的 AI 提问或下达临时指令。当前步骤
-            完成后送达，AI 只做文字汇报并继续原任务，不会被打断。</p>
-          <textarea
-            rows="4"
-            placeholder="例如：现在进度汇报一下 / 改用方案 B / 已读文件里有线索吗"
-            .value=${this._interjectDraft}
-            @input=${(e: InputEvent) => {
-              this._interjectDraft = (e.target as HTMLTextAreaElement).value;
-            }}
-            @keydown=${(e: KeyboardEvent) => {
-              // Ctrl/Cmd+Enter 快捷提交（Enter 留给多行输入）
-              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                e.preventDefault();
-                void this._onInterjectSubmit();
-              }
-            }}></textarea>
-          <div class="interject-actions">
-            <button class="secondary" @click=${this._onInterjectCancel}>取消</button>
-            <button class="primary" ?disabled=${!this._interjectDraft.trim()}
-                    @click=${this._onInterjectSubmit}>插入</button>
-          </div>
-        </div>
-      </dialog>`;
-  }
+  /** 插话输入 dialog 宿主（<c-dialog> 公共件外壳，AP-3）。 */
+
 
   /** 会话信息对话框宿主（2026-09-17；<dialog> 由 updated() showModal）。 */
-  private _renderInfoDialog() {
-    if (!this._infoDialogOpen || !this.viewState.currentSession) return nothing;
-    // 占用口径：压缩晚于最近一次 LLM 调用时，最近实测已不代表当前上下文
-    // （历史已被摘要替换）——显示压缩后估算并标注；下轮对话实测覆盖
-    const usage = this._sessionUsage;
-    const compaction = this._sessionCompaction;
-    const useEstimate =
-      compaction !== null &&
-      compaction.lastPostTokens > 0 &&
-      compaction.lastSeq > (usage?.lastSeq ?? -1);
-    const used = useEstimate
-      ? compaction!.lastPostTokens
-      : usage?.used ?? null;
-    return html`
-      <dialog @cancel=${this._onInfoClose}>
-        <session-info-dialog
-          .sessionId=${this.viewState.currentSession?.id ?? ""}
-          .used=${used}
-          .usedIsEstimate=${useEstimate}
-          .contextWindow=${usage?.contextWindow ?? 0}
-          .cacheReadTotal=${usage?.cacheReadTotal ?? null}
-          .inputTotal=${usage?.inputTotal ?? null}
-          .calls=${usage?.calls ?? 0}
-          .lastCallRead=${usage ? usage.lastRead : null}
-          .lastCallUsed=${usage?.lastUsed ?? 0}
-          .compactionCount=${compaction?.count ?? 0}
-          .lastCompactedAt=${compaction?.lastAt ?? null}
-          .lastPreTokens=${compaction?.lastPreTokens ?? null}
-          @close=${this._onInfoClose}
-          @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}
-        ></session-info-dialog>
-      </dialog>`;
-  }
+
 
   private _onInfoClose = () => {
     this._infoDialogOpen = false;
@@ -1090,7 +671,7 @@ export class ChatView extends LitElement {
   private async _sendWithSkill(name: string) {
     const question = this.draft.trim();
     if (!question) return;
-    recordSkillUse(name);
+    this._skills.recordUse(name);
     const message = `/${name} ${question}`;
     this.draft = "";
     if (this.viewState.state === "initial") {
@@ -1108,7 +689,7 @@ export class ChatView extends LitElement {
     if (s.state === "focus" && s.currentSession) {
       await this._loadSession(s.currentSession);
     } else if (s.state === "initial") {
-      await this._loadHistory();
+      await void this._history.load();
     }
   }
 
@@ -1130,7 +711,7 @@ export class ChatView extends LitElement {
 
   /** 会话库恢复完成（ADR-0047）：重拉历史；当前会话不复存在时回欢迎页。 */
   private _onSessionsRestored = (): void => {
-    void this._loadHistory();
+    void void this._history.load();
     const cur = store.getState().chat.currentSession;
     if (cur) {
       void fetchSessionDetail(cur.id, { metaOnly: true })
@@ -1273,260 +854,9 @@ export class ChatView extends LitElement {
     }
   }
 
-  private async _loadHistory(page = 1) {
-    try {
-      const offset = (page - 1) * 200;
-      const { sessions } = await listSessions({ type: "chat", limit: 200, offset });
-      // 后端固定 starred DESC 返回；混排模式下按时间整理回时间线
-      this.historySessions = this._starPin
-        ? sessions
-        : [...sessions].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-      this._historyPage = page;
-    } catch (e) {
-      console.warn("load history failed", e);
-    }
-  }
 
-  private _onHistoryPage = (e: CustomEvent<{ page: number }>) => {
-    this._loadHistory(e.detail.page);
-    // 翻页后回到列表顶部
-    this.renderRoot.querySelector("history-list")?.scrollIntoView({ block: "start" });
-  };
 
-  /** 星标置顶开关：仅影响前端展示排序（后端仍按 starred DESC 返回），
-   *  关闭时把已拉取的星标条目按时间混排回去。 */
-  private _onStarPinChange = (e: CustomEvent<{ value: boolean }>) => {
-    this._starPin = e.detail.value;
-    localStorage.setItem(ChatView.STAR_PIN_KEY, e.detail.value ? "1" : "0");
-    if (!this._starPin) {
-      this.historySessions = [...this.historySessions]
-        .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-    } else {
-      // 重新拉第 1 页（_loadHistory 内部按 _starPin 整理）
-      this._loadHistory(1);
-    }
-  };
-
-  private async _onClearHistory() {
-    this._clearing = true;
-    this.requestUpdate();
-    try {
-      const res = await clearSessions("chat");
-      // 加星会话受保护：后端跳过，本地保留
-      this.historySessions = this.historySessions.filter((s) => s.starred);
-      if (res.skipped_starred > 0) {
-        this._pushToast(
-          `已清空 ${res.deleted_count} 条，${res.skipped_starred} 条加星会话保留`,
-          "info", 3500);
-      }
-    } catch (e) {
-      console.warn("clear sessions failed", e);
-    } finally {
-      this._clearing = false;
-      this.requestUpdate();
-    }
-  }
-
-  /** 导出当前会话（ADR-0038）：全保真 JSON，跨实例记忆转移。
-   *  WebView 内 `<a download>`（blob URL）在 X5 无下载 UI → 走 jsbridge
-   *  原生下载（写 Downloads + 系统通知）；浏览器仍走 fetch+blob。
-   *  uptoSeq 非空 = 截断导出（导出到此为止，2026-10-29）：只导该 user
-   *  消息及之前的条目，产物是新 id 的派生会话（避免整段上下文过长）。 */
-  private async _exportSession(uptoSeq?: number): Promise<void> {
-    const cur = this.viewState.currentSession;
-    if (!cur) return;
-    const truncated = uptoSeq !== undefined;
-    try {
-      if (jsbridgeDownloadAvailable()) {
-        const r = await downloadFromUrl(
-          sessionExportUrl(cur.id, uptoSeq),
-          sessionExportFileName(cur.title || "", truncated),
-        );
-        if (r.via !== "jsbridge") return;
-        if (r.name) this._pushToast(`已导出：${r.name}（保存在下载目录）`, "success", 3500);
-        else if (r.error) this._pushToast(`导出失败：${r.error}`, "error", 5000);
-        // 两字段皆空 = unauthorized 已在公共编排内跳登录，此处静默
-        return;
-      }
-      await exportSession(cur.id, uptoSeq);
-      this._pushToast(
-        truncated ? "已导出（截至该消息）" : "已导出会话文件",
-        "success", 2500,
-      );
-    } catch (e) {
-      this._pushToast(`导出失败：${(e as Error)?.message || e}`, "error", 5000);
-    }
-  }
-
-  /** user 气泡「导出到此为止」：截断导出到该消息（含）为止。 */
-  private _onExportUpto = (e: CustomEvent<{ seq: number }>): void => {
-    void this._exportSession(e.detail.seq);
-  };
-
-  /** 导入会话（ADR-0038）：浏览器 = 文件选择器 → 确认框（标题/条目数）→
-   *  上传；WebView 内改用原生选择器 + 直传（X5 不弹 input file）。
-   *  toast 报告 + 列表刷新；不自动进入（导入是数据操作不是导航操作）。
-   *
-   *  2026-10-29：确认改用原生 <dialog>（window.confirm 可能被浏览器
-   *  「阻止此页面创建更多对话框」静默返回 false = 点了没反应）；后端回报
-   *  同 id 已存在时，弹「作为副本导入」分支而不是一闪而过的 toast。 */
-  private _onImportHistory(): void {
-    if (jsbridgeUploadAvailable()) {
-      void this._importViaJsbridge();
-      return;
-    }
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "application/json,.json";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (file) void this._importSessionFile(file);
-    };
-    input.click();
-  }
-
-  /** WebView 原生导入：pickAndUploadFiles 选中 JSON 直传
-   *  /api/sessions/import/upload（multipart），H5 不碰文件字节。
-   *  服务端借 path 字段回报 imported / skipped。 */
-  private async _importViaJsbridge(): Promise<void> {
-    if (this._importing) return;
-    this._importing = true;
-    try {
-      const res = await pickAndUploadFiles({
-        destDir: "",
-        uploadUrl: sessionImportUploadUrl(),
-        maxCount: 1,
-      });
-      if (!res) return; // 用户在选择器取消
-      if (res.unauthorized) {
-        // 与 client.ts 的 401 统一钩子行为对齐
-        actions.setAuthState({ authenticated: false });
-        router.navigate("login");
-        return;
-      }
-      const item = res.results[0];
-      if (!item) {
-        this._pushToast("导入失败：未选择文件", "error", 5000);
-        return;
-      }
-      if (!item.ok) {
-        this._pushToast(`导入失败：${item.detail || item.code || "未知错误"}`, "error", 5000);
-        return;
-      }
-      if (item.path === "skipped") {
-        // 已导入过：展示「作为副本导入」分支（副本需重新选文件——原生
-        // 直传通道不把文件字节交给 H5，只能再走一次选择器）。
-        this._importDialog = {
-          fileName: "", title: "", count: 0,
-          phase: "exists", data: null, webview: true,
-        };
-        await this._loadHistory();
-        return;
-      }
-      this._pushToast("已导入会话", "success", 3000);
-      await this._loadHistory();
-    } catch (e) {
-      this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
-    } finally {
-      this._importing = false;
-    }
-  }
-
-  /** 浏览器路径：解析文件 → 打开原生确认框（不直接用 window.confirm）。 */
-  private async _importSessionFile(file: File): Promise<void> {
-    let data: unknown;
-    try {
-      data = JSON.parse(await file.text());
-    } catch {
-      this._pushToast("导入失败：文件不是合法 JSON", "error", 5000);
-      return;
-    }
-    // 前端轻量预读（标题/条目数）供确认展示；完整结构校验在后端
-    const d = data as { session?: { title?: unknown }; items?: unknown };
-    const title = typeof d.session?.title === "string" ? d.session.title : "";
-    const count = Array.isArray(d.items) ? d.items.length : 0;
-    this._importDialog = {
-      fileName: file.name, title, count,
-      phase: "confirm", data, webview: false,
-    };
-  }
-
-  /** 确认框「导入 / 作为副本导入」（detail.asCopy）。 */
-  private _onImportConfirm = async (
-    e: CustomEvent<{ asCopy: boolean }>,
-  ): Promise<void> => {
-    const asCopy = !!e.detail?.asCopy;
-    const dlg = this._importDialog;
-    if (!dlg) return;
-
-    // WebView 副本路径：无文件字节，重新拉起原生选择器（as_copy 直传端点）
-    if (dlg.webview) {
-      if (!asCopy) return;
-      this._importDialog = null;
-      await this._importViaJsbridgeCopy();
-      return;
-    }
-
-    if (dlg.data === null) return;
-    this._importDialog = { ...dlg, phase: "busy" };
-    try {
-      const res = await importSession(dlg.data, { asCopy });
-      if (res.imported > 0) {
-        this._importDialog = null;
-        this._pushToast(
-          asCopy
-            ? `已导入副本「${dlg.title || dlg.fileName}」`
-            : `已导入会话「${dlg.title || dlg.fileName}」`,
-          "success", 3000,
-        );
-        await this._loadHistory();  // 刷新列表（导入即置顶）
-        return;
-      }
-      // skipped：切到「已存在」态，让用户决定是否作为副本导入
-      this._importDialog = { ...dlg, phase: "exists" };
-    } catch (e) {
-      this._importDialog = { ...dlg, phase: "confirm" };
-      this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
-    }
-  };
-
-  /** WebView 副本导入：带 as_copy 再走一次原生选择器直传。 */
-  private async _importViaJsbridgeCopy(): Promise<void> {
-    if (this._importing) return;
-    this._importing = true;
-    try {
-      const res = await pickAndUploadFiles({
-        destDir: "",
-        uploadUrl: sessionImportUploadUrl(true),
-        maxCount: 1,
-      });
-      if (!res) return;
-      if (res.unauthorized) {
-        actions.setAuthState({ authenticated: false });
-        router.navigate("login");
-        return;
-      }
-      const item = res.results[0];
-      if (!item || !item.ok) {
-        this._pushToast(
-          `导入失败：${item?.detail || item?.code || "未选择文件"}`, "error", 5000,
-        );
-        return;
-      }
-      this._pushToast("已导入会话副本", "success", 3000);
-      await this._loadHistory();
-    } catch (e) {
-      this._pushToast(`导入失败：${(e as Error)?.message || e}`, "error", 5000);
-    } finally {
-      this._importing = false;
-    }
-  }
-
-  private _onImportCancel = (): void => {
-    this._importDialog = null;
-  };
-
-  private get viewState() {
+    private get viewState() {
     return store.getState().chat;
   }
 
@@ -1553,10 +883,10 @@ export class ChatView extends LitElement {
     // 调用）。非法阻断发送并保留草稿（后端对漏网的非法斜杠按普通文本处理，
     // 不注入 hint）；合法则记录最近技能后按普通消息原样发送——hint 由后端
     // 在发送给 LLM 时注入（展示保真/落库原文）。
-    if (message.startsWith("/") && this._skillCandidates === null) {
-      await this._loadSkillCandidates();
+    if (message.startsWith("/") && this._skills.candidates === null) {
+      await this._skills.loadCandidates();
     }
-    const check = checkSlashSubmit(message, this._skillCandidates);
+    const check = this._skills.checkSubmit(message);
     if (check.type === "unknown") {
       this.draft = message; // 恢复草稿便于修正
       this._pushToast(
@@ -1566,8 +896,6 @@ export class ChatView extends LitElement {
       );
       return;
     }
-    if (check.type === "ok") recordSkillUse(check.name);
-
     this.draft = "";
 
     // initial 态时消息发送前先建会话（与技能对话共用路径）
@@ -1601,8 +929,8 @@ export class ChatView extends LitElement {
     this._markTabSession(created.id); // 新会话也算本页当前会话
     this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
     this._rewindDividers = []; // 新会话：无回退边界
-    this._rewindDialog = null;
-    this._deleteTurnDialog = null;
+    this._ops.cancelRewind();
+    this._ops.cancelDeleteTurn();
     actions.setChatState({
       state: "focus",
       currentSession: {
@@ -1680,15 +1008,15 @@ export class ChatView extends LitElement {
           // 回合末自动压缩（ADR-0044）：start → 不可关闭模态 running 态；
           // done → 框内展示 pre→post 结果（「完成」按钮才可关）。
           // 手动压缩弹窗在场时让位（同一次压缩不叠两个模态）。
-          if (this._compactDialog && !this._compactDialog.auto) break;
-          this._compactDialog = {
+          if (this._ops.compactDialog && !this._ops.compactDialog.auto) break;
+          this._ops.setAutoCompactDialog({
             phase: ev.phase === "done" ? "done" : "running",
             preTokens: ev.pre_tokens ?? 0,
             postTokens: ev.post_tokens ?? 0,
             errorMessage: "",
             compactedText: "",
             auto: true,
-          };
+          });
           if (ev.phase === "done") void this._refreshCompaction();
         } else if (ev.type === "usage") {
           // 与恢复态聚合共用 applyUsageEvent（口径单一真相源）；
@@ -1705,7 +1033,7 @@ export class ChatView extends LitElement {
           // 对话式提问（ADR-0033）：回合因提问而终止，输入框已解锁——
           // 提示用户直接发消息作答（答案即下一条用户消息）
           this._pushToast("等待你的回复：直接发送消息回答上面的问题即可", "info", 5000);
-          this._finalizeAutoCompactDialog();
+          this._ops.finalizeAutoCompactDialog();
         } else if (ev.type === "interject_ack") {
           // 插话送达（ADR-0048）：占位 trace 末追加 running 插话卡
           // （interject_report 到达回填 output；回合落库条目随 raw 回放一致）
@@ -1754,8 +1082,8 @@ export class ChatView extends LitElement {
       // 维持流式视图（重进会话时经 detail 重建）。切走了就别动当前会话的
       // 收尾状态（弹窗/输入锁属于正在展示的那个会话）；历史列表是全局的，
       // 照常刷新（标题/条数随本轮落库更新）。
-      if (stillOwn()) this._finalizeAutoCompactDialog();
-      this._loadHistory();
+      if (stillOwn()) this._ops.finalizeAutoCompactDialog();
+      void this._history.load();
     } catch (err) {
       if (this._isAbortError(err)) {
         // 用户主动停止：保留已生成的半截回答（2026-09-22 语义变更：后端
@@ -1764,7 +1092,7 @@ export class ChatView extends LitElement {
         if (stillOwn()) {
           messages = finalizeInterruptedMessages(messages);
           actions.setChatState({ messages });
-          this._loadHistory();
+          void this._history.load();
         }
       } else {
         // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断。
@@ -1834,14 +1162,14 @@ export class ChatView extends LitElement {
   private _backToInitial() {
     this._resetPreview();
     this._activeAsk = null;
-    this._highlightSessionId = null; // 「新会话」返回后不残留旧高亮
+    this._history.setHighlight(null); // 「新会话」返回后不残留旧高亮
     this._markTabSession(null); // 回到欢迎页：本页不再挂着任何会话
     this._rewindDividers = [];
-    this._rewindDialog = null;
-    this._deleteTurnDialog = null;
+    this._ops.cancelRewind();
+    this._ops.cancelDeleteTurn();
     this._stopGeneratingPoll();
     actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null });
-    this._loadHistory();
+    void this._history.load();
   }
 
   /** 清空预览 pane 的全部状态（导航离开当前对话时调用，避免残留旧文档）。
@@ -1855,7 +1183,7 @@ export class ChatView extends LitElement {
     this._resetPreview();
     this._activeAsk = null;
     this._interjectPending = false;
-    this._highlightSessionId = s.id;
+    this._history.setHighlight(s.id);
     this._markTabSession(s.id); // 本页当前会话（自动恢复只看本页，见 _autoResumeIfGenerating）
     actions.setChatState({
       state: "focus",
@@ -1916,39 +1244,10 @@ export class ChatView extends LitElement {
     }
   }
 
-  private _onHistorySelect(e: CustomEvent<{ session: Session }>) {
-    this._loadSession(e.detail.session);
-  }
 
   /** 历史条目「复制会话」（2026-10-10）：先弹确认框说明复制语义，确认后
    *  调孪生复制 API → 刷新历史 → 直接进入孪生会话（复制即为了继续干活，
    *  避免再点一次）。失败 toast。 */
-  private _onForkSession(e: CustomEvent<{ session: Session }>) {
-    this._forkDialogSession = e.detail.session;
-  }
-
-  private _onForkCancel = () => {
-    this._forkDialogSession = null;
-  };
-
-  private _onForkConfirm = async (): Promise<void> => {
-    const session = this._forkDialogSession;
-    this._forkDialogSession = null;
-    if (!session) return;
-    try {
-      const twin = await duplicateSession(session.id);
-      await this._loadHistory();
-      // 复用 Session 形态进入会话（starred/mode 已知，免一次 get）
-      this._loadSession({
-        id: twin.id, type: "chat", title: twin.title, preview: twin.preview,
-        updated_at: new Date().toISOString(),
-        message_count: session.message_count, mode: session.mode,
-      });
-      this._pushToast("已复制会话，原会话保留", "success", 2500);
-    } catch (err) {
-      this._pushToast(`复制会话失败：${(err as Error)?.message || err}`, "error", 5000);
-    }
-  };
 
   private _loadPreviewPaneWidth(): void {
     const saved = localStorage.getItem(ChatView.PREVIEW_PANE_WIDTH_KEY);
@@ -2035,204 +1334,29 @@ export class ChatView extends LitElement {
     }
   }
 
-  /** 点击 user 气泡的「回退到这里」：算折叠数并弹确认框（ADR-2026-09-19）。 */
-  private _onRewind(e: CustomEvent<{ seq: number; content: string; images?: { data: string; media_type: string }[] }>): void {
-    if (this.viewState.streaming) return; // 流式期间按钮已禁用，双保险
-    const anchorSeq = e.detail.seq;
-    // 折叠数 = 锚点及其后的活消息（锚点回填输入框，同样从时间线消失）
-    const deadCount = this.viewState.messages.filter(
-      (m) => m.seq !== undefined && m.seq >= anchorSeq,
-    ).length;
-    this._rewindDialog = {
-      seq: anchorSeq, content: e.detail.content, deadCount,
-      images: e.detail.images,
-    };
-  }
-
-  /** 确认回退：POST → 重拉 detail（渲染新折叠条）→ 锚点内容回填输入框。 */
-  private async _onRewindConfirm(
-    e: CustomEvent<{ pointSeq: number; restoreFiles: boolean }>,
-  ): Promise<void> {
-    const session = this.viewState.currentSession;
-    const anchor = this._rewindDialog;
-    this._rewindDialog = null;
-    if (!session || !anchor) return;
-    try {
-      const res = await rewindSession(
-        session.id, e.detail.pointSeq, e.detail.restoreFiles,
-      );
-      this.draft = anchor.content;
-      this._pendingImages = anchor.images ?? [];
-      const f = res.files;
-      const parts: string[] = [];
-      if (f.restored.length) parts.push(`恢复 ${f.restored.length} 个文件`);
-      if (f.deleted.length) parts.push(`删除 ${f.deleted.length} 个文件`);
-      if (f.failed.length) parts.push(`${f.failed.length} 个文件处置失败`);
-      this._pushToast(
-        parts.length ? `已回退（${parts.join("，")}）` : "已回退",
-        f.failed.length ? "info" : "success",
-        4000,
-      );
-      await this._loadSession(session);
-    } catch (err) {
-      this._pushToast(`回退失败：${(err as Error)?.message || err}`, "error", 5000);
-    }
-  }
-
-  private _onRewindCancel = (): void => {
-    this._rewindDialog = null;
-  };
 
   /** user 气泡「删除这一轮」：弹确认框（删除不可撤销，不直接执行）。
-   *  本轮消息数 = 锚点起、到下一条 user 消息之前的可见消息条数。 */
-  private _onDeleteTurn(e: CustomEvent<{ seq: number }>): void {
-    const seq = e.detail.seq;
-    const msgs = this.viewState.messages.filter((m) => m.seq !== undefined);
-    const nextUser = msgs.find(
-      (m) => m.role === "user" && (m.seq as number) > seq,
-    );
-    const end = nextUser?.seq ?? Infinity;
-    const inTurn = msgs.filter(
-      (m) => (m.seq as number) >= seq && (m.seq as number) < end,
-    );
-    const anchorMsg = msgs.find((m) => m.seq === seq);
-    this._deleteTurnDialog = {
-      seq,
-      content: anchorMsg?.content ?? "",
-      turnMessageCount: Math.max(inTurn.length, 1),
-      submitting: false,
-      errorMessage: "",
-    };
-  }
 
-  /** 确认删轮：DELETE → 重拉 detail（消息流与压缩信息同步刷新）。 */
-  private async _onDeleteTurnConfirm(
-    e: CustomEvent<{ pointSeq: number }>,
-  ): Promise<void> {
-    const session = this.viewState.currentSession;
-    const d = this._deleteTurnDialog;
-    if (!session || !d) return;
-    this._deleteTurnDialog = { ...d, submitting: true, errorMessage: "" };
-    try {
-      const res = await deleteTurn(session.id, e.detail.pointSeq);
-      this._deleteTurnDialog = null;
-      this._pushToast(
-        `已删除该轮对话（剩 ${res.message_count} 条消息）`, "success", 3000,
-      );
-      await this._loadSession(session);
-    } catch (err) {
-      this._deleteTurnDialog = {
-        ...d, submitting: false,
-        errorMessage: (err as Error)?.message || String(err),
-      };
-    }
-  }
+  /** 删轮确认框宿主（<c-dialog> 公共件外壳，AP-3）。 */
 
-  private _onDeleteTurnCancel = (): void => {
-    this._deleteTurnDialog = null;
-  };
 
-  /** 删轮确认框宿主（<dialog> 由 updated() showModal）。 */
-  private _renderDeleteTurnDialog() {
-    const d = this._deleteTurnDialog;
-    const session = this.viewState.currentSession;
-    if (!d || !session) return nothing;
-    return html`
-      <dialog @cancel=${(e: Event) => {
-        if (d.submitting) e.preventDefault();
-        else this._onDeleteTurnCancel();
-      }}>
-        <turn-delete-dialog
-          .pointSeq=${d.seq}
-          .anchorContent=${d.content}
-          .turnMessageCount=${d.turnMessageCount}
-          .submitting=${d.submitting}
-          .errorMessage=${d.errorMessage}
-          @turn-delete-confirm=${this._onDeleteTurnConfirm}
-          @cancel=${this._onDeleteTurnCancel}>
-        </turn-delete-dialog>
-      </dialog>`;
-  }
+  /** 回退确认框宿主（<c-dialog> 公共件外壳，AP-3）。 */
 
-  /** 回退确认框宿主（<dialog> 由 updated() showModal）。 */
-  private _renderRewindDialog() {
-    const d = this._rewindDialog;
-    const session = this.viewState.currentSession;
-    if (!d || !session) return nothing;
-    return html`
-      <dialog @cancel=${this._onRewindCancel}>
-        <rewind-dialog
-          .sessionId=${session.id}
-          .pointSeq=${d.seq}
-          .anchorContent=${d.content}
-          .deadCount=${d.deadCount}
-          @rewind-confirm=${this._onRewindConfirm}
-          @cancel=${this._onRewindCancel}>
-        </rewind-dialog>
-      </dialog>`;
-  }
 
-  /** 压缩上下文模态框宿主（<dialog> 由 updated() showModal）。running 态
+  /** 压缩上下文模态框宿主（<c-dialog> 公共件外壳，AP-3）。running 态
    *  拦截 cancel（ESC/无法点 backdrop——dialog 默认无 backdrop 点击关闭），
    *  保证压缩期间模态锁定页面。 */
-  private _renderCompactDialog() {
-    const d = this._compactDialog;
-    if (!d) return nothing;
-    return html`
-      <dialog @cancel=${(e: Event) => {
-        if (d.phase === "running") e.preventDefault();
-        else this._onCompactCancel();
-      }}>
-        <compact-confirm-dialog
-          .phase=${d.phase}
-          .preTokens=${d.preTokens}
-          .postTokens=${d.postTokens}
-          .errorMessage=${d.errorMessage}
-          .compactedText=${d.compactedText}
-          @compact-confirm=${this._onCompactConfirm}
-          @cancel=${this._onCompactCancel}
-        ></compact-confirm-dialog>
-      </dialog>`;
-  }
+
 
   /** 孪生复制确认框宿主（2026-10-10；<dialog> 由 updated() showModal）——
    *  历史列表在 initial 分支，但渲染挂 focus 分支末尾同理可行；这里挂在
    *  initial 分支（fork 按钮只出现在历史列表）。 */
-  private _renderForkDialog() {
-    const s = this._forkDialogSession;
-    if (!s) return nothing;
-    return html`
-      <dialog @cancel=${this._onForkCancel}>
-        <fork-confirm-dialog
-          .sessionTitle=${s.title}
-          @fork-confirm=${this._onForkConfirm}
-          @cancel=${this._onForkCancel}
-        ></fork-confirm-dialog>
-      </dialog>`;
-  }
 
-  /** 导入确认框宿主（<dialog> 由 updated() showModal）——2026-10-29 取代
+
+  /** 导入确认框宿主（<c-dialog> 公共件外壳，AP-3）——2026-10-29 取代
    *  window.confirm（可被浏览器静默抑制），并承载「同 id 已存在 → 作为
    *  副本导入」分支。 */
-  private _renderImportDialog() {
-    const d = this._importDialog;
-    if (!d) return nothing;
-    return html`
-      <dialog @cancel=${(e: Event) => {
-        if (d.phase === "busy") e.preventDefault();
-        else this._onImportCancel();
-      }}>
-        <import-confirm-dialog
-          .fileName=${d.fileName}
-          .sessionTitle=${d.title}
-          .itemCount=${d.count}
-          .phase=${d.phase}
-          ?webview=${d.webview}
-          @import-confirm=${this._onImportConfirm}
-          @cancel=${this._onImportCancel}
-        ></import-confirm-dialog>
-      </dialog>`;
-  }
+
 
   /** PST 邮件列表行点击 → 打开派生邮件预览（与点击引用同路径）。 */
   private _onOpenPstEmail = async (e: CustomEvent<{ path: string }>): Promise<void> => {
@@ -2297,12 +1421,16 @@ export class ChatView extends LitElement {
 
   /** 预览 pane 阅读书签收藏反馈（added / duplicate / full）。 */
   private _onBookmarkAdded = (): void => this._pushToast("已收藏书签", "success", 2500);
+
+  /** 预览 md 复制失败（AP-5 遗留接线：md-viewer 的 copy-failed 冒泡穿
+   *  shadow 到宿主，此前预览页无监听——失败无反馈）。 */
+  private _onPreviewCopyFailed = (): void =>
+    this._pushToast("复制失败，请手动选择文本", "error", 5000);
   private _onBookmarkDuplicate = (): void => this._pushToast("此处已有书签", "info", 2500);
   private _onBookmarkFull = (): void => this._pushToast("书签已满（200 条），请先清理", "error", 5000);
 
   private _pushToast(message: string, level: "success" | "error" | "info", duration: number): void {
-    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
-    stack?.pushToast(message, level, duration);
+    pushLocalToast(this, message, level, duration);
   }
 
   private _renderNotIndexedHint(): unknown {
@@ -2337,20 +1465,20 @@ export class ChatView extends LitElement {
           <history-list
             title="历史会话"
             type="chat"
-            ?clearing=${this._clearing}
-            .sessions=${this.historySessions}
-            .activeId=${this._highlightSessionId}
-            .page=${this._historyPage}
-            ?hasMore=${this.historySessions.length >= 200}
-            .starPin=${this._starPin}
+            ?clearing=${this._history.clearing}
+            .sessions=${this._history.sessions}
+            .activeId=${this._history.highlightSessionId}
+            .page=${this._history.page}
+            ?hasMore=${this._history.hasMore}
+            .starPin=${this._history.starPin}
             ?importable=${true}
-            @select=${this._onHistorySelect}
-            @toggle-star=${this._onToggleStar}
-            @fork=${this._onForkSession}
-            @page-change=${this._onHistoryPage}
-            @star-pin-change=${this._onStarPinChange}
-            @clear=${this._onClearHistory}
-            @import=${this._onImportHistory}>
+            @select=${(e: CustomEvent<{ session: Session }>) => this._loadSession(e.detail.session)}
+            @toggle-star=${(e: CustomEvent<{ session: Session; starred: boolean }>) => void this._history.toggleStar(e.detail.session.id, e.detail.starred)}
+            @fork=${(e: CustomEvent<{ session: Session }>) => this._ops.openFork(e.detail.session)}
+            @page-change=${(e: CustomEvent<{ page: number }>) => void this._history.goToPage(e.detail.page)}
+            @star-pin-change=${(e: CustomEvent<{ value: boolean }>) => void this._history.setStarPin(e.detail.value)}
+            @clear=${() => void this._history.clear()}
+            @import=${() => this._ops.importHistory()}>
           </history-list>
           <div class="input-row">
             <input-box
@@ -2361,23 +1489,23 @@ export class ChatView extends LitElement {
               attachments
               .value=${this.draft}
               .images=${this._pendingImages}
-              .skillItems=${this._recentSkillItems}
-              .slashItems=${this._skillCandidates}
+              .skillItems=${this._skills.recentItems}
+              .slashItems=${this._skills.candidates}
               @input-change=${(e: any) => (this.draft = e.detail.value)}
               @images-change=${(e: any) => (this._pendingImages = e.detail.images)}
               @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
-              @skill-menu-open=${this._onSkillMenuOpen}
-              @skill-pick=${this._onSkillMenuPick}
-              @skill-pick-empty=${this._onSkillPickEmpty}
-              @skill-browse=${this._onSkillBrowse}
+              @skill-menu-open=${() => this._skills.onMenuOpen()}
+              @skill-pick=${(e: CustomEvent<{ name: string }>) => this._skills.pickFromMenu(e.detail.name)}
+              @skill-pick-empty=${(e: CustomEvent<{ name: string }>) => this._skills.prefillOnly(e.detail.name)}
+              @skill-browse=${() => this._skills.openDialog()}
               @submit=${this._submit}>
             </input-box>
           </div>
         </div>
-        ${this._renderSkillDialog()}
-        ${this._renderVisionGateDialog()}
-        ${this._renderForkDialog()}
-        ${this._renderImportDialog()}
+        ${this._dialogs.skill()}
+        ${this._dialogs.visionGate()}
+        ${this._dialogs.fork()}
+        ${this._dialogs.import()}
       `;
     }
     const hasPreview = this.previewOpen;
@@ -2408,6 +1536,7 @@ export class ChatView extends LitElement {
       @saved=${this._onPreviewSaved}
       @save-failed=${this._onPreviewSaveFailed}
       @path-copied=${this._onPathCopied}
+      @copy-failed=${this._onPreviewCopyFailed}
       @bookmark-added=${this._onBookmarkAdded}
       @bookmark-duplicate=${this._onBookmarkDuplicate}
       @bookmark-full=${this._onBookmarkFull}
@@ -2432,9 +1561,9 @@ export class ChatView extends LitElement {
             ?interjectPending=${this._interjectPending}
             @reference-click=${this._onReferenceClick}
             @reask=${this._onReask}
-            @rewind=${this._onRewind}
-            @export-upto=${this._onExportUpto}
-            @delete-turn=${this._onDeleteTurn}
+            @rewind=${(e: CustomEvent<{ seq: number; content: string; images?: { data: string; media_type: string }[] }>) => this._ops.openRewind(e)}
+            @export-upto=${(e: CustomEvent<{ seq: number }>) => void this._ops.exportSession(e.detail.seq)}
+            @delete-turn=${(e: CustomEvent<{ seq: number }>) => this._ops.openDeleteTurn(e)}
             @interject-request=${this._onInterjectRequest}
             @chat-nav-state=${this._onChatNavState}
             @copy-failed=${() => this._pushToast("复制失败，请手动选择文本", "error", 5000)}>
@@ -2469,15 +1598,15 @@ export class ChatView extends LitElement {
             ?streaming=${s.streaming || !!s.pendingAsk}
             .value=${this.draft}
             .images=${this._pendingImages}
-            .skillItems=${this._recentSkillItems}
-            .slashItems=${this._skillCandidates}
+            .skillItems=${this._skills.recentItems}
+            .slashItems=${this._skills.candidates}
             @input-change=${(e: any) => (this.draft = e.detail.value)}
             @images-change=${(e: any) => (this._pendingImages = e.detail.images)}
             @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
-            @skill-menu-open=${this._onSkillMenuOpen}
-            @skill-pick=${this._onSkillMenuPick}
-            @skill-pick-empty=${this._onSkillPickEmpty}
-            @skill-browse=${this._onSkillBrowse}
+            @skill-menu-open=${() => this._skills.onMenuOpen()}
+            @skill-pick=${(e: CustomEvent<{ name: string }>) => this._skills.pickFromMenu(e.detail.name)}
+            @skill-pick-empty=${(e: CustomEvent<{ name: string }>) => this._skills.prefillOnly(e.detail.name)}
+            @skill-browse=${() => this._skills.openDialog()}
             @submit=${this._submit}
             @stop=${this._stop}>
           </input-box>
@@ -2499,30 +1628,19 @@ export class ChatView extends LitElement {
                   : previewPane(false)}`
             : previewPane(true)}
         </div>` : null}
-      ${this._renderSkillDialog()}
-      ${this._renderRenameDialog()}
-      ${this._renderVisionGateDialog()}
-      ${this._renderInterjectDialog()}
-      ${this._renderInfoDialog()}
-      ${this._renderRewindDialog()}
-      ${this._renderDeleteTurnDialog()}
-      ${this._renderCompactDialog()}
+      ${this._dialogs.skill()}
+      ${this._dialogs.rename()}
+      ${this._dialogs.visionGate()}
+      ${this._dialogs.interject()}
+      ${this._dialogs.info()}
+      ${this._dialogs.rewind()}
+      ${this._dialogs.deleteTurn()}
+      ${this._dialogs.compact()}
     `;
   }
 
   /** 技能选择对话框宿主（两分支共用；<dialog> 由 updated() showModal）。 */
-  private _renderSkillDialog() {
-    if (!this._skillDialogOpen) return nothing;
-    return html`
-      <dialog @cancel=${this._onSkillDialogCancel}>
-        <skill-toolbox-dialog
-          .skills=${this._skillCandidates}
-          .error=${this._skillCandidatesError}
-          @pick=${this._onSkillDialogPick}
-          @cancel=${this._onSkillDialogCancel}
-        ></skill-toolbox-dialog>
-      </dialog>`;
-  }
+
 }
 
 declare global {

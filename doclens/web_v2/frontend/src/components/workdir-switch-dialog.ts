@@ -1,4 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
+import { dialogHeadStyles } from "../styles/dialog-frame";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
+import { emptyStateStyles } from "../styles/empty-state-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -8,6 +11,8 @@ import {
   WorkdirSwitchError,
   type RecentWorkdir,
 } from "../api/workdir";
+import { WORKDIR_SWAP_FAILED_EVENT } from "../utils/events";
+import "./c-dialog";
 
 /** 工作目录切换对话框（ADR-0043）：顶栏「工作目录指示器」点击弹出。
  * 内容：最近工作目录清单 + 路径输入框 + 确认警告（孤儿任务数、草稿丢失）。
@@ -18,62 +23,7 @@ import {
  * 关掉对话框用户会以为没切）。 */
 @customElement("workdir-switch-dialog")
 export class WorkdirSwitchDialog extends LitElement {
-  static styles = css`
-    :host {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      pointer-events: none;
-    }
-    :host([open]) {
-      background: rgba(0, 0, 0, 0.3);
-      pointer-events: auto;
-    }
-    .scrim { position: absolute; inset: 0; }
-    dialog {
-      position: relative;
-      pointer-events: auto;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-xl);
-      padding: 0;
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-shadow-lg);
-      min-width: 420px;
-      max-width: 90vw;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-      font-family: var(--cortex-font);
-    }
-    .head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--cortex-space-4);
-      padding: var(--cortex-space-4) var(--cortex-space-6);
-      border-bottom: 1px solid var(--cortex-border-muted);
-    }
-    .head h3 {
-      margin: 0;
-      font-size: var(--cortex-fs-md);
-      font-weight: 600;
-      color: var(--cortex-text);
-    }
-    .close-btn {
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      font-size: var(--cortex-fs-lg);
-      line-height: 1;
-      color: var(--cortex-text-muted);
-      padding: 4px 8px;
-      border-radius: var(--cortex-radius-sm);
-    }
-    .close-btn:hover:not(:disabled) { background: var(--cortex-surface-muted); color: var(--cortex-text); }
-    .close-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  static styles = [dialogHeadStyles, buttonBaseStyles, buttonRowStyles, emptyStateStyles, css`
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -111,7 +61,6 @@ export class WorkdirSwitchDialog extends LitElement {
     .recent-item:hover:not(:disabled) { background: var(--cortex-surface-muted); }
     .recent-item.current { color: var(--cortex-text-muted); cursor: default; }
     .recent-item:disabled { opacity: 0.5; cursor: not-allowed; }
-    .empty { font-size: var(--cortex-fs-sm); color: var(--cortex-text-muted); padding: 4px 0; }
     input {
       width: 100%;
       padding: 8px;
@@ -142,33 +91,10 @@ export class WorkdirSwitchDialog extends LitElement {
       color: var(--cortex-danger);
       font-size: var(--cortex-fs-sm);
     }
-    .actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-    }
-    .actions button {
-      padding: 6px 16px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      cursor: pointer;
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-base);
-    }
-    .actions button.primary {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      border: none;
-    }
-    .actions button.primary:hover:not(:disabled) { opacity: 0.9; }
-    .actions button:disabled { opacity: 0.4; cursor: not-allowed; }
     @media (max-width: 1023px) {
-      dialog { min-width: 0; width: calc(100vw - 16px); max-width: calc(100vw - 16px); }
       input { font-size: 16px; padding: 10px; }
-      .actions { flex-direction: column-reverse; gap: var(--cortex-space-3); }
-      .actions button { width: 100%; padding: 12px 16px; min-height: 44px; }
     }
-  `;
+  `];;
 
   @property({ type: Boolean, reflect: true })
   open = false;
@@ -284,7 +210,7 @@ export class WorkdirSwitchDialog extends LitElement {
       // 409/500 = 窗口内失败（已回滚），兜底解锁遮罩（SSE workdir_swap_failed
       // 可能在断连间隙丢失——POST 失败响应是可靠终态信号；app 层幂等）。
       if (!(e instanceof WorkdirSwitchError && e.status === 400)) {
-        window.dispatchEvent(new CustomEvent("cortex:workdir-swap-failed", {
+        window.dispatchEvent(new CustomEvent(WORKDIR_SWAP_FAILED_EVENT, {
           detail: { error: e instanceof Error ? e.message : String(e) },
         }));
       }
@@ -313,8 +239,7 @@ export class WorkdirSwitchDialog extends LitElement {
     // 所需信息，非提示噪音）
     const others = this._recent.filter((r) => !this._samePath(r.path, this.currentWorkdir)).slice(0, 3);
     return html`
-      <div class="scrim" @click=${this._close}></div>
-      <dialog open>
+      <c-dialog ?open=${true} @cancel=${this._close}>
         <div class="head">
           <h3>切换工作目录</h3>
           <button class="close-btn" ?disabled=${this._submitting} @click=${this._close} aria-label="关闭">
@@ -365,7 +290,7 @@ export class WorkdirSwitchDialog extends LitElement {
             </button>
           </div>
         </div>
-      </dialog>
+      </c-dialog>
     `;
   }
 }

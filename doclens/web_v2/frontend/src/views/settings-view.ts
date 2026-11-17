@@ -16,12 +16,13 @@ import {
 import { getConfig, putConfig, ConfigApiError, probeJimeng, fetchJimengBalance, type JimengBalance } from "../api/config";
 import { getStatus } from "../api/status";
 import "../components/toast-stack";
+import { pushLocalToast } from "../utils/toast";
 import "../components/password-section";
 import "../components/model-presets-section";
 import "../components/search-presets-section";
 import "../components/mcp-servers-section";
 import "../components/skills-section";
-import type { ToastStack } from "../components/toast-stack";
+import { formStyles } from "../styles/form-styles";
 
 const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
 
@@ -57,7 +58,7 @@ const ICON_EYE_OFF = html`
 
 @customElement("settings-view")
 export class SettingsView extends LitElement {
-  static styles = css`
+  static styles = [formStyles, css`
     :host {
       display: flex;
       flex-direction: column;
@@ -262,7 +263,7 @@ export class SettingsView extends LitElement {
     .switch .track {
       width: 36px;
       height: 20px;
-      border-radius: 999px;
+      border-radius: var(--cortex-radius-pill);
       background: var(--cortex-border);
       position: relative;
       transition: background 0.15s;
@@ -355,19 +356,8 @@ export class SettingsView extends LitElement {
       text-align: center;
     }
 
-    .input, .select {
-      padding: 9px 12px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-surface);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-      color: var(--cortex-text);
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-    }
+    /* 设置页表单控件内边距比公共基线略宽（本地尺寸覆盖，形态走公共块） */
+    .input, .select { padding: 9px 12px; }
     /* toggle 开关（bool 配置项，如「启用 MCP server」） */
     .toggle {
       display: inline-flex; align-items: center; gap: var(--cortex-space-2);
@@ -391,13 +381,6 @@ export class SettingsView extends LitElement {
     .toggle-label { font-size: var(--cortex-fs-sm); color: var(--cortex-text-subtle); }
     .input:hover:not(:focus), .select:hover:not(:focus) {
       border-color: var(--cortex-text-muted);
-    }
-    .input.mono { font-family: var(--cortex-font-mono); }
-    .input:focus, .select:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      background: var(--cortex-surface);
-      box-shadow: var(--cortex-focus-ring);
     }
 
     .footer-bar {
@@ -503,7 +486,7 @@ export class SettingsView extends LitElement {
         left: 0;
         right: 0;
         bottom: 0;
-        z-index: 20;
+        z-index: var(--cortex-z-raised);
         margin: 0;
         border-radius: 0;
         padding: var(--cortex-space-2) var(--cortex-space-3);
@@ -593,7 +576,7 @@ export class SettingsView extends LitElement {
         font-size: var(--cortex-fs-sm);
       }
     }
-  `;
+  `];;
 
   @state() private _activeTab: SettingsTab = "ai";
   @state() private _saving = false;
@@ -723,8 +706,7 @@ export class SettingsView extends LitElement {
   }
 
   private _pushToast(message: string, level: "success" | "error" | "info" = "info", duration = 2500) {
-    const stack = this.shadowRoot?.querySelector("toast-stack") as ToastStack | null;
-    stack?.pushToast(message, level, duration);
+    pushLocalToast(this, message, level, duration);
   }
 
   private _extractFieldErrors(e: unknown): Record<string, string> {

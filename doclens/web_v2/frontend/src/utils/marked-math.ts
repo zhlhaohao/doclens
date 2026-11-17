@@ -15,31 +15,38 @@ import { Marked } from "marked";
 import markedKatex from "marked-katex-extension";
 import katex from "katex";
 
-/** 单行 `$$...$$` 块级公式扩展（marked-katex-extension 只认定界符独占一行）。
+/** 单行 `$$...$$` 块级公式扩展工厂（AP-6：与 md-viewer 此前各一份复制，
+ *  已收敛单源）。md-viewer 版传 attrsFn 注入 data-source-line 行号
+ *  （源行对齐），聊天版（createMathMarked）不传。
  *
- *  与 md-viewer 同款逻辑（arxiv 转换的 md 常写成单行 `$$ $A$ ( $B$ ) $$`，
- *  且内部嵌套 `$...$`），只是不带 data-source-line 行号（聊天消息无此需求）。 */
+ *  arxiv 转换的 md 常写成单行 `$$ $A$ ( $B$ ) $$`，且内部嵌套 `$...$`
+ *  （LaTeX→md 转换残留）。自定义 block tokenizer 整行匹配、不改写源文本
+ *  （改写会打乱 data-source-line 与后端行号对齐）；renderer 剥掉内层 `$`
+ *  后按 displayMode 渲染。 */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const singleLineDisplayMath: any = {
-  name: "singleLineDisplayMath",
-  level: "block",
-  start(src: string) {
-    return src.indexOf("$$");
-  },
-  tokenizer(src: string) {
-    const m = /^\$\$([^\n]+?)\$\$\s*(?:\n|$)/.exec(src);
-    if (!m) return undefined;
-    return { type: "singleLineDisplayMath", raw: m[0], text: m[1].trim() };
-  },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  renderer(token: any) {
-    const body = katex.renderToString(token.text.replace(/\$/g, ""), {
-      displayMode: true,
-      throwOnError: false,
-    });
-    return `<div>${body}</div>\n`;
-  },
-};
+export function makeSingleLineDisplayMath(attrsFn?: (token: any) => string): any {
+  return {
+    name: "singleLineDisplayMath",
+    level: "block",
+    start(src: string) {
+      return src.indexOf("$$");
+    },
+    tokenizer(src: string) {
+      const m = /^\$\$([^\n]+?)\$\$\s*(?:\n|$)/.exec(src);
+      if (!m) return undefined;
+      return { type: "singleLineDisplayMath", raw: m[0], text: m[1].trim() };
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    renderer(token: any) {
+      const attrs = attrsFn ? ` ${attrsFn(token)}` : "";
+      const body = katex.renderToString(token.text.replace(/\$/g, ""), {
+        displayMode: true,
+        throwOnError: false,
+      });
+      return `<div${attrs}>${body}</div>\n`;
+    },
+  };
+}
 
 /** CJK 语境行内公式扩展（marked-katex-extension 标准规则的补充）。
  *
@@ -122,7 +129,7 @@ export function kbImageUrl(path: string): string | null {
 export function createMathMarked(): Marked {
   const md = new Marked();
   md.use(markedKatex({ throwOnError: false }));
-  md.use({ extensions: [cjkInlineMath, singleLineDisplayMath] });
+  md.use({ extensions: [cjkInlineMath, makeSingleLineDisplayMath()] });
   md.use({ breaks: true });
 
   // 知识库图像内联（AI 气泡）：md image 的 href 是 workdir 内图像路径时

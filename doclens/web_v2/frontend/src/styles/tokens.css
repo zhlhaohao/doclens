@@ -21,6 +21,21 @@
   --cortex-space-8: 32px;  /* xxl */
   --cortex-space-10: 40px; /* xxxl */
 
+  /* ── 层叠（z-index）分层规范（AP-4）──
+   * 裸数字散布史：10→10000 无谱系，两个 9999 互不知晓，PDF portal 曾被
+   * 意外压死（灰底实证）。约定五档，新浮层对号入座，禁止再造裸数字：
+   *   base      组件内局部微调（sticky 头部/徽章/FAB 等，不跨组件比较）
+   *   raised    组件内浮起层（下拉菜单/hover 卡，仍属组件内部）
+   *   overlay   跨组件覆盖层（预览栏覆盖、PDF portal 之上、app-bar 层级带）
+   *   toast     通知/抽屉/拖放指示层（用户操作反馈，须盖过一切内容层）
+   *   modal     全屏模态/遮罩（图片查看器/下载遮罩/换库遮罩——最顶层）
+   * top-layer 原生 <dialog> 不走 z-index（showModal 自带 top-layer）。 */
+  --cortex-z-base: 1;
+  --cortex-z-raised: 10;
+  --cortex-z-overlay: 100;
+  --cortex-z-toast: 1000;
+  --cortex-z-modal: 9999;
+
   /* ── 圆角 · Meta 阶梯 ──
    * 保留 sm/md/lg 语义：lg=16 仍是标准卡片（原用 radius-lg 的卡片无需逐站迁移）；
    * md=8 对齐 Meta text-input；新增 xl/2xl 给大卡与对话框，pill 给按钮/徽章/导航。 */
@@ -64,6 +79,13 @@
 
   /* ── 按钮水平内边距（与字号同缩放；日记页等文字按钮消费）── */
   --cortex-btn-pad-x: 14px;
+
+  /* ── 按钮通用形态（DESIGN.md：按钮一律 pill，绝不方角）──
+     此前 999px/100px 硬编码散落 13 处，统一到 radius-pill token。── */
+  --cortex-btn-radius: var(--cortex-radius-pill);
+  --cortex-btn-disabled-opacity: 0.4;   /* 禁用态透明度（0.5 变体随各自场景覆盖） */
+  --cortex-btn-hover-bg: var(--cortex-surface-muted);
+  --cortex-btn-hover-border: var(--cortex-text-subtle);
 
   /* ── 文字按钮高度基准（= fs-md + 2×padding-y；随字号缩放）── */
   --cortex-btn-h-sm: calc(var(--cortex-fs-md) * 1.4 + 12px);   /* ≈33px：导航/保存等紧凑按钮 */
@@ -156,54 +178,6 @@
   /* ── Focus ring（钴蓝）── */
   --cortex-focus-ring: 0 0 0 3px rgba(0, 100, 224, 0.18);
   --cortex-focus-ring-danger: 0 0 0 3px rgba(228, 30, 63, 0.18);
-
-  /* ────────────────────────────────────────────────────────────
-   * Shoelace --sl-* 主题映射（构建产物内联进 index.[hash].css）
-   * 让任意 Shoelace 组件跟随应用主题（ADR-0043：每主题整段自映射，
-   * 不叠加官方 dark.css——两套暗色体系会打架）
-   * ──────────────────────────────────────────────────────────── */
-  --sl-color-primary-50: #e8f0fe;
-  --sl-color-primary-100: #cfe3fd;
-  --sl-color-primary-200: #9ec9fb;
-  --sl-color-primary-300: #6daef9;
-  --sl-color-primary-400: #3c94f7;
-  --sl-color-primary-500: #0064e0;
-  --sl-color-primary-600: #0064e0;   /* Shoelace 主按钮填充 = 钴蓝 */
-  --sl-color-primary-700: #0457cb;
-  --sl-color-primary-800: #0346a8;
-  --sl-color-primary-900: #023680;
-  --sl-color-primary-950: #01224f;
-
-  --sl-color-gray-50: #ffffff;
-  --sl-color-gray-100: #f1f4f7;
-  --sl-color-gray-200: #dee3e9;
-  --sl-color-gray-300: #ced0d4;
-  --sl-color-gray-400: #8595a4;
-  --sl-color-gray-500: #5d6c7b;
-  --sl-color-gray-600: #4b4c4f;
-  --sl-color-gray-700: #1c1e21;
-  --sl-color-gray-800: #0a1317;
-  --sl-color-gray-900: #0a1317;
-  --sl-color-gray-950: #0a1317;
-
-  --sl-color-success-600: #31a24c;
-  --sl-color-warning-600: #f7b928;
-  --sl-color-danger-600: #e41e3f;
-
-  --sl-input-color: #0a1317;
-  --sl-input-color-hover: #0a1317;
-  --sl-input-color-focus: #0a1317;
-  --sl-input-border-color: #ced0d4;
-  --sl-input-border-color-hover: #8595a4;
-  --sl-input-border-color-focus: #0064e0;
-  --sl-input-focus-ring-color: rgba(0, 100, 224, 0.18);
-
-  --sl-border-radius-small: 8px;
-  --sl-border-radius-medium: 8px;
-  --sl-border-radius-large: 16px;
-  --sl-border-radius-x-large: 24px;
-  --sl-border-radius-circle: 9999px;
-  --sl-border-radius-pill: 100px;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -274,43 +248,6 @@
 
   --cortex-focus-ring: 0 0 0 3px rgba(88, 166, 255, 0.22);
   --cortex-focus-ring-danger: 0 0 0 3px rgba(248, 81, 73, 0.22);
-
-  /* Shoelace 自映射（暗色全段） */
-  --sl-color-primary-50: #0d1d33;
-  --sl-color-primary-100: #12233a;
-  --sl-color-primary-200: #1f3a5f;
-  --sl-color-primary-300: #2a5a9c;
-  --sl-color-primary-400: #3c94f7;
-  --sl-color-primary-500: #3c94f7;
-  --sl-color-primary-600: #3c94f7;
-  --sl-color-primary-700: #6daef9;
-  --sl-color-primary-800: #9ec9fb;
-  --sl-color-primary-900: #cfe3fd;
-  --sl-color-primary-950: #e8f0fe;
-
-  --sl-color-gray-50: #0d1117;
-  --sl-color-gray-100: #161b22;
-  --sl-color-gray-200: #21262d;
-  --sl-color-gray-300: #30363d;
-  --sl-color-gray-400: #8b949e;
-  --sl-color-gray-500: #adb5bd;
-  --sl-color-gray-600: #c9d1d9;
-  --sl-color-gray-700: #d0d7de;
-  --sl-color-gray-800: #e6edf3;
-  --sl-color-gray-900: #f0f6fc;
-  --sl-color-gray-950: #f0f6fc;
-
-  --sl-color-success-600: #3fb950;
-  --sl-color-warning-600: #d29922;
-  --sl-color-danger-600: #f85149;
-
-  --sl-input-color: #e6edf3;
-  --sl-input-color-hover: #e6edf3;
-  --sl-input-color-focus: #e6edf3;
-  --sl-input-border-color: #30363d;
-  --sl-input-border-color-hover: #8b949e;
-  --sl-input-border-color-focus: #3c94f7;
-  --sl-input-focus-ring-color: rgba(88, 166, 255, 0.22);
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -379,41 +316,4 @@
 
   --cortex-focus-ring: 0 0 0 3px rgba(0, 100, 224, 0.18);
   --cortex-focus-ring-danger: 0 0 0 3px rgba(192, 53, 65, 0.18);
-
-  /* Shoelace 自映射（暖纸） */
-  --sl-color-primary-50: #e7ecdf;
-  --sl-color-primary-100: #cfe0f5;
-  --sl-color-primary-200: #9ec9fb;
-  --sl-color-primary-300: #6daef9;
-  --sl-color-primary-400: #3c94f7;
-  --sl-color-primary-500: #0064e0;
-  --sl-color-primary-600: #0064e0;
-  --sl-color-primary-700: #0457cb;
-  --sl-color-primary-800: #0346a8;
-  --sl-color-primary-900: #023680;
-  --sl-color-primary-950: #01224f;
-
-  --sl-color-gray-50: #fdfaf2;
-  --sl-color-gray-100: #efe9da;
-  --sl-color-gray-200: #e5ddcb;
-  --sl-color-gray-300: #d8cfba;
-  --sl-color-gray-400: #8d8268;
-  --sl-color-gray-500: #6e6450;
-  --sl-color-gray-600: #5c5342;
-  --sl-color-gray-700: #3b3324;
-  --sl-color-gray-800: #2b2417;
-  --sl-color-gray-900: #2b2417;
-  --sl-color-gray-950: #2b2417;
-
-  --sl-color-success-600: #3d8b4f;
-  --sl-color-warning-600: #c9971c;
-  --sl-color-danger-600: #c03541;
-
-  --sl-input-color: #2b2417;
-  --sl-input-color-hover: #2b2417;
-  --sl-input-color-focus: #2b2417;
-  --sl-input-border-color: #d8cfba;
-  --sl-input-border-color-hover: #8d8268;
-  --sl-input-border-color-focus: #0064e0;
-  --sl-input-focus-ring-color: rgba(0, 100, 224, 0.18);
 }

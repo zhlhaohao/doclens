@@ -42,14 +42,25 @@ describe("rename-dialog", () => {
   });
 
   it("mobile breakpoint overrides :host min-width and stacks actions", async () => {
-    const cssText = (RenameDialog as any).styles.cssText as string;
+    // AP-6 后 styles 是数组（公共块组合）——拼全体 cssText 断言
+    const cssText = ((RenameDialog as any).styles as { cssText: string }[])
+      .map((s) => s.cssText)
+      .join("\n") as string;
     expect(cssText).toMatch(/@media\s*\(max-width:\s*1023px\)/);
     // 移除外层 360px min-width
     expect(cssText).toMatch(/@media[\s\S]*?:host\s*\{\s*min-width:\s*0/);
     // actions 列向（column-reverse），主按钮在主按钮在上方
-    expect(cssText).toMatch(/@media[\s\S]*?\.actions\s*\{\s*flex-direction:\s*column-reverse/);
+    // AP-4：按钮排公共块的选择器改为组形式（.actions, .buttons）——
+    // 正则需容忍组内的逗号分隔。
+    expect(cssText).toMatch(
+      /@media[\s\S]*?\.actions[^{]*\{[^}]*flex-direction:\s*column-reverse/,
+    );
     // 按钮全宽 + 44px 触控目标
-    expect(cssText).toMatch(/@media[\s\S]*?\.actions\s+button\s*\{[^}]*width:\s*100%/);
-    expect(cssText).toMatch(/@media[\s\S]*?\.actions\s+button\s*\{[^}]*min-height:\s*44px/);
+    expect(cssText).toMatch(
+      /@media[\s\S]*?\.actions[^{]*button\s*\{[^}]*width:\s*100%/,
+    );
+    expect(cssText).toMatch(
+      /@media[\s\S]*?\.actions[^{]*button\s*\{[^}]*min-height:\s*44px/,
+    );
   });
 });

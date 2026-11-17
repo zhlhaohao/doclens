@@ -1,6 +1,7 @@
 import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { Session } from "../state/types";
+import { copyText, createCopiedFlash } from "../utils/clipboard";
 import "./icon";
 
 @customElement("history-item")
@@ -166,7 +167,7 @@ export class HistoryItem extends LitElement {
 
   /** 复制成功后的瞬时反馈：图标由 copy 变 check，1.5s 后恢复 */
   @state() private _copied = false;
-  private _copyTimer?: number;
+  private _copiedFlash = createCopiedFlash(() => { this._copied = false; });
 
   private _select() {
     if (!this.session) return;
@@ -192,12 +193,11 @@ export class HistoryItem extends LitElement {
     e.stopPropagation();
     const text = this.session?.title ?? "";
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyText(text);
+    if (ok) {
       this._copied = true;
-      if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
-      this._copyTimer = window.setTimeout(() => { this._copied = false; }, 1500);
-    } catch {
+      this._copiedFlash.flash();
+    } else {
       this.dispatchEvent(
         new CustomEvent("copy-failed", { bubbles: true, composed: true }),
       );
@@ -269,7 +269,7 @@ export class HistoryItem extends LitElement {
     this.removeEventListener("click", this._select);
     this._ro?.disconnect();
     this._ro = undefined;
-    if (this._copyTimer !== undefined) window.clearTimeout(this._copyTimer);
+    this._copiedFlash.dispose();
     super.disconnectedCallback();
   }
 

@@ -147,6 +147,29 @@ def create_app() -> FastAPI:
     # 错误处理
     register_error_handlers(app)
 
+    # HTTP 压缩（2026-11-17）：前端产物此前无压缩中间件，首屏主包
+    # 1.28 MB 原始传输（浏览器不会自压 JS）。gzip 后 ~350 KB。
+    # **注册在 swap/auth 之前 = 最内层**：Starlette 的 add_middleware 是
+    # `insert(0, ...)`，后注册者最外层。auth 必须是最外层（AP-33：
+    # 否则切换窗口内未登录 LAN 客户端拿到 503 而非 401）——gzip 插到
+    # 最内层既保住该不变量，静态文件照常压缩（auth/swap 只拦 /api/*，
+    # /assets/* 直通到路由层，仍经 gzip 压缩）。
+    # 排除项：text/event-stream（SSE 流必须逐字透传，Starlette 默认已排除）、
+    # font/woff(2)（已压缩格式，二次压收益为负）——静态目录里 .woff/.ttf
+    # 落 application/octet-stream，显式排除。
+    from starlette.middleware.gzip import GZipMiddleware
+    app.add_middleware(
+        GZipMiddleware,
+        minimum_size=1024,          # 小于 1 KB 不压（压缩头开销 > 收益）
+        compresslevel=6,            # level 9 仅多省 0.5% 但慢 74%（实测 42ms vs 73ms）
+        exclude_content_types=(
+            "text/event-stream",     # SSE——流式响应必须逐字透传
+            "font/woff",
+            "font/woff2",
+            "application/octet-stream",  # 静态目录里 .woff/.ttf 落此类型
+        ),
+    )
+
     # 切换窗口 503（ADR-0043）。**先注册 = 内层**：Starlette 的
     # `add_middleware` 是 `user_middleware.insert(0, ...)`，后注册者在最外层、
     # 先执行（AP-33）。auth 必须在外层，否则切换窗口内未登录的 LAN 客户端

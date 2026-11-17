@@ -1,6 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 
-import { fetchPreview, isPstDerivedPath } from "../api/preview";
+import { fetchPreview, fetchPreviewRange, isPstDerivedPath } from "../api/preview";
 import type { PageMarker, PstAttachmentInfo } from "../api/preview";
 import { isPstFilePath } from "../api/pst";
 
@@ -66,6 +66,11 @@ export interface PreviewControllerOptions {
   reloadAfterSave?: "tokens" | "full";
 }
 
+/** 搜索命中行范围切片的上下文行数（AP-7 命名常量：命中行前 10 行 /
+ *  后 20 行——前短后长，命中行天然偏切片头部，便于看到命中处上下文）。 */
+const HIT_CONTEXT_BEFORE = 10;
+const HIT_CONTEXT_AFTER = 20;
+
 /** 命中行 → 合成 md 行号的「前驱近似」换算（BUG-F3 修复语义）：
  *  精确键 miss 时取 ≤line 的最大键——命中行常落在 docx 段落/xlsx 单元格/
  *  pptx 正文块内部，前驱 heading 即所属块，粗粒度定位远优于不滚；
@@ -97,6 +102,10 @@ export class PreviewController implements ReactiveController {
 
   private host: ReactiveControllerHost;
   private opts: PreviewControllerOptions;
+  /** 请求代数（AP-3）：open/openHit/reload 每次自增；await 回跳点复查，
+   *  过期响应（连点两文件先发后到 / clear 后迟到）不落 state。
+   *  对照 pdf-viewer._loadSeq 范式。 */
+  private _seq = 0;
 
   constructor(host: ReactiveControllerHost, opts: PreviewControllerOptions = {}) {
     this.host = host;
@@ -137,11 +146,13 @@ export class PreviewController implements ReactiveController {
 
   /** 全文件预览（files 文件树 / chat 引用 / search 无行命中）。 */
   async open(path: string): Promise<PreviewState> {
+    const seq = ++this._seq;
     // PST 物理文件：预览 = 分页邮件列表组件（自取数），不走 /api/preview
     if (isPstFilePath(path)) {
       return this._set({ status: "ok", doc: this._emptyDoc(path) });
     }
     const result = await fetchPreview(path);
+    if (seq !== this._seq) return this.state; // 过期响应（已有更新的 open/clear）
     if (result.ok) {
       return this._set({ status: "ok", doc: this._docFrom(result) });
     }
@@ -158,23 +169,26 @@ export class PreviewController implements ReactiveController {
    *  返回状态供视图算行定位（doc.lineMap 前驱换算在调用方）。 */
   async openHit(path: string, line: number | null): Promise<PreviewState> {
     if (line === null || isPstDerivedPath(path)) return this.open(path);
-    const params = new URLSearchParams({ path });
-    params.set("start_line", String(Math.max(1, line - 10)));
-    params.set("end_line", String(line + 20));
-    let body: any;
-    try {
-      const res = await fetch(`/api/preview?${params}`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        return this._set(this._failState(path, err.code === "NOT_INDEXED", err.detail || `HTTP ${res.status}`));
-      }
-      body = await res.json();
-    } catch {
-      return this._set(this._setTempError(path));
+    const seq = ++this._seq;
+    // 行范围请求经 api 层 fetchPreviewRange（AP-8：取代手写裸 fetch——
+    // 参数拼装/错误解析与 fetchPreview 双份维护）
+    const r = await fetchPreviewRange(
+      path,
+      Math.max(1, line - HIT_CONTEXT_BEFORE),
+      line + HIT_CONTEXT_AFTER,
+    );
+    if (seq !== this._seq) return this.state; // 过期响应（已有更新的 open/clear）
+    if (!r.ok) {
+      return this._set(this._failState(path, r.notIndexed, r.message));
     }
+    const body = r.body as {
+      synthesized?: boolean; language?: string; path?: string; content?: string;
+      writable?: boolean; size_bytes?: number | null; tokens?: string[][][] | null;
+    };
     if (body.synthesized || body.language === "markdown") {
-      return this.open(path); // 合成/md 预览必须整文件渲染
+      return this.open(path); // 合成/md 预览必须整文件渲染（open 内部自增代数）
     }
+    if (seq !== this._seq) return this.state; // 过期响应
     // 范围片段：文本文件，r.line 即文件实际行号（无 lineMap/页表/附件）
     return this._set({
       status: "ok",
@@ -185,7 +199,7 @@ export class PreviewController implements ReactiveController {
         writable: body.writable ?? false,
         synthesized: body.synthesized ?? false,
         sizeBytes: body.size_bytes ?? null,
-        pages: body.pages ?? null,
+        pages: null,
         lineMap: null,
         pageStarts: null,
         attachments: null,
@@ -202,8 +216,10 @@ export class PreviewController implements ReactiveController {
 
   // ------------------------------------------------------------ 生命周期
 
-  /** 清空预览（切视图 / 删除文件 / 关闭预览栏）。 */
+  /** 清空预览（切视图 / 删除文件 / 关闭预览栏）。自增代数使在途请求
+   *  全部失效——迟到响应不再回填到清空后的空白态。 */
   clear(): void {
+    this._seq++;
     this._set({ status: "empty" });
     this.dirty = false;
   }
@@ -258,12 +274,16 @@ export class PreviewController implements ReactiveController {
     return Promise.resolve();
   }
 
-  /** 重拉恢复 tokens 高亮（仍在本文件才回填，防竞态）。 */
+  /** 重拉恢复 tokens 高亮（仍在本文件才回填，防竞态；套请求代数——
+   *  open 到达时 fetchPreview 的 path 守卫拦不住「同路径迟到响应覆盖
+   *  新状态」，代数复查一并拦掉）。 */
   private async _reloadTokens(): Promise<void> {
     if (this.state.status !== "ok") return;
+    const seq = this._seq; // 不自增：重拉属于当前状态的刷新，不打断在途 open
     const path = this.state.doc.path;
     try {
       const r = await fetchPreview(path);
+      if (seq !== this._seq) return; // 期间有新的 open/clear
       if (r.ok && this.state.status === "ok" && this.state.doc.path === path) {
         this.state = { status: "ok", doc: this._docFrom(r) };
         this.host.requestUpdate();
@@ -304,10 +324,6 @@ export class PreviewController implements ReactiveController {
     return notIndexed
       ? { status: "not-indexed", path }
       : { status: "error", path, message: message || "预览失败" };
-  }
-
-  private _setTempError(path: string): PreviewState {
-    return { status: "error", path, message: "网络错误" };
   }
 
   private _set(state: PreviewState): PreviewState {

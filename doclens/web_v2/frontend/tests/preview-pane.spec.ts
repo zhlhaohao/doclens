@@ -66,7 +66,7 @@ describe("<preview-pane> markdown branch", () => {
 });
 
 describe("<preview-pane> download overlay（公共组件集成）", () => {
-  it("_downloading=true 渲染 download-overlay 且 open=true（漏传 open 即「无转圈」回归）", async () => {
+  it("下载中渲染 download-overlay 且 open=true（漏传 open 即「无转圈」回归）", async () => {
     const el = await fixture(html`
       <preview-pane language="markdown" path="t.md" content="# T"></preview-pane>
     `) as any;
@@ -74,14 +74,20 @@ describe("<preview-pane> download overlay（公共组件集成）", () => {
     // 默认不显示
     let ov = el.shadowRoot!.querySelector("download-overlay") as any;
     expect(ov?.open ?? false).toBe(false);
-    // 下载中：组件在且 open=true（遮罩内容在其自身 shadow 内渲染）
-    el._downloading = true;
+    // 下载中（AP-1 拆分：态迁 DownloadController，经注入回调驱动）
+    const r = new Promise<{ via: "jsbridge"; name?: string; error?: string }>((resolve) =>
+      setTimeout(() => resolve({ via: "jsbridge", name: "t.md" }), 50));
+    el._download.download = () => r;
+    el._download.click();
     await el.updateComplete;
     ov = el.shadowRoot!.querySelector("download-overlay") as any;
     expect(ov).toBeTruthy();
     expect(ov.open).toBe(true);
     await ov.updateComplete;
     expect(ov.shadowRoot!.querySelector(".download-overlay")).toBeTruthy();
+    await r; // 完成 → 遮罩关闭
+    await el.updateComplete;
+    expect((el.shadowRoot!.querySelector("download-overlay") as any).open).toBe(false);
   });
 });
 
@@ -296,28 +302,6 @@ describe("<preview-pane> 预览↔编辑选区保持（源文本字符偏移）"
   });
 });
 
-describe("<preview-pane> noHeader prop", () => {
-  it("does not render .header in markdown preview branch when noHeader=true", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" path="hi.md" content="# hi" ?noHeader=${true}></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
-    expect(el.shadowRoot!.querySelector("md-viewer")).toBeTruthy();
-  });
-
-  it("does not render .header in edit mode when noHeader=true", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" path="hi.md" content="# hi" writable ?noHeader=${true}></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    el.enterEdit();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
-    expect(el.shadowRoot!.querySelector("cm-editor")).toBeTruthy();
-  });
-});
-
 describe("<preview-pane> download button", () => {
   it("renders download button in markdown preview header", async () => {
     const el = await fixture(html`
@@ -345,14 +329,6 @@ describe("<preview-pane> download button", () => {
     expect(el.shadowRoot!.querySelector(".header")).toBeNull();
     expect(el.shadowRoot!.querySelector(".download-btn")).toBeNull();
     expect(el.shadowRoot!.querySelector("cm-editor")).toBeTruthy();
-  });
-
-  it("does not render download button when noHeader=true", async () => {
-    const el = await fixture(html`
-      <preview-pane language="markdown" content="# T" path="doc.md" ?noHeader=${true}></preview-pane>
-    `) as PreviewPane;
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".download-btn")).toBeNull();
   });
 
   it("clicking download button triggers anchor click with server URL", async () => {
@@ -472,17 +448,16 @@ describe("<preview-pane> html branch", () => {
     expect(el.shadowRoot!.querySelector(".upload-btn")).toBeNull();
   });
 
-  it("hides header when noHeader=true for html", async () => {
+  it("renders header + iframe for html branch", async () => {
     const el = await fixture(html`
       <preview-pane
-        noHeader
         language="html"
         path="x.html"
         content="<p>x</p>">
       </preview-pane>
     `) as PreviewPane;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".header")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".header")).toBeTruthy();
     expect(el.shadowRoot!.querySelector("iframe.html-frame")).toBeTruthy();
   });
 

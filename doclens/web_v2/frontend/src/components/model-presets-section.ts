@@ -1,4 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
+import { settingsSectionStyles } from "../styles/settings-section-styles";
+import { formStyles } from "../styles/form-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -18,6 +20,8 @@ import {
   type PresetProtocol,
   type QuotaResult,
 } from "../api/presets";
+import { ToastFlashMixin, apiErrMsg } from "../utils/section-mixins";
+import { ProbeController } from "../utils/probe-controller";
 
 /** 空表单初值（新建用）。 */
 function emptyForm(kind: PresetKind): FormState {
@@ -106,15 +110,12 @@ const PROTOCOL_OPTIONS: { value: PresetProtocol; label: string }[] = [
  * 拉取 .env，从而刷新「当前激活预设」高亮与下方字段散填区。
  */
 @customElement("model-presets-section")
-export class ModelPresetsSection extends LitElement {
-  static styles = css`
+export class ModelPresetsSection extends ToastFlashMixin(LitElement) {
+  static styles = [settingsSectionStyles, formStyles, css`
     :host {
       display: block;
       font-family: var(--cortex-font);
       color: var(--cortex-text);
-    }
-    .wrap {
-      margin-bottom: var(--cortex-space-6);
     }
     .head {
       display: flex;
@@ -187,15 +188,6 @@ export class ModelPresetsSection extends LitElement {
       align-items: center;
       gap: var(--cortex-space-2);
     }
-    .badge {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-primary);
-      background: var(--cortex-surface);
-      border: 1px solid var(--cortex-primary);
-      border-radius: var(--cortex-radius-pill);
-      padding: 1px var(--cortex-space-2);
-    }
     .preset-meta {
       font-size: var(--cortex-fs-xs);
       color: var(--cortex-text-muted);
@@ -208,75 +200,6 @@ export class ModelPresetsSection extends LitElement {
       display: flex;
       gap: var(--cortex-space-1);
       flex-shrink: 0;
-    }
-    .icon-btn {
-      padding: 4px 10px;
-      border: 1px solid var(--cortex-border);
-      background: var(--cortex-surface);
-      color: var(--cortex-text);
-      border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-xs);
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .icon-btn:hover {
-      background: var(--cortex-surface-muted);
-      border-color: var(--cortex-text-muted);
-    }
-    .icon-btn.primary {
-      background: var(--cortex-btn-primary-bg);
-      border-color: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-text);
-      font-weight: 600;
-    }
-    .icon-btn.primary:hover { filter: brightness(1.05); }
-    .icon-btn.danger:hover {
-      background: var(--cortex-danger);
-      border-color: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-    }
-    .icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .empty {
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-text-subtle);
-      padding: var(--cortex-space-2) 0;
-    }
-
-    /* ===== 内联编辑表单 ===== */
-    .form {
-      margin-top: var(--cortex-space-3);
-      padding: var(--cortex-space-4);
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-surface);
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--cortex-space-3);
-    }
-    .form .full { grid-column: 1 / -1; }
-    .field-label {
-      font-size: var(--cortex-fs-xs);
-      font-weight: 600;
-      color: var(--cortex-text-muted);
-      margin-bottom: 2px;
-    }
-    .input, .select {
-      padding: 8px 10px;
-      border: 1px solid var(--cortex-border);
-      border-radius: var(--cortex-radius-md);
-      background: var(--cortex-bg);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-      color: var(--cortex-text);
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .input.mono { font-family: var(--cortex-font-mono); }
-    .input:focus, .select:focus {
-      outline: none;
-      border-color: var(--cortex-primary);
-      box-shadow: var(--cortex-focus-ring);
     }
     .env-rows {
       display: flex;
@@ -294,17 +217,6 @@ export class ModelPresetsSection extends LitElement {
       grid-template-columns: minmax(140px, 1fr) 1.4fr auto;
       gap: var(--cortex-space-2);
       align-items: center;
-    }
-    .form-actions {
-      grid-column: 1 / -1;
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--cortex-space-2);
-    }
-    .form-error {
-      grid-column: 1 / -1;
-      font-size: var(--cortex-fs-xs);
-      color: var(--cortex-danger);
     }
     .probe-row {
       display: flex;
@@ -341,20 +253,20 @@ export class ModelPresetsSection extends LitElement {
       .quota .q-full { display: none; }
       .quota .q-tag { display: inline; }
     }
-
-    .msg {
-      font-size: var(--cortex-fs-xs);
-      padding: var(--cortex-space-2) var(--cortex-space-3);
-      border-radius: var(--cortex-radius-md);
-      margin-top: var(--cortex-space-3);
+    /* 重置时间（2026-11-17）：独立于 .q-full 的 1023px 档控制——
+       .q-full（标签文案「已用」等）走 1023px 档（移动端换迷你标签），
+       而重置时间走 **640px** 档：窄屏手机（≤640px，折叠态/普通手机
+       竖屏 360-430px）维持原状不显示；折叠屏展开（≈690-900px）与
+       平板、横屏等宽屏状态恢复显示。
+       故重置时间元素不带 .q-full 类（否则被 1023px 档一并隐藏）。 */
+    @media (max-width: 640px) {
+      .quota .q-reset { display: none; }
     }
-    .msg.ok { background: var(--cortex-primary-soft); color: var(--cortex-primary); }
-    .msg.err { background: var(--cortex-danger-soft, rgba(220,38,38,0.1)); color: var(--cortex-danger); }
 
     @media (max-width: 1023px) {
       .form { grid-template-columns: 1fr; }
     }
-  `;
+  `];;
 
   /** 当前激活预设名（来自 .env 的 CORTEX_ACTIVE_*_PRESET，由 settings-view 传入）。 */
   @property() activeLlm = "";
@@ -368,21 +280,27 @@ export class ModelPresetsSection extends LitElement {
   @state() private _editing: EditingState | null = null;
   @state() private _busy = false;
   @state() private _error: string | null = null;
-  @state() private _toast: string | null = null;
   @state() private _confirmDeleteId: string | null = null;
   @state() private _formError: string | null = null;
-  @state() private _probing = false;
-  @state() private _probeMsg: string | null = null;
-  @state() private _probingVision = false;
-  @state() private _probingTranslate = false;
-  @state() private _probeTranslateMsg: string | null = null;
+  /** 探测三兄弟的 busy/提示状态（AP-23 迁 ProbeController；错误统一落 _formError）。 */
+  private _probes = new ProbeController(this);
+
+  constructor() {
+    super();
+    this._probes.onError = (msg) => { this._formError = msg; };
+    this._probes.toErrMsg = (e) => this._errMsg(e);
+  }
+
+  private get _probing(): boolean { return this._probes.isBusy("max"); }
+  private get _probingVision(): boolean { return this._probes.isBusy("vision"); }
+  private get _probingTranslate(): boolean { return this._probes.isBusy("translate"); }
+  private get _probeMsg(): string | null { return this._probes.msg("max"); }
+  private get _probeTranslateMsg(): string | null { return this._probes.msg("translate"); }
   /** 套餐额度（仅 LLM 组）：preset_id → 查询状态（loading/ok/error） */
   @state() private _quotas: Record<
     string,
     { status: "loading" | "ok" | "error"; data?: QuotaResult }
   > = {};
-
-  private _toastTimer?: number;
 
   /** keep-alive view 下 connectedCallback 仅首次触发（app.ts 挂载后 [hidden]
    *  切换）；可见时重查额度，避免显示陈旧数据。同 password-section 模式。 */
@@ -398,7 +316,6 @@ export class ModelPresetsSection extends LitElement {
   }
 
   disconnectedCallback() {
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
     this._observer?.disconnect();
     super.disconnectedCallback();
   }
@@ -443,18 +360,8 @@ export class ModelPresetsSection extends LitElement {
     return (p.kind === "llm" ? this.activeLlm : this.activeVision) === p.name;
   }
 
-  private _setFlash(msg: string) {
-    this._toast = msg;
-    if (this._toastTimer !== undefined) window.clearTimeout(this._toastTimer);
-    this._toastTimer = window.setTimeout(() => { this._toast = null; }, 3000);
-  }
-
   private _errMsg(e: unknown): string {
-    if (e instanceof PresetsApiError) {
-      const body = e.body as { detail?: string } | null;
-      return body?.detail ?? `HTTP ${e.status}`;
-    }
-    return (e as Error).message;
+    return apiErrMsg(e, PresetsApiError);
   }
 
   private _openNew(kind: PresetKind) {
@@ -645,7 +552,7 @@ export class ModelPresetsSection extends LitElement {
     }
   }
 
-  private async _probe() {
+  private _probe() {
     const ed = this._editing;
     if (!ed) return;
     const f = ed.form;
@@ -657,10 +564,8 @@ export class ModelPresetsSection extends LitElement {
       this._formError = "探测前请先填写 API Key";
       return;
     }
-    this._probing = true;
     this._formError = null;
-    this._probeMsg = null;
-    try {
+    void this._probes.run("max", async () => {
       const r = await probeMaxTokens({
         protocol: f.protocol,
         base_url: f.base_url.trim(),
@@ -669,25 +574,19 @@ export class ModelPresetsSection extends LitElement {
         preset_id: ed.mode === "edit" ? ed.presetId : undefined,
       });
       this._setField("max_tokens", String(r.max_tokens));
-      this._probeMsg = `探测成功：服务端上限 ${r.max_tokens} tokens（${r.attempts} 次请求），已填入输入框`;
-    } catch (e) {
-      this._formError = this._errMsg(e);
-    } finally {
-      this._probing = false;
-    }
+      return `探测成功：服务端上限 ${r.max_tokens} tokens（${r.attempts} 次请求），已填入输入框`;
+    });
   }
 
   /** 行为学探测视觉能力（ADR-0034 增补）：后端发随机密码串图实测模型能否
    *  读图；结果回填 vision 字段（不自动保存，用户可否决）。 */
   /** 翻译服务连通性探测（ADR-0039）：当前表单服务 + envs 翻一句固定文本。 */
-  private async _probeTranslate() {
+  private _probeTranslate() {
     const ed = this._editing;
     if (!ed || ed.form.kind !== "translate") return;
     const f = ed.form;
-    this._probingTranslate = true;
     this._formError = null;
-    this._probeTranslateMsg = null;
-    try {
+    void this._probes.run("translate", async () => {
       const envs: Record<string, string> = {};
       for (const r of f.translateEnvRows) {
         if (r.key.trim()) envs[r.key.trim()] = r.value.trim();
@@ -697,15 +596,11 @@ export class ModelPresetsSection extends LitElement {
         envs,
         preset_id: ed.mode === "edit" ? ed.presetId : undefined,
       });
-      this._probeTranslateMsg = `连通正常：「Hello, this is a connectivity test.」→ ${r.translation.slice(0, 60)}`;
-    } catch (e) {
-      this._formError = this._errMsg(e);
-    } finally {
-      this._probingTranslate = false;
-    }
+      return `连通正常：「Hello, this is a connectivity test.」→ ${r.translation.slice(0, 60)}`;
+    });
   }
 
-  private async _probeVision() {
+  private _probeVision() {
     const ed = this._editing;
     if (!ed) return;
     const f = ed.form;
@@ -717,9 +612,8 @@ export class ModelPresetsSection extends LitElement {
       this._formError = "探测前请先填写 API Key";
       return;
     }
-    this._probingVision = true;
     this._formError = null;
-    try {
+    void this._probes.run("vision", async () => {
       const r = await probeVision({
         protocol: f.protocol,
         base_url: f.base_url.trim(),
@@ -729,11 +623,8 @@ export class ModelPresetsSection extends LitElement {
       });
       // 探测即回填（不自动保存——声明权在用户）；结果文案不展示（用户要求）
       this._setField("vision", r.supported ? "true" : "false");
-    } catch (e) {
-      this._formError = this._errMsg(e);
-    } finally {
-      this._probingVision = false;
-    }
+      return null;
+    });
   }
 
   private _renderForm() {
@@ -908,7 +799,7 @@ export class ModelPresetsSection extends LitElement {
             class="q-pct ${high ? "q-high" : ""}"
             >${pct}%</span
           >${w.next_reset_ms
-            ? html`<span class="q-full q-reset"> 重置 ${this._fmtReset(w.next_reset_ms)}</span>`
+            ? html`<span class="q-reset"> 重置 ${this._fmtReset(w.next_reset_ms)}</span>`
             : nothing}`;
       })}`;
     }
