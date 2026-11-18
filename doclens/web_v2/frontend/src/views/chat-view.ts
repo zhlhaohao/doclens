@@ -27,6 +27,7 @@ import { PreviewController } from "../utils/preview-controller";
 import { ChatSessionOpsController } from "../utils/chat-session-ops-controller";
 import { ChatHistoryController } from "../utils/chat-history-controller";
 import { ChatSkillsController } from "../utils/chat-skills-controller";
+import { sanitizeUpstreamError } from "../utils/upstream-error";
 // 向后兼容再导出：checkSlashSubmit 已迁至 chat-skills-controller（纯函数模块）
 export { checkSlashSubmit } from "../utils/chat-skills-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
@@ -898,9 +899,17 @@ export class ChatView extends LitElement {
     }
     this.draft = "";
 
-    // initial 态时消息发送前先建会话（与技能对话共用路径）
+    // initial 态时消息发送前先建会话（与技能对话共用路径）。
+    // createSession 失败（网络抖动等）时恢复草稿与附件——绝不丢用户输入。
     if (this.viewState.state === "initial") {
-      await this._ensureSession(message, message, undefined, images);
+      try {
+        await this._ensureSession(message, message, undefined, images);
+      } catch {
+        this.draft = message;
+        this._pendingImages = images ?? [];
+        this._pushToast("会话创建失败，草稿已保留，请重试", "error", 4000);
+        return;
+      }
       await this._sendMessage(message, true, images);
       return;
     }
@@ -955,6 +964,7 @@ export class ChatView extends LitElement {
     // 不因上次选了「收起全部」而看不到本轮执行进度（2026-10-21 决议）。
     this._streamEl?.scrollToBottom();
     this._streamEl?.resetTraceExpand();
+    actions.setChatState({ lastError: null, lastErrorDetail: null }); // 新回合开始：撤下上一轮错误卡
     if (!firstOfSession) {
       actions.setChatState({
         messages: [...this.viewState.messages, { role: "user", content: message, images, created_at: new Date().toISOString() }],
@@ -993,8 +1003,18 @@ export class ChatView extends LitElement {
       )) {
         if (!stillOwn()) continue;
         if (ev.type === "error") {
-          messages = applyStreamEvent(messages, { type: "token", text: `\n\n⚠️ ${ev.detail}` });
-          actions.setChatState({ messages });
+          // 后端 error 事件（agent 异常收场）：同样脱敏——旧会话里落库的
+          // 原文、以及任何绕过 emit_error 脱敏的路径都在这里兜住。
+          const sanitized = sanitizeUpstreamError(ev.detail ?? "");
+          messages = applyStreamEvent(messages, {
+            type: "token",
+            text: `\n\n⚠️ ${sanitized.message}`,
+          });
+          actions.setChatState({
+            messages,
+            lastError: sanitized.message,
+            lastErrorDetail: sanitized.technicalDetail,
+          });
         } else if (ev.type === "ask") {
           const questions = validateAskQuestions(ev.questions);
           if (questions) {
@@ -1105,6 +1125,16 @@ export class ChatView extends LitElement {
           actions.setChatState({ messages });
         }
         actions.setError(`对话失败: ${(err as Error).message}`);
+        // 失败成为转录的一部分（P1 修复）：末尾错误卡 + 重试入口；
+        // 重载 detail 成功（恢复态接管）或新回合开始时清除。
+        // 上游原始报文脱敏（2026-11-18）：主文案换友好句，原始码进
+        // 「技术详情」——用户看不懂 unknown error, 715 (1000)。
+        // 文案不带「对话失败：」前缀——错误卡已有标题，不重复。
+        const sanitized = sanitizeUpstreamError((err as Error).message ?? "");
+        actions.setChatState({
+          lastError: sanitized.message,
+          lastErrorDetail: sanitized.technicalDetail,
+        });
         if (cur && cur.id === sessionId) {
           void this._loadSession(cur);
         }
@@ -1168,7 +1198,7 @@ export class ChatView extends LitElement {
     this._ops.cancelRewind();
     this._ops.cancelDeleteTurn();
     this._stopGeneratingPoll();
-    actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null });
+    actions.setChatState({ state: "initial", currentSession: null, messages: [], pendingAsk: null, lastError: null, lastErrorDetail: null });
     void this._history.load();
   }
 
@@ -1228,6 +1258,10 @@ export class ChatView extends LitElement {
       }
       if (generating) this._startGeneratingPoll(s.id);
       else this._stopGeneratingPoll();
+      // 重载成功（恢复态接管 / 后端事实回填）：撤下上一轮的转录内错误卡
+      if (store.getState().chat.lastError) {
+        actions.setChatState({ lastError: null, lastErrorDetail: null });
+      }
       this._rewindDividers = dividers;
       // 切换会话/刷新：视口强制回底（贴底粘滞的强制出口）——不同会话间
       // 保留的 _pinned 状态无意义，新时间线以底部为默认视位；
@@ -1509,6 +1543,12 @@ export class ChatView extends LitElement {
       `;
     }
     const hasPreview = this.previewOpen;
+    // 输入框状态播报（aria-live）：给屏幕阅读器说明禁用原因
+    const composerStatus = s.pendingAsk
+      ? "输入框已锁定：请先在上方卡片中选择答案"
+      : s.streaming
+        ? "正在生成回复，可点击停止按钮中断"
+        : "";
     // mobile=true 时 preview-pane 渲染自带 mobile-header（返回/目录/高亮/
     // more=字号·编辑·下载·上传），与文件/搜索 tab 移动端对齐；桌面端传
     // false 保留常规 header。mobile 模式下 noHeader 属性被忽略，无需传。
@@ -1558,6 +1598,9 @@ export class ChatView extends LitElement {
             .modelName=${store.getState().status?.model_name ?? null}
             ?rewindDisabled=${s.streaming}
             ?generating=${s.streaming}
+            ?recovering=${this._genPollTimer !== undefined}
+            .lastError=${s.lastError}
+            .lastErrorDetail=${s.lastErrorDetail}
             ?interjectPending=${this._interjectPending}
             @reference-click=${this._onReferenceClick}
             @reask=${this._onReask}
@@ -1589,9 +1632,10 @@ export class ChatView extends LitElement {
             </div>` : null}
         </div>
         <div class="input-bar">
+          <span class="sr-only" role="status" aria-live="polite">${composerStatus}</span>
           <input-box
             class="text-input"
-            placeholder=${s.pendingAsk ? "请先回答上方的问题…" : "继续提问..."}
+            placeholder=${s.pendingAsk ? "请在上方卡片中选择答案…" : s.streaming ? "正在生成，可点击停止…" : "继续提问..."}
             .buttonLabel=${"发送"}
             multiline
             attachments

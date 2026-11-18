@@ -52,6 +52,18 @@ export const chatViewStyles = [dialogCardStyles, css`
     flex-shrink: 0;
     background: var(--cortex-view-bg);
   }
+  /* 屏幕阅读器专用状态播报（视觉隐藏，不占布局） */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .focus-main {
     display: flex;
     flex: 1;

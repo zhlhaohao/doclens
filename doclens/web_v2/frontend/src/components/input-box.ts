@@ -473,6 +473,8 @@ export class InputBox extends LitElement {
       }
     }
     if (e.key !== "Enter") return;
+    // IME 合成期（中文/日文选词确认）不发送：isComposing 或旧版 keyCode 229
+    if (e.isComposing || e.keyCode === 229) return;
     // multiline：Enter 发送、Shift+Enter 换行；非 multiline：Enter 始终发送
     if (e.shiftKey && this.multiline) return;
     e.preventDefault();

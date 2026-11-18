@@ -492,7 +492,7 @@ export class FilesView extends LitElement {
    *  与 files 工具箱同一条 pendingSkillChat 收尾链路；ADR-0041 D2）。 */
   private _onBookActivated(book: BookSkillItem) {
     const message = `/${book.name} 请按技能指引，先对本书内容做整体概要介绍，再以本书涉及的典型问题引导我开展深读。`;
-    actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false });
+    actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false, lastError: null });
     actions.setPendingSkillChat({
       message,
       title: `深读 · ${book.title}`,
@@ -920,7 +920,7 @@ export class FilesView extends LitElement {
     recordSkillUse(skill.name);
     const firstFile = paths[0].split("/").pop() ?? paths[0];
     // 技能对话总是新建会话：重置 chat 视图态（旧对话保留在历史列表，可回）
-    actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false });
+    actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false, lastError: null });
     actions.setPendingSkillChat({
       message: lines.join("\n"),
       title: `${skill.name} · ${firstFile}`,

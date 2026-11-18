@@ -645,6 +645,10 @@ The system runs predominantly flat. Elevation is reserved for two interaction la
 - Don't reduce `{typography.body-md}` line-height below 1.50 — the negative letter-spacing already tightens the metric and any further compression breaks legibility.
 - Don't apply heavy shadows to marketing cards. Elevation is a commerce-flow signal, not a marketing flourish.
 
+### Exception: chat composer green accent (ADR-0043 theme era, ratified 2026-11-18)
+
+The chat input box (`components/input-box.ts`, tokens `--cortex-input-accent` / `--cortex-input-accent-2`, defined per-theme in tokens.css) is a **documented exception** to the "no additional accents" rule. The gradient border + soft glow mark the *single writable surface* in the app — the one place where the user speaks — and cobalt there would collide with cobalt link/bubble accents directly above it. This exception covers the composer wrapper border/focus glow and the send button only; it does not license green anywhere else, and its tokens must carry per-theme values in tokens.css (Meta 白 / 深夜 / 暖纸 all defined) rather than hardcoded literals. The `border-radius: 20px` wrapper is likewise ratified as the composer's documented radius (between `{rounded.xl}` and `{rounded.xxxl}`).
+
 ## Responsive Behavior
 
 ### Breakpoints

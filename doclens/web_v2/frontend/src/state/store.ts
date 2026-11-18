@@ -59,6 +59,8 @@ export const INITIAL_STATE: AppState = {
     messages: [],
     streaming: false,
     pendingAsk: null,
+    lastError: null,
+    lastErrorDetail: null,
   },
   detailStack: [],
   pendingSession: null,

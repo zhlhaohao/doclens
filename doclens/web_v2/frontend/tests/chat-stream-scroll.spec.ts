@@ -39,7 +39,14 @@ describe("<chat-stream> stick-to-bottom", () => {
 
   it("follows bottom while pinned (initial default)", async () => {
     const el = await fixture(html`<chat-stream .nodes=${nodes(3)}></chat-stream>`) as ChatStream;
+    // 双保险复核（移动端回拽修复）要求距底 ≤ 阈值才跟随：初始 top 已在贴底域
+    let top = 700; // 距底 0（scrollHeight 1000 - client 300）
     stubLayout(el, 1000, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => { top = v; },
+    });
     el.nodes = nodes(4); // 流式增量 → updated()
     await el.updateComplete;
     expect(el.scrollTop).toBe(1000); // 贴底跟随：滚到 scrollHeight
@@ -108,11 +115,45 @@ describe("<chat-stream> stick-to-bottom", () => {
     // 程序性 scrollTop=scrollHeight 触发 scroll 事件：距底 0 ≤ 阈值，
     // _pinned 保持 true（跟随不会把自己顶下线）
     const el = await fixture(html`<chat-stream .nodes=${nodes(3)}></chat-stream>`) as ChatStream;
+    let top = 700; // 初始贴底（距底 0）
     stubLayout(el, 1000, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => { top = v; },
+    });
     el.nodes = nodes(4); // 跟随滚底 → scrollTop=1000 → scroll 事件
     await el.updateComplete;
+    expect(el.scrollTop).toBe(1000);
     el.dispatchEvent(new Event("scroll")); // 程序滚动的 scroll 回放
     expect(el.pinned).toBe(true);
+  });
+
+  it("rAF follow aborts when user scrolled away mid-frame (mobile yank-back fix)", async () => {
+    // 移动端回拽修复（2026-11-18）：updated() 排定 rAF 后用户快速上滚，
+    // scroll 事件被 _scrollRafPending guard 吞掉 → _pinned 仍 true，
+    // 但 rAF 执行时按实际位置复核——距底超阈值即放弃跟随，不拽回底部
+    const el = await fixture(html`<chat-stream .nodes=${nodes(3)}></chat-stream>`) as ChatStream;
+    let top = 700; // 贴底态
+    let rafCb: FrameRequestCallback | null = null;
+    stubLayout(el, 1000, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => { top = v; },
+    });
+    // 手动控制 rAF 时序：updated 排定回调但暂不执行
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+      rafCb = cb;
+      return 1;
+    });
+    el.nodes = nodes(4); // updated() → 排定 rAF
+    await el.updateComplete;
+    // rAF 待执行期间用户滚上去（scroll 事件被 guard 忽略，_pinned 不变）
+    top = 0;
+    // rAF 现在执行：距底 700 > 阈值 80 → 复核放弃跟随
+    rafCb!(0);
+    expect(el.scrollTop).toBe(0); // 未被拽回底部
   });
 });
 
