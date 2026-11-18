@@ -83,13 +83,21 @@ def _chat_with_retry(
 ):
     """client.chat 的退避重试包装。
 
-    - retryable=True 的异常（LLMRateLimitError/LLMNetworkError，429/网络）：
-      指数退避重试至多 _RETRY_MAX_ATTEMPTS 次；全部耗尽返回 None（调用方
-      以失败收场）。多子代理并发下 429 是常态而非异常（2026-10-03 实测：
-      21 并发 → 网关限流，SDK 内建 2 次重试耗尽后子代理整体报废）。
-    - 不可重试（认证/上下文超限/未知异常）：立即失败——保留全栈日志供排查。
+    - 可重试异常（429 限流 / 网络抖动 / 上游瞬时故障）：指数退避重试至多
+      _RETRY_MAX_ATTEMPTS 次；全部耗尽返回 None（调用方以失败收场）。
+      多子代理并发下 429 是常态而非异常（2026-10-03 实测：21 并发 → 网关
+      限流，SDK 内建 2 次重试耗尽后子代理整体报废）。
+    - 不可重试（认证/上下文超限/参数错误）：立即失败——保留全栈日志供排查。
+
+    判定口径复用 :mod:`planify.core.llm.retry_policy`（与主代理同源，
+    2026-11-18）：此前本函数只看 ``getattr(e, "retryable", False)``，
+    SDK 原生异常（含 anthropic RateLimitError）一律被判不可重试——
+    2026-11-18 12:39 实测 bigmodel 429 被记为 ``retryable=False``，
+    4 次子代理派发全部瞬间失败。
     """
     import time
+
+    from ..core.llm.retry_policy import is_retryable_llm_error
 
     for attempt in range(1, _RETRY_MAX_ATTEMPTS + 1):
         try:
@@ -101,7 +109,7 @@ def _chat_with_retry(
                 tracer=tracer,
             )
         except Exception as e:
-            retryable = bool(getattr(e, "retryable", False))
+            retryable = is_retryable_llm_error(e)
             if not retryable or attempt == _RETRY_MAX_ATTEMPTS:
                 logger.exception(
                     "子代理 LLM 调用失败 (agent_type=%s, max_tokens=%d, "

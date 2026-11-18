@@ -14,6 +14,8 @@ from anthropic import Anthropic, AsyncAnthropic
 
 from .stream_close import close_sdk_stream_iterator
 from .timeouts import build_httpx_timeout
+from .provider_context import mark_provider_error
+from .upstream_errors import detect_provider
 from .types import (
     LLMResponse,
     StreamEvent,
@@ -84,6 +86,10 @@ class AnthropicProvider:
         self.base_url = base_url
         self.api_key = api_key
         self.thinking_depth = normalize_thinking_depth(thinking_depth)
+
+    def _provider(self) -> str:
+        """当前端点对应的 provider（供错误分类分表，见 upstream_errors）。"""
+        return detect_provider(self.base_url, self.model)
 
     def _ensure_async_client(self) -> AsyncAnthropic:
         """惰性创建 async 客户端（参数与同步版一致，连接池独立）。"""
@@ -173,6 +179,7 @@ class AnthropicProvider:
                 with self._client.messages.stream(**kwargs) as stream:
                     response = stream.get_final_message()
         except Exception as e:
+            mark_provider_error(e, self._provider())
             if tracer:
                 tracer.trace_error(turn, e)
             raise
@@ -210,6 +217,7 @@ class AnthropicProvider:
                             tracer.trace_error(turn, f"get_final_message 失败: {e}")
                     yield normalized
             except BaseException as e:  # 含 GeneratorExit（调用方中断生成器）
+                mark_provider_error(e, self._provider())
                 if tracer and not done:
                     tracer.trace_error(turn, e)
                 raise
@@ -240,6 +248,7 @@ class AnthropicProvider:
                 async with client.messages.stream(**kwargs) as stream:
                     response = await stream.get_final_message()
         except Exception as e:
+            mark_provider_error(e, self._provider())
             if tracer:
                 tracer.trace_error(turn, e)
             raise
@@ -286,6 +295,7 @@ class AnthropicProvider:
                                 tracer.trace_error(turn, f"get_final_message 失败: {e}")
                     yield normalized
             except BaseException as e:  # 含 GeneratorExit（aclose 中断生成器）
+                mark_provider_error(e, self._provider())
                 if tracer and not done:
                     tracer.trace_error(turn, e)
                 raise
