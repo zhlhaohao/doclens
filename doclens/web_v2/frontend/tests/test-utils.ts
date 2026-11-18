@@ -5,7 +5,7 @@ export function resetStore(target: typeof store) {
   target.setState({
     view: "search",
     search: { state: "initial", currentSession: null, query: "", queryWords: [], groups: [], total: 0, totalMatches: 0, source: "fts", offset: 0, limit: 20 },
-    chat: { state: "initial", currentSession: null, messages: [], streaming: false, pendingAsk: null },
+    chat: { state: "initial", currentSession: null, messages: [], streaming: false, pendingAsk: null, lastError: null, lastErrorDetail: null },
     settings: { scope: "local", values: {}, original: {}, dirty: false, exists: true, saving: false, error: null },
     files: {
       treeCache: {},

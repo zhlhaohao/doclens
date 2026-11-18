@@ -124,22 +124,12 @@ def _round_signature(calls: List[Tuple[str, dict, str]]) -> tuple:
 def is_retryable_llm_error(e: BaseException) -> bool:
     """LLM 调用是否值得退避重试（瞬时 429/网络抖动，2026-11-01 P2）。
 
-    两类来源都认：planify 归一异常（``LLMRateLimitError``/``LLMNetworkError``
-    的 ``retryable=True``）与 SDK 原生异常（anthropic/openai SDK 经
-    provider.astream 直穿的 RateLimitError / APIConnectionError / 5xx
-    APIStatusError）。认证/上下文超限/4xx 参数错误一律不可重试。
+    判定口径的唯一真相源在 :mod:`planify.core.llm.retry_policy`
+    （主代理与子代理共用，2026-11-18）——本函数保留为历史入口的薄封装。
     """
-    # planify 归一异常（子代理 _chat_with_retry 同口径）
-    if bool(getattr(e, "retryable", False)):
-        return True
-    name = type(e).__name__
-    if name in ("RateLimitError", "APIConnectionError", "APITimeoutError"):
-        return True
-    # SDK 5xx 服务端错误（overloaded / internal）：status_code 属性判别
-    status = getattr(e, "status_code", None)
-    if isinstance(status, int) and 500 <= status < 600:
-        return True
-    return False
+    from ..core.llm.retry_policy import is_retryable_llm_error as _impl
+
+    return _impl(e)
 
 
 def _refresh_or_insert_context(
@@ -942,10 +932,23 @@ class StreamingAgent:
 
         except Exception as e:
             self.logger.exception(f"[StreamingAgent] 运行异常: {e}")
-            await self.emitter.emit_error(str(e), code="AGENT_ERROR")
+            # 上游瞬时故障脱敏（2026-11-18）：技术细节只进上面的日志，
+            # 用户可见文案换成可读句子——原文（英文占位符 + 网关码 +
+            # 业务码）透传到转录气泡用户无法理解（MiniMax 官方客户端
+            # issue #420 同款）。详见 core/llm/upstream_errors.py。
+            await self.emitter.emit_error(
+                self._user_facing_error(e), code="AGENT_ERROR"
+            )
             return self._cleanup_messages(messages)
         finally:
             reset_current_session_id(ctx_token)
+
+    @staticmethod
+    def _user_facing_error(e: BaseException) -> str:
+        """异常 → 用户可见文案（上游瞬时故障走脱敏，其余原样）。"""
+        from ..core.llm.retry_policy import user_facing_llm_error
+
+        return user_facing_llm_error(e)
 
     async def _finalize_round_compaction(
         self, messages: List[Dict], session_id: str

@@ -126,6 +126,12 @@ export interface ChatViewState {
   streaming: boolean;
   /** ask_user_question 悬置问题（null = 无）；悬置期间禁用发送 */
   pendingAsk: PendingAsk | null;
+  /** 最近一轮流式失败（传输层异常，非后端 error 事件）：转录末尾渲染
+   *  错误卡 + 重试；新回合开始 / 会话切换 / 重载成功时清除。null = 无。 */
+  lastError: string | null;
+  /** 错误卡的「技术详情」（上游原始报文，如网关码 + 业务码）：默认收起，
+   *  仅在 lastError 非空时可能存在。上游原文不进主文案（用户看不懂）。 */
+  lastErrorDetail: string | null;
 }
 
 export interface HistoryEntry {

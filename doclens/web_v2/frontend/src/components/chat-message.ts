@@ -231,6 +231,12 @@ export class ChatMessageEl extends LitElement {
       color: var(--cortex-text-subtle);
       font-style: italic;
     }
+    /* 耗时计数（P2 反馈）：纯生成期秒表——长静默不再像卡死 */
+    .thinking .elapsed {
+      font-variant-numeric: tabular-nums;
+      font-style: normal;
+      margin-left: 4px;
+    }
     /* 思考流双行尾部滑窗（2026-10-05 二修）：可滚动容器 + JS 锚定尾部
        （updated() 里 scrollTop=scrollHeight）——超高时显示最后两行，
        不足两行时 scrollTop 赋值无效果、内容自然从顶显示。纯 CSS 方案
@@ -347,6 +353,9 @@ export class ChatMessageEl extends LitElement {
    *  工具结束到下一轮 tool_call 的 LLM 流式间隙会翻 false，按钮闪烁）。
    *  恢复态（断开续跑回页占位）同样为 true——插话入口照常可用（ADR-0048）。 */
   @property({ type: Boolean }) generating = false;
+  /** 恢复态（ADR-0028 断开续跑）：占位文案从「思考中」换为后台续跑说明
+   *  （无本地 SSE 流，5s 轮询接管——秒表仍走，给「仍在进行」的进展感）。 */
+  @property({ type: Boolean }) recovering = false;
   /** 当前 AI 模型名（来自 /api/status.model_name：激活 LLM 预设名优先，回退 model id）。
    *  assistant 思考中占位会展示「{modelName} 思考中...」，空串/null 时仅显示「思考中...」。 */
   @property({ attribute: false }) modelName: string | null = null;
@@ -359,6 +368,26 @@ export class ChatMessageEl extends LitElement {
   @state() private _imgPreview: string | null = null;
   /** 思考流滑窗尾锚 rAF guard（同帧多次 updated 合并为单次） */
   private _thinkingRafPending = false;
+  /** 纯生成期耗时计数（P2 反馈）：占位期间每秒 +1，正文首 token 到达即停。 */
+  @state() private _elapsedSec = 0;
+  private _elapsedTimer?: number;
+  private _elapsedAnchor = 0;
+
+  private _syncElapsedTimer(active: boolean): void {
+    const need = active && this.message?.content === "";
+    const running = this._elapsedTimer !== undefined;
+    if (need && !running) {
+      this._elapsedAnchor = Date.now();
+      this._elapsedSec = 0;
+      this._elapsedTimer = window.setInterval(() => {
+        this._elapsedSec = Math.floor((Date.now() - this._elapsedAnchor) / 1000);
+      }, 1000);
+    } else if (!need && running) {
+      window.clearInterval(this._elapsedTimer);
+      this._elapsedTimer = undefined;
+      this._elapsedSec = 0;
+    }
+  }
 
   firstUpdated() {
     this.addEventListener("click", this._onClick);
@@ -370,6 +399,8 @@ export class ChatMessageEl extends LitElement {
   }
 
   updated() {
+    // 纯生成期秒表（P2 反馈）：占位期间计时，正文首 token / 生成结束即停
+    this._syncElapsedTimer(this.generating);
     // 图片预览 dialog：showModal 进 top-layer（center + backdrop + ESC 关闭）。
     // open 状态由 _imgPreview 驱动：非 null 且尚未 open 时唤起；close 事件回落。
     const dlg = this.renderRoot.querySelector<HTMLDialogElement>("dialog.img-preview-dialog");
@@ -390,6 +421,7 @@ export class ChatMessageEl extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this._syncElapsedTimer(false); // 秒表随组件卸载停止
     this.removeEventListener("click", this._onClick);
     this.removeEventListener("mouseenter", this._onHoverChange);
     this.removeEventListener("mouseleave", this._onHoverChange);
@@ -532,12 +564,20 @@ export class ChatMessageEl extends LitElement {
   /** assistant: markdown 渲染；user: 纯文本（保留换行）；空内容显示思考占位 */
   private renderBubble(content: string) {
     if (content === "") {
-      const prefix = this.modelName ? `${this.modelName} 思考中` : "思考中";
+      // 恢复态（P2 反馈）：无本地 SSE 流、5s 轮询接管——文案换后台续跑说明
+      const prefix = this.recovering
+        ? "正在后台继续生成（每 5 秒检查）"
+        : this.modelName
+          ? `${this.modelName} 思考中`
+          : "思考中";
       // 思考流（2026-10-05）：占位期间以双行尾部滑窗展示被动接收的推理增量；
-      // 无思考流（服务端不发）退化为静态「思考中...」占位
+      // 无思考流（服务端不发）退化为静态「思考中...」占位。
+      // 耗时计数（P2 反馈）：秒表随 generating 走——长静默有进展感。
       const stream = this.message?.thinking;
       return html`
-        <div class="thinking">${prefix}${stream ? "" : "..."}</div>
+        <div class="thinking">${prefix}${stream ? "" : "..."}${this._elapsedTimer !== undefined
+          ? html`<span class="elapsed">${this._elapsedSec}s</span>`
+          : null}</div>
         ${stream
           ? html`<div class="thinking-stream"><span>${stream}</span></div>`
           : null}

@@ -1,4 +1,4 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { TimelineNode } from "../views/chat-timeline";
 import { ScrollJumpController, scrollJumpFabStyles } from "../utils/scroll-jump";
@@ -26,6 +26,12 @@ export class ChatStream extends LitElement {
       }
       :host::-webkit-scrollbar {
         display: none;
+      }
+      /* FAB 槽位（2026-11-18 玻璃压正文修复）：桌面端预留右侧 52px 内边距，
+         正文右缘收缩到槽位左侧，悬浮按钮组落在槽内、不再压任何气泡。
+         仅桌面生效——移动端三钮组本就 display:none 收进顶栏菜单。 */
+      @media (min-width: 1024px) {
+        :host { padding-right: 52px; }
       }
       /* 空态在流容器内垂直水平居中（复用公共块 .empty.fill 变体） */
       .empty.fill {
@@ -61,6 +67,77 @@ export class ChatStream extends LitElement {
         border-left: 2px solid var(--cortex-border-muted);
         margin-left: 10px;
       }
+      /* 转录内错误卡（P1 修复）：流式传输层失败时末尾渲染，role=alert
+         即时播报；重试把上一条用户消息回填输入框（reask 通道）。 */
+      .error-card {
+        align-self: center;
+        max-width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border: 1px solid color-mix(in srgb, var(--cortex-danger) 45%, transparent);
+        border-left: 3px solid var(--cortex-danger);
+        border-radius: var(--cortex-radius-md);
+        background: var(--cortex-danger-soft);
+        color: var(--cortex-danger);
+        font-size: var(--cortex-fs-sm);
+      }
+      .error-card doclens-icon { flex: 0 0 auto; }
+      .error-body { flex: 1; min-width: 0; }
+      .error-title { font-weight: 600; color: var(--cortex-danger-strong); }
+      .error-msg {
+        color: var(--cortex-text-muted);
+        font-size: var(--cortex-fs-xs);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .error-retry {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        border: 1px solid var(--cortex-border);
+        border-radius: 999px;
+        background: var(--cortex-surface);
+        color: var(--cortex-text);
+        font-size: var(--cortex-fs-sm);
+        padding: 5px 12px;
+        cursor: pointer;
+        min-height: 32px;
+      }
+      .error-retry:hover { border-color: var(--cortex-primary); color: var(--cortex-primary); }
+      /* 技术详情（上游原始报文）：默认收起，展开后显示原始码——
+         排查需要，但不让裸错误码占据主视线。 */
+      .error-detail {
+        margin-top: 4px;
+        font-size: var(--cortex-fs-xs);
+        color: var(--cortex-text-muted);
+      }
+      .error-detail summary {
+        cursor: pointer;
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .error-detail summary::-webkit-details-marker { display: none; }
+      .error-detail summary::before { content: "▸"; }
+      .error-detail[open] summary::before { content: "▾"; }
+      .error-detail code {
+        display: block;
+        margin-top: 4px;
+        padding: 6px 8px;
+        border-radius: var(--cortex-radius-sm);
+        background: var(--cortex-surface);
+        border: 1px solid var(--cortex-border-muted);
+        font-family: var(--cortex-font-mono, monospace);
+        font-size: var(--cortex-fs-xs);
+        color: var(--cortex-text-muted);
+        word-break: break-word;
+        white-space: pre-wrap;
+      }
       /* 会话导航三钮组（回顶 / 展开-收起思考过程 / 回底，2026-10-21）：
          仅桌面渲染——移动端上划就是看历史，悬浮钮更占视线且易误触；
          移动端把三个动作收进顶栏「更多」菜单（2026-11-06）。 */
@@ -78,22 +155,24 @@ export class ChatStream extends LitElement {
         bottom: auto;
         margin-bottom: calc(-1 * var(--cortex-space-4));
       }
+      /* FAB 落位（2026-11-18）：:host 已让出右侧 52px 槽位；按钮组负外边距
+         向右探入槽内，与正文彻底分离（不再压正文右缘）。 */
       .scroll-jump-anchor .scroll-jump-fabs {
         /* 锚点 height:0 → 按钮组整体上移自身一半高度，中心对准 50% 线 */
         transform: translateY(-50%);
         padding-right: var(--cortex-space-1);
+        margin-right: -40px; /* 探入 :host 让出的 52px 槽位 */
       }
-      /* 半透明（2026-10-21，二版加深）：悬浮钮压在正文上，实心底会切掉文字。
-         默认极薄底 + 重毛玻璃——靠模糊而非底色区分层级，正文透出来；
-         hover/键盘聚焦回到实心（可读性在交互时优先），禁用态只剩描边。
-         作用域限定 chat-stream——md-viewer / preview-pane 的跳转钮保持原实心。 */
+      /* 实心底（2026-11-18 玻璃压正文修复）：正文右缘已让开槽位，无需靠
+         毛玻璃透出文字。恢复与 md-viewer / preview-pane 一致的实底 + 描边 +
+         柔影，hover 提亮为钴蓝描边；禁用态退为浅描边。 */
       .scroll-jump-anchor .scroll-jump-fab {
-        background: color-mix(in srgb, var(--cortex-surface) 32%, transparent);
-        border-color: color-mix(in srgb, var(--cortex-border) 35%, transparent);
-        color: color-mix(in srgb, var(--cortex-text-muted) 70%, transparent);
-        backdrop-filter: blur(8px) saturate(1.15);
-        -webkit-backdrop-filter: blur(8px) saturate(1.15);
-        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+        background: var(--cortex-surface);
+        border-color: var(--cortex-border);
+        color: var(--cortex-text-muted);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        box-shadow: var(--cortex-shadow-sm);
       }
       .scroll-jump-anchor .scroll-jump-fab:hover,
       .scroll-jump-anchor .scroll-jump-fab:focus-visible {
@@ -104,8 +183,8 @@ export class ChatStream extends LitElement {
       }
       .scroll-jump-anchor .scroll-jump-fab:disabled,
       .scroll-jump-anchor .scroll-jump-fab:disabled:hover {
-        background: transparent;
-        border-color: color-mix(in srgb, var(--cortex-border) 30%, transparent);
+        background: var(--cortex-surface);
+        border-color: var(--cortex-border-muted);
         color: var(--cortex-text-subtle);
         box-shadow: none;
       }
@@ -124,6 +203,14 @@ export class ChatStream extends LitElement {
   /** 回合生成中（ADR-0048）：透传给消息 trace——插话按钮显隐锚点
    *  （绑 streaming 态而非 running 步骤，防流式间隙闪烁）。 */
   @property({ type: Boolean }) generating = false;
+  /** 最近一轮流式失败文案（非 null 时转录末尾渲染错误卡；「重试」把
+   *  上一条用户消息回填输入框并聚焦——复用 reask 语义，由宿主处理）。 */
+  @property({ attribute: false }) lastError: string | null = null;
+  /** 错误卡「技术详情」（上游原始报文，如 `unknown error, 715 (1000)`）：
+   *  默认收起——主文案只给可读句子，原始码供排查时展开。 */
+  @property({ attribute: false }) lastErrorDetail: string | null = null;
+  /** 恢复态（ADR-0028）：末条占位换后台续跑文案（宿主绑轮询激活态）。 */
+  @property({ type: Boolean }) recovering = false;
   @state() private _expanded = new Set<number>();
   /** 贴底粘滞（stick-to-bottom，2026-10-05）：仅当用户视口在底部附近时，
    *  流式增量（token / thinking_delta / tool step）才自动跟随滚底。
@@ -314,6 +401,12 @@ export class ChatStream extends LitElement {
     requestAnimationFrame(() => {
       this._scrollRafPending = false;
       if (!this._pinned) return; // rAF 间隙用户上滚：放弃本次跟随
+      // 双保险（移动端滚动回拽修复）：_pinned 由 scroll 事件维护，但
+      // iOS/Android 惯性滚动期间 scroll 事件批量滞后，可能在 rAF 排定后
+      // 才到达——只信标志会把用户刚滚上去的视口拽回底部（「上去又自动
+      // 下来」）。执行前按当前实际位置复核：已离底超过阈值即放弃跟随。
+      const distance = this.scrollHeight - this.scrollTop - this.clientHeight;
+      if (distance > ChatStream.PIN_THRESHOLD) return;
       this.scrollTop = this.scrollHeight;
       this._scrollJump.refresh(); // 滚到底后「回底」钮该消失了
     });
@@ -331,7 +424,7 @@ export class ChatStream extends LitElement {
       // generating 只给末条（流式占位 / 恢复态占位）——历史消息的 trace
       // 不亮插话按钮（它们不是当前回合）
       const isLast = this.nodes[this.nodes.length - 1] === node;
-      return html`<chat-message role=${node.message.role} .message=${node.message} .modelName=${this.modelName} .rewindDisabled=${this.rewindDisabled} .traceExpandOverride=${this._expandOverride} .interjectPending=${this.interjectPending} .generating=${this.generating && isLast}></chat-message>`;
+      return html`<chat-message role=${node.message.role} .message=${node.message} .modelName=${this.modelName} .rewindDisabled=${this.rewindDisabled} .traceExpandOverride=${this._expandOverride} .interjectPending=${this.interjectPending} .generating=${this.generating && isLast} .recovering=${this.recovering && isLast}></chat-message>`;
     }
     const expanded = this._expanded.has(node.boundarySeq);
     return html`
@@ -382,13 +475,51 @@ export class ChatStream extends LitElement {
     `;
   }
 
+  /** 错误卡「重试」：回填上一条用户消息到输入框（复用 reask 通道）。 */
+  private _onErrorRetry(): void {
+    const lastUser = [...this.nodes]
+      .reverse()
+      .find((n) => n.type === "message" && n.message.role === "user");
+    if (!lastUser || lastUser.type !== "message") return;
+    const m = lastUser.message;
+    this.dispatchEvent(
+      new CustomEvent("reask", {
+        detail: { content: m.content, images: m.images },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private _renderErrorCard(): ReturnType<typeof html> | null {
+    if (!this.lastError) return null;
+    return html`
+      <div class="error-card" role="alert">
+        <doclens-icon name="alert-triangle"></doclens-icon>
+        <div class="error-body">
+          <div class="error-title">对话失败</div>
+          <div class="error-msg">${this.lastError}</div>
+          ${this.lastErrorDetail
+            ? html`<details class="error-detail">
+                <summary>技术详情</summary>
+                <code>${this.lastErrorDetail}</code>
+              </details>`
+            : nothing}
+        </div>
+        <button class="error-retry" type="button" @click=${this._onErrorRetry}>
+          <doclens-icon name="rotate-ccw"></doclens-icon>重试
+        </button>
+      </div>
+    `;
+  }
+
   render() {
     if (this.nodes.length === 0) {
       return html`<div class="empty fill">向助手提出你的第一个问题</div>`;
     }
     // 三钮组放在内容**开头**：sticky top:50% 需要静态位置在内容顶部才能
     // 被钳制到视口中央（放末尾只能配 sticky bottom 钉住下缘）
-    return html`${this._renderFabs()}${this.nodes.map((n) => this._renderNode(n))}`;
+    return html`${this._renderFabs()}${this.nodes.map((n) => this._renderNode(n))}${this._renderErrorCard()}`;
   }
 }
 

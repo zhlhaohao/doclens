@@ -249,7 +249,7 @@ export class CortexApp extends LitElement {
   /** 预览页技能工具箱确认（skill-chat 事件）：重置 chat 态 → pending
    *  技能消息 → 走 router 切 chat（与 files 页工具箱同一条收尾链路）。 */
   private _onSkillChat = (e: CustomEvent<{ message: string; title: string }>) => {
-    actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false });
+    actions.setChatState({ state: "initial", currentSession: null, messages: [], streaming: false, lastError: null });
     actions.setPendingSkillChat({
       message: e.detail.message,
       title: e.detail.title,

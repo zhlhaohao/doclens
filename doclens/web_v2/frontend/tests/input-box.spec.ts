@@ -39,6 +39,26 @@ describe("<input-box>", () => {
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }));
     expect(submitted).toBe("x");
   });
+
+  it("does NOT submit while IME is composing (isComposing / keyCode 229)", async () => {
+    const el = await fixture(html`<input-box placeholder="hi" button-label="go" multiline></input-box>`);
+    const input = el.shadowRoot!.querySelector<HTMLInputElement | HTMLTextAreaElement>("input, textarea")!;
+    (input as HTMLInputElement).value = "中文候选";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    let submitted = "";
+    el.addEventListener("submit", (e: any) => (submitted = e.detail.value));
+
+    // 现代浏览器：KeyboardEvent.isComposing = true（选词确认 Enter）
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }));
+    // 旧版 Safari：keyCode 229
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true } as any));
+    expect(submitted).toBe("");
+
+    // 合成结束后普通 Enter 正常发送
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(submitted).toBe("中文候选");
+  });
 });
 
 const MODES: Record<SearchMode, { label: string; icon: string }> = {
