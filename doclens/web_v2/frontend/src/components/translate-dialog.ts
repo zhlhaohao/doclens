@@ -36,7 +36,7 @@ export class TranslateDialog extends LitElement {
       display: flex;
       flex-direction: column;
       gap: var(--cortex-space-3);
-      width: min(440px, calc(100vw - 32px));
+      width: min(440px, 100%);
       max-height: calc(100vh - 48px);
       color: var(--cortex-text);
       font-family: var(--cortex-font);

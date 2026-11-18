@@ -30,7 +30,7 @@ export class MoveDialog extends LitElement {
       padding: var(--cortex-space-2) 0;
     }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
       .tree { max-height: 50vh; }
     }
   `];;

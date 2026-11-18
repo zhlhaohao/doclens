@@ -78,7 +78,7 @@ export abstract class InputDialogBase extends LitElement {
     }
     button.primary:disabled:hover { opacity: 1; }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
       input { font-size: 16px; padding: 10px; }
     }
   `];;

@@ -37,6 +37,14 @@ export class ImportConfirmDialog extends LitElement {
       font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
     }
+    /* 移动端（2026-11-18）：卡片外壳已内缩到视口宽 − 32px，340px 下限
+       在窄屏上会顶出卡片——归零让内容随卡片自适应。 */
+    @media (max-width: 1023px) {
+      :host {
+        min-width: 0;
+        max-width: 100%;
+      }
+    }
     /* 标题略大 + 图标（本地变体，形态走公共块 confirmStyles） */
     h2 {
       display: flex;

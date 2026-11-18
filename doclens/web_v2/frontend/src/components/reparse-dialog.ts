@@ -61,7 +61,7 @@ export class ReparseDialog extends LitElement {
     .actions .spacer { flex: 1; }
     /* 按钮形态走公共块（AP-4）——此处仅保留本对话框的按钮排特例 */
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
       .actions { flex-wrap: wrap; gap: var(--cortex-space-3); }
       .actions .spacer { flex-basis: 100%; }
       .actions button { flex: 1; padding: 12px 16px; min-height: 44px; }

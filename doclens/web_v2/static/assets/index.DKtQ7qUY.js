@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index.D8qc3tcT.js","assets/index.DM6vfrH2.js","assets/index.DxclzAEI.js","assets/index.Dlb8HZ3x.js","assets/index.mgU8uCQW.js","assets/index.BLN2MqrA.js","assets/index.uREPqZDF.js","assets/index.C68yp2NH.js","assets/index.pTN8W0Lr.js","assets/index.CxrvKQuH.js","assets/index.BNA_g1Jm.js","assets/index.Bm9j8sd8.js","assets/dockerfile.BNmZX-Cu.js","assets/simple-mode.GW_nhZxv.js","assets/factor.XCvu78D9.js","assets/cm-core.CUAIktSp.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/index.D8qc3tcT.js","assets/index.DM6vfrH2.js","assets/index.DxclzAEI.js","assets/index.Dlb8HZ3x.js","assets/index.mgU8uCQW.js","assets/index.BLN2MqrA.js","assets/index.uREPqZDF.js","assets/index.C68yp2NH.js","assets/index.pTN8W0Lr.js","assets/index.CxrvKQuH.js","assets/index.BNA_g1Jm.js","assets/index.Bm9j8sd8.js","assets/dockerfile.BNmZX-Cu.js","assets/simple-mode.GW_nhZxv.js","assets/factor.XCvu78D9.js","assets/cm-core.ChNP0jU5.js"])))=>i.map(i=>d[i]);
 var h1=Object.defineProperty;var u1=(e,t,r)=>t in e?h1(e,t,{enumerable:!0,configurable:!0,writable:!0,value:r}):e[t]=r;var ye=(e,t,r)=>u1(e,typeof t!="symbol"?t+"":t,r);(function(){const t=document.createElement("link").relList;if(t&&t.supports&&t.supports("modulepreload"))return;for(const i of document.querySelectorAll('link[rel="modulepreload"]'))s(i);new MutationObserver(i=>{for(const n of i)if(n.type==="childList")for(const a of n.addedNodes)a.tagName==="LINK"&&a.rel==="modulepreload"&&s(a)}).observe(document,{childList:!0,subtree:!0});function r(i){const n={};return i.integrity&&(n.integrity=i.integrity),i.referrerPolicy&&(n.referrerPolicy=i.referrerPolicy),i.crossOrigin==="use-credentials"?n.credentials="include":i.crossOrigin==="anonymous"?n.credentials="omit":n.credentials="same-origin",n}function s(i){if(i.ep)return;i.ep=!0;const n=r(i);fetch(i.href,n)}})();/**
  * @license
  * Copyright 2019 Google LLC
@@ -4224,7 +4224,7 @@ ${i}</table>
 `,0),this._onTable=()=>{const t=`| ${Array.from({length:3},(i,n)=>`列${n+1}`).join(" | ")} |
 `,r=`| ${Array.from({length:3},()=>"---").join(" | ")} |
 `,s=Array.from({length:5},()=>`| ${Array.from({length:3},()=>"").join(" | ")} |
-`).join("");this._blockInsert(t+r+s,t.length+r.length+2)},this._onLink=()=>this._wrapAction("[","](https://)","链接文字"),this._onSaveClick=()=>{this._dirty&&this._emitSave()},this._onCancelClick=()=>{this.discard()}}async firstUpdated(){this._original=this.originalContent,this._offAppThemeChange=Od(e=>{this._appTheme=e,this._applyTheme()}),this._offCodeThemeChange=N4(e=>{this._codeTheme=e,this._applyTheme()}),this._coreReady=this._loadCore(),await this._coreReady}disconnectedCallback(){var e,t,r,s;super.disconnectedCallback(),(e=this._offAppThemeChange)==null||e.call(this),this._offAppThemeChange=null,(t=this._offCodeThemeChange)==null||t.call(this),this._offCodeThemeChange=null,(s=(r=this._view)==null?void 0:r.destroy)==null||s.call(r),this._view=null}async _loadCore(){try{const e=await D(()=>import("./cm-core.CUAIktSp.js"),__vite__mapDeps([15,1,2]));this._core=e,this._langCompartment=new e.Compartment,this._themeCompartment=new e.Compartment;const t=this.shadowRoot.querySelector(".cm-host");if(!t)return;this._view=new e.EditorView({state:e.EditorState.create({doc:this.originalContent,extensions:e.buildBaseExtensions({onDocChanged:()=>this._onDocChanged(),onSave:()=>this._emitSave(),langCompartment:this._langCompartment,themeCompartment:this._themeCompartment})}),parent:t}),this._ready=!0,await this.updateComplete,this._loadLang(),this._applyTheme()}catch(e){console.error("[cm-editor] 编辑器内核加载失败",e),this._loadError="编辑器加载失败，请刷新重试",this._error=this._loadError}}willUpdate(e){if(e.has("originalContent")){this._original=this.originalContent,this._dirty=!1,this._error=null;const t=this._view;t&&t.state.doc.toString()!==this.originalContent&&(this._updating=!0,t.dispatch({changes:{from:0,to:t.state.doc.length,insert:this.originalContent}}),this._updating=!1)}}async _loadLang(){if(!this._view)return;const t=ew(this.path||"");if(t)try{const r=await t(),s=this._view,i=this._langCompartment;if(!s||!i||!this._core)return;const n=this._core.toExtension(r);s.dispatch({effects:i.reconfigure([n,this._highlightExt()])})}catch(r){console.warn("[cm-editor] 语言包加载失败",r)}}get _codeDark(){return this.markdown?this._appTheme==="dark":this._codeTheme==="dark"?!0:this._codeTheme==="light"?!1:this._appTheme==="dark"}_highlightExt(){return this._core?[this._core.buildHighlightExt(this._codeDark)]:[]}_applyTheme(){const e=this._view;if(!e||!this._core)return;const r=this._codeDark&&!this.markdown?er:Qt;e.dom.style.background=r.canvas,e.dom.style.color=r.ink;const s=this._themeCompartment;s&&e.dispatch({effects:s.reconfigure(this._highlightExt())})}_onDocChanged(){if(this._updating)return;const e=this._view;if(!e)return;const t=e.state.doc.toString()!==this._original;t!==this._dirty&&(this._dirty=t,this.dispatchEvent(new CustomEvent("dirty-change",{detail:{dirty:t}}))),this._error&&(this._error=null)}async whenReady(){await this._coreReady}topLine(){const e=this._view;return e?e.state.doc.lineAt(e.viewport.from).number:1}scrollToLine(e){const t=this._view;if(!t||!this._core)return;const r=t.state.doc.line(Math.max(1,Math.min(e,t.state.doc.lines)));t.dispatch({selection:this._core.EditorSelection.cursor(r.from),effects:this._core.EditorView.scrollIntoView(r.from,{y:"start"})})}selectionOffsets(){const e=this._view;if(!e)return null;const t=e.state.selection.main;return t.empty?null:{start:t.from,end:t.to}}selectOffsets(e,t){const r=this._view;if(!r||!this._core)return;const s=r.state.doc.length,i=Math.max(0,Math.min(e,t,s)),n=Math.max(0,Math.min(Math.max(e,t),s));r.dispatch({selection:this._core.EditorSelection.range(i,n)}),r.focus()}isAtBottom(){const e=this._view;if(!e)return!1;const{viewport:t}=e,r=e.state.doc.lines;return t.to-t.from+1>=r?!1:t.to>=r}scrollToBottom(){const e=this._view;!e||!this._core||e.dispatch({effects:this._core.EditorView.scrollIntoView(e.state.doc.length,{y:"end"})})}discard(){const e=this._view;e&&(this._updating=!0,e.dispatch({changes:{from:0,to:e.state.doc.length,insert:this._original}}),this._updating=!1),this._dirty=!1,this._error=null,this.dispatchEvent(new CustomEvent("cancel",{}))}setError(e){this._error=e}_applyEdit(e,t,r,s,i){const n=this._view;!n||!this._core||(n.dispatch({changes:{from:e,to:t,insert:r},selection:this._core.EditorSelection.range(s,i)}),n.focus())}_selectedLineRange(){const e=this._view,t=e.state.selection.main,r=e.state.doc,s=r.lineAt(t.from).from,i=r.lineAt(t.to).to;return{lineStart:s,lineEnd:i}}_linePrefixAction(e){const t=this._view;if(!t)return;const{lineStart:r,lineEnd:s}=this._selectedLineRange(),n=t.state.doc.sliceString(r,s).split(`
+`).join("");this._blockInsert(t+r+s,t.length+r.length+2)},this._onLink=()=>this._wrapAction("[","](https://)","链接文字"),this._onSaveClick=()=>{this._dirty&&this._emitSave()},this._onCancelClick=()=>{this.discard()}}async firstUpdated(){this._original=this.originalContent,this._offAppThemeChange=Od(e=>{this._appTheme=e,this._applyTheme()}),this._offCodeThemeChange=N4(e=>{this._codeTheme=e,this._applyTheme()}),this._coreReady=this._loadCore(),await this._coreReady}disconnectedCallback(){var e,t,r,s;super.disconnectedCallback(),(e=this._offAppThemeChange)==null||e.call(this),this._offAppThemeChange=null,(t=this._offCodeThemeChange)==null||t.call(this),this._offCodeThemeChange=null,(s=(r=this._view)==null?void 0:r.destroy)==null||s.call(r),this._view=null}async _loadCore(){try{const e=await D(()=>import("./cm-core.ChNP0jU5.js"),__vite__mapDeps([15,1,2]));this._core=e,this._langCompartment=new e.Compartment,this._themeCompartment=new e.Compartment;const t=this.shadowRoot.querySelector(".cm-host");if(!t)return;this._view=new e.EditorView({state:e.EditorState.create({doc:this.originalContent,extensions:e.buildBaseExtensions({onDocChanged:()=>this._onDocChanged(),onSave:()=>this._emitSave(),langCompartment:this._langCompartment,themeCompartment:this._themeCompartment})}),parent:t}),this._ready=!0,await this.updateComplete,this._loadLang(),this._applyTheme()}catch(e){console.error("[cm-editor] 编辑器内核加载失败",e),this._loadError="编辑器加载失败，请刷新重试",this._error=this._loadError}}willUpdate(e){if(e.has("originalContent")){this._original=this.originalContent,this._dirty=!1,this._error=null;const t=this._view;t&&t.state.doc.toString()!==this.originalContent&&(this._updating=!0,t.dispatch({changes:{from:0,to:t.state.doc.length,insert:this.originalContent}}),this._updating=!1)}}async _loadLang(){if(!this._view)return;const t=ew(this.path||"");if(t)try{const r=await t(),s=this._view,i=this._langCompartment;if(!s||!i||!this._core)return;const n=this._core.toExtension(r);s.dispatch({effects:i.reconfigure([n,this._highlightExt()])})}catch(r){console.warn("[cm-editor] 语言包加载失败",r)}}get _codeDark(){return this.markdown?this._appTheme==="dark":this._codeTheme==="dark"?!0:this._codeTheme==="light"?!1:this._appTheme==="dark"}_highlightExt(){return this._core?[this._core.buildHighlightExt(this._codeDark)]:[]}_applyTheme(){const e=this._view;if(!e||!this._core)return;const r=this._codeDark&&!this.markdown?er:Qt;e.dom.style.background=r.canvas,e.dom.style.color=r.ink;const s=this._themeCompartment;s&&e.dispatch({effects:s.reconfigure(this._highlightExt())})}_onDocChanged(){if(this._updating)return;const e=this._view;if(!e)return;const t=e.state.doc.toString()!==this._original;t!==this._dirty&&(this._dirty=t,this.dispatchEvent(new CustomEvent("dirty-change",{detail:{dirty:t}}))),this._error&&(this._error=null)}async whenReady(){await this._coreReady}topLine(){const e=this._view;return e?e.state.doc.lineAt(e.viewport.from).number:1}scrollToLine(e){const t=this._view;if(!t||!this._core)return;const r=t.state.doc.line(Math.max(1,Math.min(e,t.state.doc.lines)));t.dispatch({selection:this._core.EditorSelection.cursor(r.from),effects:this._core.EditorView.scrollIntoView(r.from,{y:"start"})})}selectionOffsets(){const e=this._view;if(!e)return null;const t=e.state.selection.main;return t.empty?null:{start:t.from,end:t.to}}selectOffsets(e,t){const r=this._view;if(!r||!this._core)return;const s=r.state.doc.length,i=Math.max(0,Math.min(e,t,s)),n=Math.max(0,Math.min(Math.max(e,t),s));r.dispatch({selection:this._core.EditorSelection.range(i,n)}),r.focus()}isAtBottom(){const e=this._view;if(!e)return!1;const{viewport:t}=e,r=e.state.doc.lines;return t.to-t.from+1>=r?!1:t.to>=r}scrollToBottom(){const e=this._view;!e||!this._core||e.dispatch({effects:this._core.EditorView.scrollIntoView(e.state.doc.length,{y:"end"})})}discard(){const e=this._view;e&&(this._updating=!0,e.dispatch({changes:{from:0,to:e.state.doc.length,insert:this._original}}),this._updating=!1),this._dirty=!1,this._error=null,this.dispatchEvent(new CustomEvent("cancel",{}))}setError(e){this._error=e}_applyEdit(e,t,r,s,i){const n=this._view;!n||!this._core||(n.dispatch({changes:{from:e,to:t,insert:r},selection:this._core.EditorSelection.range(s,i)}),n.focus())}_selectedLineRange(){const e=this._view,t=e.state.selection.main,r=e.state.doc,s=r.lineAt(t.from).from,i=r.lineAt(t.to).to;return{lineStart:s,lineEnd:i}}_linePrefixAction(e){const t=this._view;if(!t)return;const{lineStart:r,lineEnd:s}=this._selectedLineRange(),n=t.state.doc.sliceString(r,s).split(`
 `),a=n.every(l=>l.startsWith(e)),o=n.map(l=>a?l.slice(e.length):e+l).join(`
 `);this._applyEdit(r,s,o,r,r+o.length)}_toggleHeading(){const e=this._view;if(!e)return;const{lineStart:t,lineEnd:r}=this._selectedLineRange(),i=e.state.doc.sliceString(t,r).split(`
 `),n=i[0].match(/^(#{1,6})\s+/),a=n?n[1].length:0,o=a>=6?0:a+1,l=p=>p.replace(/^#{1,6}\s+/,""),h=i.map(p=>o===0?l(p):"#".repeat(o)+" "+l(p)).join(`
@@ -4891,17 +4891,23 @@ body.cortex-preview-fs .cortex-pdf-portal {
     background: var(--cortex-surface);
     box-shadow: var(--cortex-shadow-lg);
     max-width: 90vw;
+    /* 卡片最小宽度：宿主（<c-dialog> 公共件）经 --c-dialog-min-width 注入；
+       未注入时为 0 = 不设下限（内容自适应）。 */
+    min-width: var(--c-dialog-min-width, 0);
   }
   dialog::backdrop {
     background: rgba(0, 0, 0, 0.3);
   }
-  /* 移动端占满屏宽（2026-08-17 决议）——与 files-view 原规格一致 */
+  /* 移动端：卡片**内缩**（2026-11-18 修正）——此前占满 100vw，左右边框
+     顶住屏幕边缘，读起来像「页面被裁掉一半」。改为左右各留 16px 间距，
+     卡片宽 = 视口宽 − 32px；同时归零 min-width（宿主给的 340/360px 下限
+     在窄屏上会顶住边缘）。 */
   @media (max-width: 1023px) {
     dialog {
       min-width: 0;
-      width: 100vw;
-      max-width: 100vw;
-      max-height: calc(100vh - 16px);
+      width: calc(100vw - 32px);
+      max-width: calc(100vw - 32px);
+      max-height: calc(100vh - 32px);
       border-radius: var(--cortex-radius-md);
     }
   }
@@ -4938,7 +4944,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
     opacity: var(--cortex-btn-disabled-opacity);
     cursor: not-allowed;
   }
-`;var Xw=Object.defineProperty,Yw=Object.getOwnPropertyDescriptor,Ud=(e,t,r,s)=>{for(var i=s>1?void 0:s?Yw(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&Xw(t,r,i),i};let na=class extends V{constructor(){super(...arguments),this.open=!1,this.minWidth=0,this._onCancel=()=>{this.dispatchEvent(new CustomEvent("cancel",{bubbles:!0,composed:!0}))},this._onClose=()=>{this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}}updated(e){if(!e.has("open"))return;const t=this.renderRoot.querySelector("dialog");t&&(this.open?t.open||t.showModal():t.open&&t.close())}render(){if(!this.open)return C;const e=this.minWidth>0?`min-width:${this.minWidth}px;`:"";return c`
+`;var Xw=Object.defineProperty,Yw=Object.getOwnPropertyDescriptor,Ud=(e,t,r,s)=>{for(var i=s>1?void 0:s?Yw(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&Xw(t,r,i),i};let na=class extends V{constructor(){super(...arguments),this.open=!1,this.minWidth=0,this._onCancel=()=>{this.dispatchEvent(new CustomEvent("cancel",{bubbles:!0,composed:!0}))},this._onClose=()=>{this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}}updated(e){if(!e.has("open"))return;const t=this.renderRoot.querySelector("dialog");t&&(this.open?t.open||t.showModal():t.open&&t.close())}render(){if(!this.open)return C;const e=this.minWidth>0?`--c-dialog-min-width:${this.minWidth}px;`:"";return c`
       <dialog style=${e} @cancel=${this._onCancel} @close=${this._onClose}>
         <div class="card">
           <slot></slot>
@@ -5038,7 +5044,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       display: flex;
       flex-direction: column;
       gap: var(--cortex-space-3);
-      width: min(440px, calc(100vw - 32px));
+      width: min(440px, 100%);
       max-height: calc(100vh - 48px);
       color: var(--cortex-text);
       font-family: var(--cortex-font);
@@ -5457,7 +5463,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       font-size: var(--cortex-fs-base);
     }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
       .files { max-height: 35vh; }
     }
   `];Xo([k({attribute:!1})],Qi.prototype,"skill",2);Xo([k({attribute:!1})],Qi.prototype,"filePaths",2);Xo([w()],Qi.prototype,"_prompt",2);Qi=Xo([U("skill-run-dialog")],Qi);class my{constructor(t){this._phase=null,this._skills=null,this._error=null,this._picked=null,this.onRun=null,this.available=!1,this.filePaths=()=>[],this._onPick=r=>{this._picked=r.detail.skill,this._phase="run",this.host.requestUpdate()},this._onRunSubmit=r=>{var o,l;const s=this._picked;if(this._phase=null,!s){this.host.requestUpdate();return}const i=this.filePaths(),n=[`/${s.name} 按技能指引处理以下文件`,"","文件：",...i.map(h=>`- ${h}`),"",`补充要求：${r.detail.prompt||"无"}`];fo(s.name);const a=((o=i[0])==null?void 0:o.split("/").pop())??i[0]??"";this.host.requestUpdate(),(l=this.onRun)==null||l.call(this,{skill:s,message:n.join(`
@@ -7922,11 +7928,12 @@ body.cortex-preview-fs .cortex-pdf-portal {
        initial 态 .input-row 与 focus 态 .input-bar 同步收紧，保证两态等宽 */
     .input-row,
     .input-bar { padding-left: var(--cortex-space-2); padding-right: var(--cortex-space-2); }
-    /* 移动端对话框占满屏幕宽度，与 files-view 决议一致 */
+    /* 移动端对话框内缩（2026-11-18）：与公共块 dialogCardStyles 同步——
+       左右各留 16px，卡片不再顶住屏幕左右边框 */
     dialog {
-      width: 100vw;
-      max-width: 100vw;
-      max-height: calc(100vh - 16px);
+      width: calc(100vw - 32px);
+      max-width: calc(100vw - 32px);
+      max-height: calc(100vh - 32px);
       border-radius: var(--cortex-radius-md);
     }
     dialog > * { padding: var(--cortex-space-4); }
@@ -8131,7 +8138,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
     }
     button.primary:disabled:hover { opacity: 1; }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
       input { font-size: 16px; padding: 10px; }
     }
   `];let Sr=th;Yo([w()],Sr.prototype,"_value");Yo([w()],Sr.prototype,"_err");Yo([w()],Sr.prototype,"_errLevel");Yo([w()],Sr.prototype,"_touched");var V3=Object.defineProperty,K3=Object.getOwnPropertyDescriptor,If=(e,t,r,s)=>{for(var i=s>1?void 0:s?K3(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&V3(t,r,i),i};let qc=class extends Sr{constructor(){super(...arguments),this.currentTitle=""}get submitLabel(){return"重命名"}get maxlength(){return 1e3}get inputLabel(){return c`会话标题`}get prefill(){return this.currentTitle}validate(e){return e.trim()?e===this.currentTitle?{message:"标题未变化",level:"hint"}:"":"标题不能为空"}submitDetail(e){return{title:e.trim()}}};If([k({type:String})],qc.prototype,"currentTitle",2);qc=If([U("session-rename-dialog")],qc);const fa=F`
@@ -8248,6 +8255,14 @@ body.cortex-preview-fs .cortex-pdf-portal {
         max-width: 460px;
         font-size: var(--cortex-fs-md);
         color: var(--cortex-text);
+      }
+      /* 移动端（2026-11-18）：卡片外壳已内缩到视口宽 − 32px，340px 下限
+         在窄屏上会顶出卡片——归零让内容随卡片自适应。 */
+      @media (max-width: 1023px) {
+        :host {
+          min-width: 0;
+          max-width: 100%;
+        }
       }
     `];let Er=rh;Of([w()],Er.prototype,"_submitting");Of([w()],Er.prototype,"_errorMessage");var X3=Object.defineProperty,Y3=Object.getOwnPropertyDescriptor,Rf=(e,t,r,s)=>{for(var i=s>1?void 0:s?Y3(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&X3(t,r,i),i};let go=class extends Er{constructor(){super(...arguments),this.sessionTitle=""}get dialogTitle(){return"复制会话"}get confirmLabel(){return"确认复制"}renderBody(){return c`
       <p>将创建「${this.sessionTitle} (副本)」，继承全部对话内容，可在其中继续提问。</p>
@@ -8411,7 +8426,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       color: var(--cortex-primary);
     }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
     }
   `];Ve.COMPACT_RATIO=.8;_t([k({type:Number})],Ve.prototype,"used",2);_t([k({type:String})],Ve.prototype,"sessionId",2);_t([k({type:Boolean})],Ve.prototype,"usedIsEstimate",2);_t([k({type:Number})],Ve.prototype,"contextWindow",2);_t([k({type:Number})],Ve.prototype,"cacheReadTotal",2);_t([k({type:Number})],Ve.prototype,"inputTotal",2);_t([k({type:Number})],Ve.prototype,"calls",2);_t([k({type:Number})],Ve.prototype,"lastCallRead",2);_t([k({type:Number})],Ve.prototype,"lastCallUsed",2);_t([k({type:Number})],Ve.prototype,"compactionCount",2);_t([k({type:String})],Ve.prototype,"lastCompactedAt",2);_t([k({type:Number})],Ve.prototype,"lastPreTokens",2);_t([w()],Ve.prototype,"_copied",2);Ve=_t([U("session-info-dialog")],Ve);var Q3=Object.defineProperty,e5=Object.getOwnPropertyDescriptor,Or=(e,t,r,s)=>{for(var i=s>1?void 0:s?e5(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&Q3(t,r,i),i};const t5=160;let jt=class extends Er{constructor(){super(...arguments),this.sessionId="",this.pointSeq=-1,this.anchorContent="",this.deadCount=0,this._loading=!0,this._error=null,this._plan=null,this._restoreFiles=!0,this._submitting=!1,this._onToggleRestore=()=>{this._restoreFiles=!this._restoreFiles}}connectedCallback(){super.connectedCallback(),this._loadPreview()}async _loadPreview(){this._loading=!0,this._error=null;try{this._plan=await r3(this.sessionId,this.pointSeq)}catch(e){this._error=(e==null?void 0:e.message)||"预览加载失败"}finally{this._loading=!1}}get dialogTitle(){return"回退到这条消息"}get confirmLabel(){return"回退"}get canSubmit(){return!this._loading&&!this._error&&!this._submitting}confirm(){this._submitting||(this._submitting=!0,this.dispatchEvent(new CustomEvent("rewind-confirm",{detail:{pointSeq:this.pointSeq,restoreFiles:this._restoreFiles},bubbles:!0,composed:!0})))}_renderFiles(){if(this._loading)return c`<div class="loading">正在获取文件恢复清单…</div>`;if(this._error)return c`<div class="error">${this._error}</div>`;const e=this._plan;return e?e.restored.length>0||e.deleted.length>0||e.skipped.length>0?c`
       <label class="checkbox-row">
@@ -8680,6 +8695,14 @@ body.cortex-preview-fs .cortex-pdf-portal {
       max-width: 460px;
       font-size: var(--cortex-fs-md);
       color: var(--cortex-text);
+    }
+    /* 移动端（2026-11-18）：卡片外壳已内缩到视口宽 − 32px，340px 下限
+       在窄屏上会顶出卡片——归零让内容随卡片自适应。 */
+    @media (max-width: 1023px) {
+      :host {
+        min-width: 0;
+        max-width: 100%;
+      }
     }
     /* 标题略大 + 图标（本地变体，形态走公共块 confirmStyles） */
     h2 {
@@ -12037,7 +12060,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
     .actions .spacer { flex: 1; }
     /* 按钮形态走公共块（AP-4）——此处仅保留本对话框的按钮排特例 */
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
       .actions { flex-wrap: wrap; gap: var(--cortex-space-3); }
       .actions .spacer { flex-basis: 100%; }
       .actions button { flex: 1; padding: 12px 16px; min-height: 44px; }
@@ -12097,7 +12120,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       padding: var(--cortex-space-2) 0;
     }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
       .tree { max-height: 50vh; }
     }
   `];Zd([w()],oa.prototype,"_dest",2);Zd([w()],oa.prototype,"_overwrite",2);oa=Zd([U("move-dialog")],oa);var M6=Object.defineProperty,I6=Object.getOwnPropertyDescriptor,el=(e,t,r,s)=>{for(var i=s>1?void 0:s?I6(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&M6(t,r,i),i};let en=class extends V{constructor(){super(...arguments),this._phase="confirming",this._stats=null,this._confirmed=!1}get _selected(){return E.getState().files.selectedPaths}connectedCallback(){super.connectedCallback(),!this._stats&&this._selected.length>0&&(this._phase="loading-stats",this._loadStats())}async _loadStats(){const e=this._selected;let t=0,r=0,s=0;for(const i of e)try{const n=await tr.stats(i);t+=n.file_count,r+=n.dir_count,s+=n.total_size_bytes}catch{}t===0&&r===0&&(t=e.length),this._stats={file_count:t,dir_count:r,total_size_bytes:s},this._phase="confirming"}_delete(){this._confirmed&&(this._phase="deleting",this.dispatchEvent(new CustomEvent("submit",{detail:{paths:this._selected},bubbles:!0,composed:!0})))}_cancel(){this.dispatchEvent(new CustomEvent("cancel",{bubbles:!0,composed:!0}))}render(){const e=this._selected.length;return this._phase==="loading-stats"?c`<div class="spinner">统计中…</div>`:c`
@@ -12148,7 +12171,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
     }
     .spinner { color: var(--cortex-text-muted); padding: var(--cortex-space-4); text-align: center; }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
     }
   `];el([w()],en.prototype,"_phase",2);el([w()],en.prototype,"_stats",2);el([w()],en.prototype,"_confirmed",2);en=el([U("delete-dialog")],en);var O6=Object.defineProperty,R6=Object.getOwnPropertyDescriptor,tl=(e,t,r,s)=>{for(var i=s>1?void 0:s?R6(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&O6(t,r,i),i};function L6(e){if(e===null)return"";const t=new Date(e*1e3),r=t.getFullYear(),s=String(t.getMonth()+1).padStart(2,"0"),i=String(t.getDate()).padStart(2,"0");return`${r}-${s}-${i}`}let tn=class extends V{constructor(){super(...arguments),this._books=null,this._error=null,this._loading=!1,this._onExitClick=()=>{this.dispatchEvent(new CustomEvent("exit",{bubbles:!0,composed:!0}))},this._onRowClick=e=>{this.dispatchEvent(new CustomEvent("activated",{detail:{book:e},bubbles:!0,composed:!0}))},this._onDeleteClick=(e,t)=>{e.stopPropagation(),this.dispatchEvent(new CustomEvent("delete",{detail:{book:t},bubbles:!0,composed:!0}))}}connectedCallback(){super.connectedCallback(),this.refresh()}async refresh(){this._loading=!0,this._error=null;try{this._books=await bf()}catch(e){this._error=(e==null?void 0:e.message)||"书目加载失败",this._books=null}finally{this._loading=!1}}render(){return c`
       <div class="header">
@@ -13705,7 +13728,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       color: var(--cortex-primary);
     }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
     }
   `;Vc=d7([U("city-dialog")],Vc);var u7=Object.defineProperty,p7=Object.getOwnPropertyDescriptor,Uf=(e,t,r,s)=>{for(var i=s>1?void 0:s?p7(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&u7(t,r,i),i};let yo=class extends V{constructor(){super(...arguments),this._initialized=!1,this._pendingSubmit=null,this._onDiaryUpdated=e=>{var r;const t=(r=e.detail)==null?void 0:r.date;this._diary.submitting||t&&t===this._diary.today&&this._loadToday()}}connectedCallback(){super.connectedCallback(),this._unsubscribe=E.subscribe(()=>this.requestUpdate()),window.addEventListener("cortex:diary-updated",this._onDiaryUpdated),this._initialized||(this._initialized=!0,this._init())}updated(e){super.updated(e)}disconnectedCallback(){var e;(e=this._unsubscribe)==null||e.call(this),window.removeEventListener("cortex:diary-updated",this._onDiaryUpdated),super.disconnectedCallback()}get _diary(){return E.getState().diary}_localToday(){return eo(new Date)}async _init(){await this._loadToday();const e=this._diary.today||this._localToday(),t=this._diary.reviewDate||Ih(e,-1);this._diary.reviewDate!==t&&T.setDiaryState({reviewDate:t}),await Promise.all([this._loadReview(t),this._loadCalendar(On(Zr(t)))])}async _loadToday(){T.setDiaryState({recordLoading:!0,error:null});try{const e=await ks.today();T.setDiaryState({today:e.today,todayEntry:e.entry,recordLoading:!1})}catch(e){T.setDiaryState({recordLoading:!1,today:this._localToday(),error:e instanceof Tt?e.message:"加载今日记录失败"})}}async _loadReview(e){T.setDiaryState({reviewLoading:!0,error:null});try{const t=await ks.entry(e);T.setDiaryState({reviewEntry:t,reviewLoading:!1})}catch(t){T.setDiaryState({reviewEntry:null,reviewLoading:!1,error:t instanceof Tt?t.message:"加载日记失败"})}}async _loadCalendar(e){try{const t=await ks.calendar(e);T.setDiaryState({calendarMonth:e,calendarDates:t.dates})}catch{T.setDiaryState({calendarMonth:e,calendarDates:[]})}}_onPhotoError(e){T.setDiaryState({error:e.detail.message})}async _onSubmitText(e){var t;if(!this._diary.submitting){if(!((t=this._diary.todayEntry)!=null&&t.city)){this._pendingSubmit={type:"text",value:e.detail.value},T.setDiaryState({cityDialogOpen:!0});return}this._submitText(e.detail.value)}}async _onUploadPhoto(e){var t;if(!this._diary.submitting){if(!((t=this._diary.todayEntry)!=null&&t.city)){this._pendingSubmit={type:"photo",file:e.detail.file,caption:e.detail.caption},T.setDiaryState({cityDialogOpen:!0});return}this._uploadPhoto(e.detail.file,e.detail.caption)}}async _submitText(e){T.setDiaryState({submitting:!0,error:null});try{await ks.addText(e),await this._loadToday()}catch(t){T.setDiaryState({error:t instanceof Tt?t.message:"记录失败，请重试"})}finally{T.setDiaryState({submitting:!1})}}async _uploadPhoto(e,t){T.setDiaryState({submitting:!0,error:null});try{await ks.uploadPhoto(e,t),await this._loadToday()}catch(r){T.setDiaryState({error:r instanceof Tt?r.message:"照片上传失败，请重试"})}finally{T.setDiaryState({submitting:!1})}}async _onDeleteFragment(e){const t=this._diary.today||this._localToday();T.setDiaryState({error:null});try{await ks.removeFragment(t,e.detail.fid),await this._loadToday()}catch(r){T.setDiaryState({error:r instanceof Tt?r.message:"删除失败，请重试"})}}async _onEditFragment(e){const t=this._diary.today||this._localToday();T.setDiaryState({submitting:!0,error:null});try{await ks.editFragment(t,e.detail.fid,e.detail.text),await this._loadToday()}catch(r){T.setDiaryState({error:r instanceof Tt?r.message:"保存失败，请重试"})}finally{T.setDiaryState({submitting:!1})}}async _onNavigateDay(e){const t=Ih(this._diary.reviewDate,e.detail.delta);T.setDiaryState({reviewDate:t,calendarOpen:!1}),await this._loadReview(t);const r=On(Zr(t));r!==this._diary.calendarMonth&&this._loadCalendar(r)}_onToggleCalendar(){const e=!this._diary.calendarOpen;T.setDiaryState({calendarOpen:e}),e&&this._loadCalendar(On(Zr(this._diary.reviewDate)))}async _onSelectDate(e){const t=e.detail.date;T.setDiaryState({reviewDate:t,calendarOpen:!1}),await this._loadReview(t)}_onMonthChange(e){this._loadCalendar(e.detail.month)}_switchTab(e){if(T.setDiaryState({tab:e,calendarOpen:!1}),e==="record")this._loadToday();else{const t=this._diary.reviewDate;this._loadReview(t),this._loadCalendar(On(Zr(t)))}}async _onCitySubmit(e){const t=e.detail.city,r=this._diary.today||this._localToday();T.setDiaryState({cityDialogOpen:!1});const s=this._pendingSubmit;this._pendingSubmit=null,(s==null?void 0:s.type)==="text"?await this._submitText(s.value):(s==null?void 0:s.type)==="photo"&&s.file&&await this._uploadPhoto(s.file,s.caption);try{const i=await ks.setCity(r,t);T.setDiaryState({todayEntry:i})}catch{}}_onCityCancel(){T.setDiaryState({cityDialogOpen:!1}),localStorage.setItem("doclens.diary.citySelected","true")}render(){var t;const e=this._diary;return c`
       <div class="page ${e.tab==="review"?"review-tab":""}"
@@ -14240,7 +14263,9 @@ body.cortex-preview-fs .cortex-pdf-portal {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-lg);
       padding: var(--cortex-space-5);
-      width: min(400px, 85vw);
+      /* 移动端：外层卡片已内缩到视口宽 − 32px，内层确认卡按 100% 跟随，
+         不用 vw（85vw 会顶出外层卡片右缘）。 */
+      width: min(400px, 100%);
       display: flex;
       flex-direction: column;
       gap: var(--cortex-space-3);
@@ -14321,7 +14346,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
       white-space: nowrap;
       font-size: var(--cortex-fs-xs);
     }
-  `];Kf([k({type:Boolean,reflect:!0})],$o.prototype,"open",2);$o=Kf([U("watch-changes-dialog")],$o);var S7=Object.defineProperty,E7=Object.getOwnPropertyDescriptor,sl=(e,t,r,s)=>{for(var i=s>1?void 0:s?E7(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&S7(t,r,i),i};let sn=class extends V{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),s=i=>{var n;return((n=r.find(a=>a.type===i))==null?void 0:n.value)??""};return`${s("year")}-${s("month")}-${s("day")} ${s("hour")}:${s("minute")}:${s("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 b0601205 · 2026-11-18 13:43 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),s=Math.floor(e%3600/60),i=e%60,n=a=>String(a).padStart(2,"0");return t>0?`${t}天 ${n(r)}:${n(s)}:${n(i)}`:`${n(r)}:${n(s)}:${n(i)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return c``;const e=this._runtime();return c`
+  `];Kf([k({type:Boolean,reflect:!0})],$o.prototype,"open",2);$o=Kf([U("watch-changes-dialog")],$o);var S7=Object.defineProperty,E7=Object.getOwnPropertyDescriptor,sl=(e,t,r,s)=>{for(var i=s>1?void 0:s?E7(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=(s?a(t,r,i):a(i))||i);return s&&i&&S7(t,r,i),i};let sn=class extends V{constructor(){super(...arguments),this.open=!1,this._health=null,this._healthError=!1,this._pollTimer=null,this._onKeydown=e=>{this.open&&e.key==="Escape"&&(e.preventDefault(),this._close())}}_runtime(){var e;return((e=this._health)==null?void 0:e.runtime)??null}get _codeState(){const e=this._health;return!e||!e.started_at||!e.code_mtime||e.started_at==="?"||e.code_mtime==="?"?"unknown":e.code_mtime<=e.started_at?"fresh":"stale"}_fmtBeijing(e){if(!e)return"?";const t=new Date(e);if(Number.isNaN(t.getTime()))return e;const r=new Intl.DateTimeFormat("zh-CN",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:!1}).formatToParts(t),s=i=>{var n;return((n=r.find(a=>a.type===i))==null?void 0:n.value)??""};return`${s("year")}-${s("month")}-${s("day")} ${s("hour")}:${s("minute")}:${s("second")}`}connectedCallback(){super.connectedCallback(),document.addEventListener("keydown",this._onKeydown)}disconnectedCallback(){this._stopPolling(),document.removeEventListener("keydown",this._onKeydown),super.disconnectedCallback()}updated(e){e.has("open")&&(this.open?(this._loadHealth(),this._pollTimer=window.setInterval(()=>void this._loadHealth(),5e3)):this._stopPolling())}_stopPolling(){this._pollTimer!==null&&(window.clearInterval(this._pollTimer),this._pollTimer=null)}_close(){this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}_currentBundle(){return performance.getEntriesByType("resource").map(r=>r.name.split("/").pop()??"").filter(r=>/^index\.[A-Za-z0-9_-]+\.js$/.test(r))[0]??"未知"}async _loadHealth(){this._health=null,this._healthError=!1;try{const e=await fetch("/api/health",{cache:"no-store"});if(!e.ok)throw new Error(String(e.status));const t=await e.json();this._health={version:t.version??"?",dev:t.dev??!1,started_at:t.started_at,code_mtime:t.code_mtime,runtime:t.runtime},this._health.dev&&console.info(`[about] 前端构建 398be265 · 2026-11-18 18:27 | bundle ${this._currentBundle()}`)}catch{this._healthError=!0}}_fmtUptime(e){const t=Math.floor(e/86400),r=Math.floor(e%86400/3600),s=Math.floor(e%3600/60),i=e%60,n=a=>String(a).padStart(2,"0");return t>0?`${t}天 ${n(r)}:${n(s)}:${n(i)}`:`${n(r)}:${n(s)}:${n(i)}`}_fmtNum(e){return e.toLocaleString("zh-CN")}render(){var t;if(!this.open)return c``;const e=this._runtime();return c`
       <c-dialog ?open=${!0} @cancel=${this._close}>
         <div class="head">
           <h3>关于</h3>
@@ -14364,7 +14389,7 @@ body.cortex-preview-fs .cortex-pdf-portal {
           ${(t=this._health)!=null&&t.dev?c`
           <div class="row" title="git 提交 · 构建时刻（开发调试用）">
             <span class="label">前端构建</span>
-            <span class="value">${"b0601205 · 2026-11-18 13:43"}</span>
+            <span class="value">${"398be265 · 2026-11-18 18:27"}</span>
           </div>
           <div class="row stale-hint" title="与磁盘 static/assets/ 最新文件名对比，判断 SW 是否缓存了旧 bundle">
             <span class="label">当前 bundle</span>
@@ -14875,9 +14900,9 @@ body.cortex-preview-fs .cortex-pdf-portal {
     button.warn { background: var(--cortex-danger); color: var(--cortex-on-danger); border: none; border-radius: var(--cortex-radius-lg); }
     @media (max-width: 1023px) {
       .reindex-body {
-        width: calc(100vw - 16px);
-        max-width: calc(100vw - 16px);
-        max-height: calc(100vh - 16px);
+        width: 100%;
+        max-width: 100%;
+        max-height: calc(100vh - 32px);
       }
     }
   `;Gc=A7([U("reindex-dialog")],Gc);var P7=Object.getOwnPropertyDescriptor,D7=(e,t,r,s)=>{for(var i=s>1?void 0:s?P7(t,r):t,n=e.length-1,a;n>=0;n--)(a=e[n])&&(i=a(i)||i);return i};let Xc=class extends V{constructor(){super(...arguments),this._label="下拉刷新"}showPull(e,t){this.classList.remove("settle"),this.removeAttribute("refreshing"),this._setMode("pull",t?"松开刷新":"下拉刷新"),t?this.setAttribute("armed",""):this.removeAttribute("armed"),this.style.transform=`translate(-50%, ${Math.max(0,e)}px)`}showRefreshing(){this.classList.remove("settle"),this.setAttribute("refreshing",""),this.removeAttribute("armed"),this._setMode("pull","刷新中…"),this.style.transform="translate(-50%, 8px)"}hide(){!this.classList.contains("settle")&&this.style.transform===""||(this.removeAttribute("armed"),this.removeAttribute("refreshing"),this.classList.add("settle"),this.style.transform="translate(-50%, -110%)")}_setMode(e,t){this._label!==t&&(this._label=t,this.requestUpdate())}render(){return c`

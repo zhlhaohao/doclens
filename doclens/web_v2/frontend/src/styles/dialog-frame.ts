@@ -33,17 +33,23 @@ export const dialogCardStyles = css`
     background: var(--cortex-surface);
     box-shadow: var(--cortex-shadow-lg);
     max-width: 90vw;
+    /* 卡片最小宽度：宿主（<c-dialog> 公共件）经 --c-dialog-min-width 注入；
+       未注入时为 0 = 不设下限（内容自适应）。 */
+    min-width: var(--c-dialog-min-width, 0);
   }
   dialog::backdrop {
     background: rgba(0, 0, 0, 0.3);
   }
-  /* 移动端占满屏宽（2026-08-17 决议）——与 files-view 原规格一致 */
+  /* 移动端：卡片**内缩**（2026-11-18 修正）——此前占满 100vw，左右边框
+     顶住屏幕边缘，读起来像「页面被裁掉一半」。改为左右各留 16px 间距，
+     卡片宽 = 视口宽 − 32px；同时归零 min-width（宿主给的 340/360px 下限
+     在窄屏上会顶住边缘）。 */
   @media (max-width: 1023px) {
     dialog {
       min-width: 0;
-      width: 100vw;
-      max-width: 100vw;
-      max-height: calc(100vh - 16px);
+      width: calc(100vw - 32px);
+      max-width: calc(100vw - 32px);
+      max-height: calc(100vh - 32px);
       border-radius: var(--cortex-radius-md);
     }
   }

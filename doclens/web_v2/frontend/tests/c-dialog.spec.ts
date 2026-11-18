@@ -56,14 +56,31 @@ describe("c-dialog", () => {
     expect(seen).toEqual(["cancel"]);
   });
 
-  it("minWidth 落到 dialog 内联样式", async () => {
+  it("minWidth 落到 dialog 的 --c-dialog-min-width 自定义属性", async () => {
     const el = document.createElement("c-dialog") as any;
     el.open = true;
     el.minWidth = 360;
     document.body.appendChild(el);
     await el.updateComplete;
     const dlg = el.shadowRoot!.querySelector("dialog") as HTMLElement;
-    expect(dlg.getAttribute("style")).toContain("min-width:360px");
+    // 走自定义属性而非 min-width 内联样式：移动端媒体查询才能覆盖归零
+    expect(dlg.getAttribute("style")).toContain("--c-dialog-min-width:360px");
+    // 不得出现裸的 min-width 内联声明（否则移动端媒体查询压不住）
+    expect(dlg.getAttribute("style")).not.toMatch(/(^|;)\s*min-width:/);
+  });
+
+  it("移动端卡片内缩：宽度留 16px 边距、min-width 归零", async () => {
+    const code = readFileSync(
+      resolve(process.cwd(), "src/styles/dialog-frame.ts"),
+      "utf-8",
+    );
+    // 移动端卡片不再占满 100vw（顶住屏幕左右边框），改为内缩 32px
+    expect(code).toContain("width: calc(100vw - 32px)");
+    expect(code).toContain("max-width: calc(100vw - 32px)");
+    expect(code).not.toMatch(/width:\s*100vw/);
+    // 移动端归零 min-width（宿主给的 340/360px 下限会顶出卡片）
+    const mobile = code.slice(code.indexOf("@media (max-width: 1023px)"));
+    expect(mobile).toMatch(/min-width:\s*0/);
   });
 
   it("内容走 slot 投影，.card 承载内边距", async () => {

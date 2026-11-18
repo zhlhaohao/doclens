@@ -100,7 +100,9 @@ export class BackupDialog extends LitElement {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-lg);
       padding: var(--cortex-space-5);
-      width: min(400px, 85vw);
+      /* 移动端：外层卡片已内缩到视口宽 − 32px，内层确认卡按 100% 跟随，
+         不用 vw（85vw 会顶出外层卡片右缘）。 */
+      width: min(400px, 100%);
       display: flex;
       flex-direction: column;
       gap: var(--cortex-space-3);
