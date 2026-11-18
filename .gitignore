@@ -151,3 +151,6 @@ slides/
 # 规则写在 .git/info/exclude（仅 git 读取），不放这里——索引器只读本文件，
 # 写在这里会把整个目录挡在扫描范围外，导致既不索引也不监控。
 # 见 .git/info/exclude 注释。
+
+# Claude Code 本地配置/技能（工具私有，不入库）
+.claude/
