@@ -1078,11 +1078,23 @@ export class ChatView extends LitElement {
         }
       }
 
+      // 正常完成路径同样收尾 running 步骤（2026-11-18 停止竞态修复）：
+      // _stop() 先 await stopChat（后端 cancel+收尾后 SSE 正常闭合），前端
+      // for-await 在 abort 之前就走本路径退出——若不在此收尾，停止时仍在
+      // 执行的工具步（如 MCP 搜索）永远停留 running，spinner 不灭。
+      // 流已结束，running 步骤不可能再收到结果，一律标记中断。
+      if (stillOwn()) {
+        const finalized = finalizeInterruptedMessages(messages);
+        if (finalized !== messages) {
+          messages = finalized;
+          actions.setChatState({ messages });
+        }
+        this._ops.finalizeAutoCompactDialog();
+      }
       // 展示层 message_ai 已由后端统一落库（ADR-0028）；前端只在本地
       // 维持流式视图（重进会话时经 detail 重建）。切走了就别动当前会话的
       // 收尾状态（弹窗/输入锁属于正在展示的那个会话）；历史列表是全局的，
       // 照常刷新（标题/条数随本轮落库更新）。
-      if (stillOwn()) this._ops.finalizeAutoCompactDialog();
       void this._history.load();
     } catch (err) {
       if (this._isAbortError(err)) {
@@ -1487,6 +1499,7 @@ export class ChatView extends LitElement {
               .buttonLabel=${"发送"}
               multiline
               attachments
+              inputHistory
               .value=${this.draft}
               .images=${this._pendingImages}
               .skillItems=${this._skills.recentItems}
@@ -1595,6 +1608,7 @@ export class ChatView extends LitElement {
             .buttonLabel=${"发送"}
             multiline
             attachments
+            inputHistory
             ?streaming=${s.streaming || !!s.pendingAsk}
             .value=${this.draft}
             .images=${this._pendingImages}

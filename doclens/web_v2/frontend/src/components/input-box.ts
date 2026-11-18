@@ -355,6 +355,11 @@ export class InputBox extends LitElement {
    *  点「选择技能…」发 skill-browse。 */
   @property({ attribute: false }) skillItems: { name: string; icon?: string }[] | null = null;
 
+  /** 输入历史（chat 专属）：true 时启用 ↑/↓ 历史回溯——组件内部记录本次
+   *  会话内提交过的值；↑ 向上翻阅（multiline 仅当光标在首行时接管，否则保持
+   *  原生换行移动），↓ 向下翻阅，翻到底恢复未发送草稿。 */
+  @property({ type: Boolean }) inputHistory = false;
+
   /** 斜杠技能引导（chat 专属）：非 null 时，输入以 "/" 开头且仍是纯技能名片段
    *  （/^\/[A-Za-z0-9_.-]*$/）显示过滤下拉；↑↓ 导航、Enter 补全为 "/name "
    *  （不发送）、Esc 关闭。候选由宿主注入（chat-view 的对话技能候选白名单：
@@ -366,6 +371,14 @@ export class InputBox extends LitElement {
   @state() private _slashIndex = 0;
   /** Esc 关闭斜杠下拉后的驳回标记：输入变化即复位（再敲字符重新出现） */
   @state() private _slashDismissed = false;
+
+  /** ---------- 输入历史（↑/↓ 回溯） ---------- */
+  /** 本组件生命周期内提交过的值（含本次输入行之前的草稿）。 */
+  private _history: string[] = [];
+  /** 当前历史位置：-1 = 不在历史中（正在编辑草稿）；≥0 = _history 下标。 */
+  private _histIndex = -1;
+  /** 进入历史前暂存的草稿：翻回最底（↓ 出历史）时恢复。 */
+  private _histDraft = "";
 
   @query("input, textarea") private inputEl!: HTMLInputElement | HTMLTextAreaElement;
   /** 隐藏文件选择器（📎 入口；移动端主路径） */
@@ -405,6 +418,7 @@ export class InputBox extends LitElement {
     this.value = target.value;
     this._slashDismissed = false; // 输入变化即复位 Esc 驳回
     this._slashIndex = 0;
+    this._histIndex = -1; // 用户手动编辑即离开历史浏览态
     this.dispatchEvent(new CustomEvent("input-change", { detail: { value: this.value } }));
     // 同步更新按钮 disabled 状态，避免 Lit 异步渲染期间 disabled 按钮拦截 click 事件。
     // 精确命中提交键（AP-1）：renderRoot 文档序中 thumb-x 删除钮/📎 attach 键
@@ -472,6 +486,24 @@ export class InputBox extends LitElement {
         return;
       }
     }
+    // 输入历史回溯（chat 输入框）：↑ 取上一条提交值、↓ 向下翻/出历史恢复草稿。
+    // multiline 时光标不在首行（↑）/末行（↓）则让给原生光标移动。
+    if (this.inputHistory && !this.disabled && !this.streaming) {
+      const caretAtTop = !this.multiline ||
+        !this.value.slice(0, this.inputEl?.selectionStart ?? 0).includes("\n");
+      const caretAtBottom = !this.multiline ||
+        !this.value.slice(this.inputEl?.selectionEnd ?? 0).includes("\n");
+      if (e.key === "ArrowUp" && caretAtTop && this._history.length > 0) {
+        e.preventDefault();
+        this._navigateHistory(-1);
+        return;
+      }
+      if (e.key === "ArrowDown" && caretAtBottom && this._histIndex !== -1) {
+        e.preventDefault();
+        this._navigateHistory(1);
+        return;
+      }
+    }
     if (e.key !== "Enter") return;
     // multiline：Enter 发送、Shift+Enter 换行；非 multiline：Enter 始终发送
     if (e.shiftKey && this.multiline) return;
@@ -479,9 +511,50 @@ export class InputBox extends LitElement {
     this._submit();
   }
 
+  /** ↑/↓ 历史导航：dir=-1 向旧翻、+1 向新翻；翻出底恢复进入历史前的草稿。 */
+  private _navigateHistory(dir: -1 | 1) {
+    const h = this._history;
+    if (this._histIndex === -1) {
+      if (dir === -1) {
+        this._histDraft = this.value; // 暂存未发送草稿
+        this._histIndex = h.length - 1;
+      } else return;
+    } else {
+      const next = this._histIndex + dir;
+      if (next >= h.length) {
+        // ↓ 翻出历史：恢复草稿
+        this._histIndex = -1;
+        this._setInputValue(this._histDraft);
+        return;
+      }
+      if (next < 0) return; // 已在最早一条
+      this._histIndex = next;
+    }
+    this._setInputValue(h[this._histIndex]!);
+  }
+
+  /** 程序化写入输入值：走与 _onInput 相同的同步链（事件/按钮态/高度），光标移末尾。 */
+  private _setInputValue(v: string) {
+    this.value = v;
+    this.dispatchEvent(new CustomEvent("input-change", { detail: { value: this.value } }));
+    const btn = this.renderRoot.querySelector<HTMLButtonElement>("button.submit:not(.caret)");
+    if (btn) btn.disabled = !this.trimmed || this.disabled;
+    this._autoResize();
+    this.updateComplete.then(() => {
+      const pos = this.value.length;
+      this.inputEl?.focus();
+      this.inputEl?.setSelectionRange(pos, pos);
+    });
+  }
+
   private _submit() {
     // 流式中由停止键接管，submit 不触发（textarea 已禁用，此为双保险）
     if (this.streaming || !this.trimmed || this.disabled) return;
+    // 记入输入历史：与最近一条相同则不重复入栈；提交即离开历史浏览态
+    if (this.inputHistory) {
+      if (this._history[this._history.length - 1] !== this.trimmed) this._history.push(this.trimmed);
+      this._histIndex = -1;
+    }
     const images = this.attachments && this.images.length > 0 ? this.images : undefined;
     this.dispatchEvent(
       new CustomEvent("submit", { detail: { value: this.trimmed, images } }),
