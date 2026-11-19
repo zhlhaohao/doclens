@@ -103,7 +103,7 @@ composite = Σ(权重i × 因子i) / Σ权重i    （权重合计 10.0）
 | Agent `search_kb` | **节点自身**引擎分（`n.get("score")`，kb_tools.py:1095） | 同文档不同节点有区分度，节点排序正常 |
 | Web/CLI `score_and_rank` | **文档级**最高分（`doc_fts_best.get(doc_id)`，scoring_pipeline.py:103） | 同文档全部节点拿同一个 fts 分，节点间排序退化为标题/邻近度因子 |
 
-这是 `antipatterns/kb-search-scoring.md` AP-1 记录的「评分三轨制」分叉：kb_tools 在 2026-10-19 修成节点级，管线版保留了旧缺陷，且 kb_tools 至今未改回调 `score_and_rank`（编排仍是两份）。
+这是「评分三轨制」分叉（AP-1 记录的遗留，2026-11-19 随 `antipatterns/` 台账清理转为本分册自持条目）：kb_tools 在 2026-10-19 修成节点级，管线版保留了旧缺陷，且 kb_tools 至今未改回调 `score_and_rank`（编排仍是两份）。
 
 ```mermaid
 flowchart LR
@@ -260,6 +260,6 @@ sequenceDiagram
 - ⚠ 端点动词：两个搜索端点均为 **POST**（search.py:124、grep.py:69 的 `@router.post`；前端亦 POST）。本分册工作清单初稿曾误写 GET，已核实修正。
 - ⚠ `SearchRequest.mode` 字段（keyword/phrase）在 /api/search 端点中**只校验、不消费**——搜索行为不随 mode 变化（models/search.py:11 定义，search.py 全文无引用）。属预留或死参数，排障时勿据此推断行为。
 - ⚠ 与「IndexManager.search 内建 ripgrep 降级」的说法不符：该方法（index_manager.py:874）无任何降级分支；三重降级住在 `score_and_rank` 里，因此**只有走管线的 Web/CLI/TUI 享受降级**，Agent 的 search_kb 不经过它。
-- ⚠ `antipatterns/kb-search-scoring.md` AP-1（评分三轨分叉，pending）：本分册核实仍成立，见第 6 章。同台账 AP-2（N+1 回查）、AP-3（连接零锁）、AP-6（事件循环阻塞）已于 2026-10-22 修复，现状不再成立。
+- ⚠ 评分三轨分叉（AP-1，pending）：本分册核实仍成立，见第 6 章。同批 AP-2（N+1 回查）、AP-3（连接零锁）、AP-6（事件循环阻塞）已于 2026-10-22 修复，现状不再成立。
 - `models/search.py` 尾部的 `SearchResponse`/`SearchResult` 为 2026-10-18 之前的遗留模型，已被 `GroupedSearchResponse` 取代，引用评分字段应以 `FileGroup.best_score` 为准。
 - 引擎 `merge_strategy` 的 `interleave` 与 `per_doc` 两档行为完全相同（search.py:453/480），文档若称二者有别则不符。

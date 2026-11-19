@@ -45,7 +45,6 @@ doclens 是结构感知文档检索工具：把文档解析成树结构（标题
 
 - README.md / README.zh-CN.md：双语产品说明与功能清单（真实事实来源）
 - app_icon.svg：现有应用图标
-- benchmarks/：性能基准材料
 - 无客户证言、案例、新闻稿——未来宣传面不得虚构此类内容
 
 ## Product Principles

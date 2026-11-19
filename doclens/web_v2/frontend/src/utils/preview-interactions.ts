@@ -1,6 +1,5 @@
 /** 预览交互域（AP-1 拆分件）：下载 / 关键词高亮 / PDF 翻译三块，
- *  此前内联在 preview-pane（2026-11-15 迁出，台账
- *  antipatterns/frontend-file-preview.md AP-1 批 2）。
+ *  此前内联在 preview-pane（2026-11-15 迁出）。
  *
  *  共同特征：状态私有 + 依赖宿主环境经注入回调获取（path/language/
  *  viewer 定位），结果经事件派发回调上抛——沿 bookmarks-controller 范式。 */

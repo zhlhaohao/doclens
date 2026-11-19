@@ -13,7 +13,7 @@ doclens/file_watcher.py（宿主特化 watcher，知道数据目录 / 影子 md 
 doclens 侧已修复的可靠性问题（atime 伪事件去重 / 回调异常防护 / reindex
 撞锁补账 / on_moved 基线 / 防抖锁 / 大小写排除 / 启动基线跳过）本文件
 未同步——以通用形态使用时如遇同类问题，参考 doclens/file_watcher.py 的
-对应机制与 antipatterns/file-watcher.md。
+对应机制。
 
 Public entry point::
 

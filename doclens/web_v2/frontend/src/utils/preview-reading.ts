@@ -1,6 +1,5 @@
 /** 预览阅读域（AP-1 拆分件）：目录抽屉 / 滚动位置记忆，此前内联在
- *  preview-pane（2026-11-15 迁出，台账 antipatterns/frontend-file-preview.md
- *  AP-1 批 3）。
+ *  preview-pane（2026-11-15 迁出）。
  *
  *  两块此前强耦合于 _activePreviewViewer（md/pdf viewer 定位）——拆出时
  *  把「活跃 viewer 查询」也收敛为 ActiveViewerController 统一持有，

@@ -1,6 +1,5 @@
 /** 预览外观域（AP-1 拆分件）：字号缩放 / 代码主题 / 全屏三块纯呈现态，
- *  此前内联在 preview-pane（God Object 职责域之一，2026-11-15 迁出，
- *  台账 antipatterns/frontend-file-preview.md AP-1 批 1）。
+ *  此前内联在 preview-pane（God Object 职责域之一，2026-11-15 迁出）。
  *
  *  三块共同特征：零出块依赖（各自 localStorage / DOM class）、无外部事件、
  *  无宿主 prop 交叠——按 bookmarks-controller 范式拆分：状态私有化于

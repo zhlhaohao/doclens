@@ -8,7 +8,7 @@ treesearch 保持中性通用，doclens 承载宿主特化。
 
 doclens 侧已修复的可靠性问题（atime 伪事件去重 / 回调异常防护 / reindex
 撞锁补账 / on_moved 基线 / 防抖锁 / 大小写排除 / 启动基线跳过）treesearch
-侧未同步——详见 antipatterns/file-watcher.md。
+侧未同步——如需对照机制，参照 doclens/file_watcher.py 本文件实现。
 """
 
 import os

@@ -66,7 +66,7 @@ flowchart TD
     E1 --> E1b["P2 健壮性演进受损→近期修"]
     E1 --> E1c["P3 纯代码组织→择机修"]
     E1 --> E1d["P4 记录即处置→文档化/关闭"]
-    E1a & E1b & E1c & E1d --> F1["第5步 台账落盘<br/>antipatterns/范围.md<br/>（AP-n 编号 + status + 执行记录）"]
+    E1a & E1b & E1c & E1d --> F1["第5步 台账落盘<br/>docs/antipatterns/范围.md<br/>（AP-n 编号 + status + 执行记录）"]
     F1 --> STOP["对话侧摘要表 ⏸ 等令"]
 ```
 
@@ -118,7 +118,7 @@ flowchart LR
 flowchart LR
     REF["附件 B/C 栈清单<br/>references/backend·frontend.md"] -->|审计装载| AUDIT2["审计态"]
     GEN["附件 A 通用透镜<br/>references/general.md"] -->|兜底归类| AUDIT2
-    AUDIT2 -->|发现 AP-n·P1-P4| LEDGER[("台账<br/>antipatterns/范围.md")]
+    AUDIT2 -->|发现 AP-n·P1-P4| LEDGER[("台账<br/>docs/antipatterns/范围.md")]
     LEDGER -->|下令引用 AP-n| EXEC2["执行态"]
     EXEC2 -->|status: done commit| LEDGER
     EXEC2 -->|新问题 discovered-during-fix| LEDGER

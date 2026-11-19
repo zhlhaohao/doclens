@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """设置页字段契约守卫（AP-6）：前端 settings-fields.ts 的 envVar 集合必须
 是后端 config_store.KNOWN_KEYS 的子集——漂移即红（jimeng 两次 feat 提交
-加字段未同步测试的实证教训，见 antipatterns/frontend-views.md AP-8）。
+加字段未同步测试的实证教训）。
 
 方向说明：KNOWN_KEYS 是「后端认识的可写键」全集（含预设物化键，如
 PLANIFY_BASE_URL 等由预设区块接管、不在散填字段清单里）；SETTINGS_FIELDS
