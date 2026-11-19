@@ -10,7 +10,7 @@
 | `docs/specs/` | 需求/设计规格（spec），落地前的完整方案 | 只增；实现后由对应 ADR 收口 |
 | `docs/jsbridge/` | NexBox Android ↔ H5 的 JSBridge 接口指南 | 随 Android 侧改动同步 |
 | `docs/*.md` | 散篇实现说明（配置参数、DB schema、记忆机制等） | 随代码改动同步 |
-| `repo_wiki/` | 架构分析（构建产物） | **勿手改**，由 repo-wiki 技能全量重生成 |
+| `repo_wiki/` | 架构分析（构建产物） | **勿手改**，由 repo-wiki 技能全量重生成；文件名与章节随重生成漂移，外部文档不得引用其具体内容 |
 | `antipatterns/` | 反模式审计台账（带执行状态） | 点名条目修复后回填状态，勿整体重生成 |
 | `planify/docs/` | planify 框架自有文档 | 随 planify 包改动同步 |
 | `doclens/web_v2/frontend/docs/DESIGN.md` | 前端设计标尺（META 设计系统） | 随前端改动同步 |
@@ -21,15 +21,9 @@
 ## 主题索引
 
 ### 架构与模块
-- `repo_wiki/ARCHITECTURE.md` — 项目全貌（五域分章 + 横切视图）
-- `repo_wiki/architecture/gui-streaming-chat.md` — GUI 流式端到端对话深析
-- `repo_wiki/planify.md` — planify 模块深析（harness loop / tool call chain）
-- `repo_wiki/search-kb.md` — 检索与知识库问答链路
-- `repo_wiki/kb-search-scoring.md` — 评分链路
-- `repo_wiki/file-preview.md` — 文件预览
-- `repo_wiki/text-file-editing.md` — 文本编辑
 - `planify/docs/ARCHITECTURE.md` — planify 分层与调用链
 - `planify/docs/DESIGN-async-refactor.md` — 流式主循环搬上 ASGI 事件循环的改造设计
+- `repo_wiki/` — 架构分析分册目录（构建产物，文件名与章节随重生成漂移；见 `CONTEXT.md` 术语「架构报告 / 架构分册」）
 
 ### 配置与运行时
 - `docs/doclens-config-parameters.md` — 配置参数全表（`CORTEX_*` / `PLANIFY_*` / `TREESEARCH_*`）

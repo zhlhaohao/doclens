@@ -319,7 +319,7 @@ framework then uses its own `.planify` namespace and loads `.planify/.env`
 
 User-question tools are wired at runtime: the host binds its event emitter and response waiter with `bind_user_interaction_handlers()` (in `tools/user_interaction.py`), so agent questions reach whatever front end the host provides and answers flow back asynchronously.
 
-The host-application integration surface (SSE streaming, custom tool development, config injection) is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The doclens repository (which hosts this package) carries deeper integration write-ups under `repo_wiki/planify.md` and `repo_wiki/architecture/gui-streaming-chat.md`.
+The host-application integration surface (SSE streaming, custom tool development, config injection) is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Development
 

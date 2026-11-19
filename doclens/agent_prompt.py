@@ -3,8 +3,7 @@
 planify 的 build_system_prompt 保持通用；doclens 的知识库策略经
 StreamingAgent/Agent 的 system_prompt_extra 参数注入（宿主扩展点）。
 历史：这些内容曾硬编码在 planify/prompts.py 的 base prompt 中（边界入侵，
-见 repo_wiki/ARCHITECTURE.md §2.5 与 docs/adr/0053-framework-host-injection.md），
-2026-09-02 迁回 doclens。
+见 docs/adr/0053-framework-host-injection.md），2026-09-02 迁回 doclens。
 """
 from pathlib import Path
 

@@ -436,3 +436,44 @@ def test_no_private_import_in_tests():
         "tests/ 模块级私有成员引用（应公共化或改为函数内 monkeypatch 目标，"
         "见 CLAUDE.md 规则 2）：\n" + "\n".join(violations)
     )
+
+
+# 红线 5（文档引用纪律）：repo_wiki/ 是**重生成构建产物**——文件名、章节号、
+# 具体结论都随每次全量重生成漂移。外部文档（docs/、源码注释、README 等）
+# 引用它的章节号会在下一次重生成后指向错误位置或失效内容。
+# 唯一允许的外部引用是**目录级声明**（「在 repo_wiki/ 下」）。
+# repo_wiki/ 内部互相引用不受限——同批产物一起重生成，相对引用始终自洽。
+_REPO_WIKI_FILE_REF_RE = re.compile(r"repo_wiki/[A-Za-z0-9_.\-]+\.md")
+# 生产者（技能定义）与被扫描目录本身豁免：生成器必须知道自己的输出路径。
+_REPO_WIKI_EXEMPT = (
+    "doclens/skills/repo-wiki/",
+    ".claude/skills/",
+)
+
+
+def test_no_external_refs_into_repo_wiki():
+    """外部文档不得引用 repo_wiki/ 的具体文件（构建产物，重生成即漂移）。"""
+    violations: list[str] = []
+    scan_roots = ["docs", "doclens", "planify", "treesearch", "tests", "antipatterns"]
+    for root_name in scan_roots:
+        root = REPO / root_name
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix not in (".md", ".py", ".ts"):
+                continue
+            rel = path.relative_to(REPO).as_posix()
+            if rel.startswith(("repo_wiki/",) + _REPO_WIKI_EXEMPT):
+                continue
+            if "__pycache__" in path.parts or "build" in path.parts:
+                continue
+            src = path.read_text(encoding="utf-8", errors="replace")
+            for m in _REPO_WIKI_FILE_REF_RE.finditer(src):
+                line = src[: m.start()].count("\n") + 1
+                violations.append(f"{rel}:{line}: {m.group(0)}")
+    assert not violations, (
+        "外部文档引用 repo_wiki/ 的具体文件——构建产物重生成后即失效"
+        "（引用纪律见 CONTEXT.md 术语「架构报告 / 架构分册」；"
+        "改引稳定源：docs/adr/、CLAUDE.md、CONTEXT.md 术语，或只声明目录位置）：\n"
+        + "\n".join(violations)
+    )

@@ -267,8 +267,7 @@ class CortexAgent:
         planify 的 RuntimeManager.initialize_runtime_components（该路径仅服务
         planify 自带 legacy REPL main.py，且缺少 gui_mode / skill_access_state /
         自定义 skills_dir 等 doclens 必需插槽）。代价：planify 装配逻辑演进时
-        需人工同步此处（决策记录见 docs/adr/0053-framework-host-injection.md
-        与 repo_wiki/ARCHITECTURE.md §2.5）。
+        需人工同步此处（决策记录见 docs/adr/0053-framework-host-injection.md）。
 
         装配按阶段拆分（AP-51）：环境/配置 → 目录 → 日志与运行时管理器 →
         技能 → 知识库工具 → 工具注册 → Runtime。阶段间只经 ``_Assembly``

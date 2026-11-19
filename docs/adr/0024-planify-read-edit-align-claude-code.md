@@ -6,7 +6,7 @@ planify 的 `read_file`/`edit_file` 与 Claude Code 的 FileReadTool/FileEditToo
 
 - **参照系**：Claude Code 源码（`FileReadTool.ts` + `utils/file.ts` 的 `addLineNumbers`）——文本读取输出带行号前缀，紧凑格式为 `行号<TAB>内容`（1-based，killswitch 回退旧 `padStart(6)+→` 格式）；FileEditTool 有 old_string 唯一性校验 + `replace_all` 参数 + read-before-edit 门禁 + mtime 新鲜度检查 + readFileState 去重 stub。
 - **词序号切片的由来**：为中文知识库场景造——CJK 长段落常整段一行，按行分块粒度太粗，词序号提供确定性细粒度寻址。该体系被 doclens `read_document` 深度依赖（`kb_tools.py`、`knowledge_base`/`summarize-files` 技能文档、MCP server 均引用）。
-- **共享实现耦合**：`doclens/kb_tools.py:24` 直接 `from planify.tools.basic import split_words_with_seps`——有意的单一真相源（跨层导入的边界说明见 `repo_wiki/ARCHITECTURE.md` §2.5）。
+- **共享实现耦合**：`doclens/kb_tools.py:24` 直接 `from planify.tools.basic import split_words_with_seps`——有意的单一真相源（跨层导入的边界说明见 `docs/adr/0053-framework-host-injection.md` 与 CLAUDE.md「模块边界」规则 2）。
 - **无法照搬的部分**：Claude Code 的 token 预算校验走自家 countTokens API；readFileState/dedup stub/read-before-edit/mtime 检查依赖 per-session 读取状态设施，planify 工具层当前是无状态函数字典。
 
 ## Decision
