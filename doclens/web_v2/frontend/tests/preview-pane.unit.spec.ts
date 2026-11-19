@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeHighlightKeyword } from "./preview-pane";
+import { normalizeHighlightKeyword } from "../src/components/preview-pane";
 
 describe("normalizeHighlightKeyword（高亮输入条 CJK 整词归一化，2026-09-28 决议）", () => {
   it("含 CJK 的输入去空格整串匹配（输入法空格不是语义分隔）", () => {

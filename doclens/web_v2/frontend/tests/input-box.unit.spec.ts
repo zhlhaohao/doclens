@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import "./input-box";
-import type { InputBox } from "./input-box";
+import "../src/components/input-box";
+import type { InputBox } from "../src/components/input-box";
 
 /** 1x1 透明 GIF：_addFiles 对 GIF 走 arrayBuffer+btoa 直转路径（不经 canvas），jsdom 可测 */
 const GIF_B64 = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
