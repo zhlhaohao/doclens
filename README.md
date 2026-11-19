@@ -358,6 +358,12 @@ Layering rule: `doclens` may depend on `planify` and `treesearch`; the two libra
 
 ---
 
+## Documentation
+
+Architecture write-ups, ADRs, configuration reference and other technical docs are indexed in [docs/README.md](docs/README.md).
+
+---
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).

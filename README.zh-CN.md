@@ -358,6 +358,12 @@ npm test           # vitest 单元测试
 
 ---
 
+## 文档
+
+架构分析、ADR、配置说明等文档见 [docs/README.md](docs/README.md)（文档索引）。
+
+---
+
 ## License
 
 Apache License 2.0——见 [LICENSE](LICENSE)。
