@@ -318,7 +318,7 @@ register_env_loader(load_your_dotenv)      # 回调：把宿主的 .env 灌进 o
 
 用户提问工具在运行时接线：宿主用 `bind_user_interaction_handlers()`（`tools/user_interaction.py` 中）绑定自己的事件发射器与应答等待器——代理的提问到达宿主任意前端，答案异步回流。
 
-完整的集成 walkthrough（SSE 流式、自定义工具开发、配置注入）见 [INTEGRATION.md](INTEGRATION.md) 与 [examples.md](examples.md)。
+宿主集成面（SSE 流式、自定义工具开发、配置注入）见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。承载本包的 doclens 仓库另有更深的集成篇目，位于 `repo_wiki/planify.md` 与 `repo_wiki/architecture/gui-streaming-chat.md`。
 
 ## 开发
 
@@ -333,8 +333,7 @@ pytest
 ## 更多文档
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) —— 深度架构分析（分层、调用链、技术债）
-- [INTEGRATION.md](INTEGRATION.md) —— 宿主应用集成指南（SSE、自定义工具、配置注入）
-- [examples.md](examples.md) —— 使用示例代码
+- [docs/DESIGN-async-refactor.md](docs/DESIGN-async-refactor.md) —— 把流式主循环搬上 ASGI 事件循环的 async 改造设计
 
 ## License
 

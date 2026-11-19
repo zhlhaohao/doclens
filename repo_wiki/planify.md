@@ -359,5 +359,5 @@ EventEmitter 协议只要求实现一个 `emit` 方法，便捷方法（emit_tex
 | ⚠-3 | `core/llm/tool_translator.py` | `ToolCallMapper` 已旁路成「僵尸代码」：round-trip 不再经它，保留仅为兼容外部 import；模块 docstring 与 CLAUDE.md 均未记录此弃用状态 |
 | ⚠-4 | README / CLAUDE.md | 两处文档均未记载「主循环默认无轮次上限」——`max_tool_rounds` / `force_answer_rounds` 默认 None（不启用），宿主不注入时 run_stream 理论可无限循环，仅剩同参检测与中断兜底。文档只写「Tool loop iterates autonomously」，无此风险面记载 |
 | ⚠-5 | CLAUDE.md:267 | CLAUDE.md 称 provider 协议是「chat/stream/count_tokens」，遗漏主链路实际使用的 `achat` / `astream`（StreamingAgent 只走 astream） |
-| ⚠-6 | `planify/streaming_spec.md` | 该 spec 通篇引用不存在的旧路径（`backend/app/planify/...`），是流式改造前的历史方案文档，与现状严重脱节，读者慎引 |
+| ⚠-6 | （已清理） | 原 `planify/streaming_spec.md` 通篇引用不存在的旧路径（`backend/app/planify/...`），是流式改造前的历史方案文档，与现状严重脱节；已于 2026-11-19 连同 `INTEGRATION.md` / `SIMPLIFIED.md` / `bootstrap_api_changes.md` / `examples.md` 一并删除（后者描述的 `get_or_create_session()` API 亦已不存在，现为 `get_or_create_runtime()`） |
 | 缺口 | docs/ 体系 | shell 超时 / 进程树击杀（2026-10-05 事故）/ 后台统一语义（2026-10-09）无任何专项文档，设计动机只存在于源码 docstring——本分册 6.3 / 6.6 目前是唯一成文来源 |
