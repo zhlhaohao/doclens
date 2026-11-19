@@ -46,7 +46,7 @@ import "../components/download-overlay";
 import "../components/spinner";
 import "../components/workdir-switch-dialog";
 import { downloadServerFile } from "../utils/download";
-import { copyText } from "../utils/clipboard";
+import { copyText, quotePaths } from "../utils/clipboard";
 import { dialogCardStyles } from "../styles/dialog-frame";
 
 type DialogKind = "mkdir" | "new-file" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
@@ -933,12 +933,12 @@ export class FilesView extends LitElement {
     router.navigate("chat");
   }
 
-  /** 拷贝选中项路径到剪贴板（相对 workdir，多选时每行一个）。
+  /** 拷贝选中项路径到剪贴板（相对 workdir，多选时每行一个、逐个加双引号）。
    *  AP-5：改走 utils/clipboard 单一入口（含非安全上下文降级）。 */
   private _copySelectedPaths() {
     const paths = this._state.selectedPaths;
     if (paths.length === 0) return;
-    const text = paths.join("\n");
+    const text = quotePaths(paths);
     void copyText(text).then((ok) =>
       this._showToast(ok ? `已复制 ${paths.length} 个路径` : "复制失败（剪贴板不可用）"),
     );

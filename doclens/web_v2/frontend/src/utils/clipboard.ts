@@ -17,6 +17,21 @@
 /** 「已复制」反馈时长（ms）——全仓唯一口径（原 1500/2000 两派）。 */
 export const COPY_FEEDBACK_MS = 1500;
 
+/** 路径加双引号（拷贝路径专用）。
+ *
+ *  拷贝出来的路径要能直接贴进命令行/引号上下文里用——路径含空格时
+ *  裸路径粘贴会被拆成多个参数。统一加双引号，粘贴端按需再处理。
+ *  路径本身若已含引号（Windows 不允许出现在文件名里，但 Linux 允许），
+ *  保留原样即可——反斜杠转义不是本函数的职责。 */
+export function quotePath(path: string): string {
+  return `"${path}"`;
+}
+
+/** 多路径拷贝文本：每行一个、逐个加双引号（与 quotePath 同口径）。 */
+export function quotePaths(paths: string[]): string {
+  return paths.map(quotePath).join("\n");
+}
+
 /** 写入剪贴板：优先 navigator.clipboard，不可用时降级隐藏 textarea +
  *  execCommand（AP-5 前仅 2/9 站点有此降级）。全失败返回 false。
  *

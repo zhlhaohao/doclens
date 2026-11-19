@@ -573,6 +573,26 @@ describe("<preview-pane> mobile header", () => {
     expect(items[2].textContent).toContain("拷贝路径");
   });
 
+  it("拷贝路径 writes the path with double quotes", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const el = await fixture(html`
+      <preview-pane
+        language="markdown"
+        content="# T"
+        path="docs/my file.md">
+      </preview-pane>
+    `) as PreviewPane;
+    await el.updateComplete;
+    (el as any)._onCopyPathClick();
+    await vi.waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('"docs/my file.md"');
+    });
+  });
+
   it("clicking mobile-more twice closes the dropdown", async () => {
     const el = await fixture(html`
       <preview-pane

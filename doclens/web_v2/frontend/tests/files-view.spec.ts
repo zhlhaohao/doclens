@@ -94,7 +94,7 @@ describe("files-view", () => {
     document.body.removeChild(el);
   });
 
-  it("copy-path action copies selected paths (newline-joined) and toasts", async () => {
+  it("copy-path action copies selected paths (quoted, newline-joined) and toasts", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
@@ -106,7 +106,8 @@ describe("files-view", () => {
     await el.updateComplete;
 
     el._onAction(new CustomEvent("action", { detail: { name: "copy-path" } }));
-    expect(writeText).toHaveBeenCalledWith("docs/a.md\nb.md");
+    // 路径加双引号（含空格的路径可直接贴进命令行）
+    expect(writeText).toHaveBeenCalledWith('"docs/a.md"\n"b.md"');
     await vi.waitFor(() => {
       expect(el.shadowRoot.textContent).toContain("已复制 2 个路径");
     });

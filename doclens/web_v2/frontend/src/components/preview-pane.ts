@@ -26,7 +26,7 @@ import { isWebviewContainer } from "../utils/jsbridge";
 import { formatBytes } from "../utils/format";
 import { SkillToolboxController } from "../utils/skill-toolbox";
 import { downloadServerFile } from "../utils/download";
-import { copyText } from "../utils/clipboard";
+import { copyText, quotePath } from "../utils/clipboard";
 import { getFileTypeBadge } from "../utils/file-type";
 import { emptyStateStyles } from "../styles/empty-state-styles";
 import {
@@ -1752,12 +1752,13 @@ export class PreviewPane extends LitElement {
     ><doclens-icon name="sparkles"></doclens-icon><span class="btn-label">工具箱</span></button>`;
   }
 
-  /** 拷贝当前预览路径（相对 workdir）到剪贴板；结果经 path-copied 事件
-   *  由宿主视图 toast（与 download-success 同模式，移动/桌面一致）。
+  /** 拷贝当前预览路径（相对 workdir）到剪贴板（路径加双引号，便于直接
+   *  贴进命令行）；结果经 path-copied 事件由宿主视图 toast（与
+   *  download-success 同模式，移动/桌面一致）。
    *  AP-5：改走 utils/clipboard 单一入口（含非安全上下文降级）。 */
   private _onCopyPathClick = () => {
     if (!this.path) return;
-    void copyText(this.path).then((ok) =>
+    void copyText(quotePath(this.path)).then((ok) =>
       this.dispatchEvent(new CustomEvent("path-copied", {
         detail: { ok, path: this.path },
         bubbles: true, composed: true,
