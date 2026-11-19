@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { rotatablePathFromSrc } from "./image-viewer";
+import { rotatablePathFromSrc } from "../src/components/image-viewer";
 
 describe("rotatablePathFromSrc（ADR-0029 手动旋转判定）", () => {
   it("raw 端点的四格式图像可旋转，返回 workdir 相对路径（query 自动解码）", () => {

@@ -5,7 +5,7 @@ import {
   bookmarksFor,
   loadBookmarks,
   removeBookmark,
-} from "./bookmarks";
+} from "../src/utils/bookmarks";
 
 const KEY = "cortex.files.readingBookmarks";
 

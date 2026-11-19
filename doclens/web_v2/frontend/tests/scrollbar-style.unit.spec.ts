@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { ChatStream } from "./chat-stream";
-import { ChatToolTrace } from "./chat-tool-trace";
-import { InputBox } from "./input-box";
+import { ChatStream } from "../src/components/chat-stream";
+import { ChatToolTrace } from "../src/components/chat-tool-trace";
+import { InputBox } from "../src/components/input-box";
 
 function cssText(styles: unknown): string {
   if (Array.isArray(styles)) {

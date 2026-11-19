@@ -8,8 +8,8 @@ import {
   lineDiff,
   orderedArgEntries,
   skillResultSummary,
-} from "./chat-tool-trace";
-import type { ToolStep } from "../state/types";
+} from "../src/components/chat-tool-trace";
+import type { ToolStep } from "../src/state/types";
 
 function step(overrides: Partial<ToolStep>): ToolStep {
   return {

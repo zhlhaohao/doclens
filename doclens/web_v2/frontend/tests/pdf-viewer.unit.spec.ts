@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { lineToPage } from "./pdf-viewer";
-import { encodePdfScrollAnchor, decodePdfScrollAnchor } from "../utils/scroll-memory";
+import { lineToPage } from "../src/components/pdf-viewer";
+import { encodePdfScrollAnchor, decodePdfScrollAnchor } from "../src/utils/scroll-memory";
 
 /** PDF 滚动锚点编码（ADR-0031）：页号+页内偏移 → 单一正整数，
  *  与 md 行号共存同一 scroll-memory map。 */

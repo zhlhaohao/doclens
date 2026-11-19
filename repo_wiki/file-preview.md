@@ -433,8 +433,8 @@ preview-pane 是无状态渲染壳，预览的获取与状态管理在各宿主�
 | upload-target hash 反查 | 匹配→`{match:true, path}`，否则 `{match:false}` | test_pdf_native_preview_api |
 | 前端 isFullFilePreview | md/pdf/docx/xlsx 族/csv 等为 true（大小写不敏感）；epub/mhtml/pst/图像在列、**pptx 不在列** | api-preview.spec.ts |
 | 前端保存 | PUT + JSON body，非 2xx 抛 PreviewSaveError{code,status} | api-preview.spec.ts |
-| 关键词归一（含 CJK） | 中日韩去空格整串匹配；纯 ASCII 保留空格分词 | preview-pane.test.ts |
-| 旋转钮 URL 判定 | 仅 raw 端点四格式返回路径；asset 图/gif/非 raw → null | image-viewer.test.ts |
+| 关键词归一（含 CJK） | 中日韩去空格整串匹配；纯 ASCII 保留空格分词 | preview-pane.unit.spec.ts |
+| 旋转钮 URL 判定 | 仅 raw 端点四格式返回路径；asset 图/gif/非 raw → null | image-viewer.unit.spec.ts |
 
 前端 Vitest 覆盖面（测试名层）：preview-pane 14 个 describe（四分支渲染、编辑锚点互逆、scroll memory、mobile header、关键词高亮、字号步进）；md-viewer（data-source-line、分页定位闪烁、icon 尺寸、resolveDocImageUrl 边界、行级锚点往返一致）；chat-view（引用打开、NOT_INDEXED、splitter、路径归一）。
 

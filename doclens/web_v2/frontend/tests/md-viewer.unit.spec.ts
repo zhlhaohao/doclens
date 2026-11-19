@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMatchLines } from "./md-viewer";
+import { buildMatchLines } from "../src/components/md-viewer";
 
 describe("buildMatchLines（匹配导航源文本索引，2026-09-28 决议）", () => {
   it("空关键词 / 空内容返回空索引", () => {

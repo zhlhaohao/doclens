@@ -94,7 +94,7 @@ planify/                    # AI 框架：bootstrap / streaming/（runner 主循
 | 前端搜索 UI（search-view / md-viewer / file-card / preview-pane / pdf-viewer / api） | `npm run test -- tests/search-highlight-units.spec.ts tests/md-viewer.spec.ts tests/file-card.spec.ts tests/preview-pane.spec.ts`（cwd=frontend）＋ `npm run build` |
 | 前端流程级测试（对话/搜索/文件三视图旅程） | `npm run test -- tests/chat-flow.spec.ts tests/search-flow.spec.ts tests/files-flow.spec.ts`（cwd=frontend）——**动 chat-view/search-view/files-view 之前先跑**，是 controller 外迁的安全网 |
 | 前端 controller 层（utils/*-controller.ts） | 同名 spec：`tests/chat-history-controller.spec.ts` / `chat-session-ops-controller.spec.ts` / `chat-skills-controller.spec.ts` / `files-modes-controller.spec.ts` / `preview-controller.spec.ts` |
-| 前端其他组件 | 同名 spec |
+| 前端其他组件 | 同名 spec（`tests/<组件名>.spec.ts`；纯函数/静态常量单元测试用 `tests/<组件名>.unit.spec.ts`——测试代码不入 `src/`，`npm run build` 的 tsc 只查 `src`，测试类型错误不阻塞生产构建） |
 | 前端定位/滚动/分页/预览（跨前后端旅程） | `npm run test:e2e:search`（自动语料 + 7890 后端） |
 | 任何层改完 | `pytest tests/test_architecture.py -q`（红线守卫） |
 

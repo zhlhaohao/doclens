@@ -1,0 +1,8 @@
+{
+  // 生产构建的类型检查范围：只查 src。
+  // 动机：测试代码（tests/）曾与 src 同处一个 tsconfig，导致 vitest 用例
+  // 写错类型就会让 `npm run build` 失败——测试不该阻塞生产构建。
+  // 测试代码的类型检查由 `npm run typecheck`（tsconfig.json，覆盖 src+tests）负责。
+  "extends": "./tsconfig.json",
+  "include": ["src"]
+}
