@@ -143,7 +143,7 @@ planify 是一个**仿 Claude Code 的单进程多代理 AI Agent 框架**（doc
 
 ## 四、发现的技术债
 
-1. **双 runner 维护成本**：`agent/runner.py`（服务旧 REPL `main.py`）与 `streaming/runner.py` 循环骨架刻意同构但需双写（压缩管道、工具执行各两份）。另：**双装配器**为已接受决策——`RuntimeManager.initialize_runtime_components` 仅服务 legacy REPL，doclens 以 `CortexAgent.initialize` 为官方装配根（理由与同步约定见 `doclens/web_v2/docs/ARCHITECTURE-planify-boundary.md` §六 #2）
+1. **双 runner 维护成本**：`agent/runner.py`（服务旧 REPL `main.py`）与 `streaming/runner.py` 循环骨架刻意同构但需双写（压缩管道、工具执行各两份）。另：**双装配器**为已接受决策——`RuntimeManager.initialize_runtime_components` 仅服务 legacy REPL，doclens 以 `CortexAgent.initialize` 为官方装配根（决策记录见 `docs/adr/0053-framework-host-injection.md` 与 `repo_wiki/ARCHITECTURE.md` §2.5）
 2. **teammate 无压缩管道**：`teammate_manager.py` 的 `_loop` 未接 compact，上下文无界增长；`:394` 的 identity 重注入是预留补丁位
 3. **死代码**：`core/client.py` 的 `init_anthropic_client` 无任何调用方（已被 `AnthropicProvider.__init__` 内联取代，且残留修改全局 `os.environ` 的隐患）；~~`session.py:15` 死导入 `Anthropic`~~（2026-09-02 已删）4. **`transcript_dir` 语义混乱**：config 中实际是文件路径却被当目录用，runner 已防御性改用 `workdir/.transcripts`
 5. **会话持久化缺位**：消息历史纯内存，唯一落盘是 auto_compact 触发时的 transcript；doclens 侧靠 `sessions_store.py`（SQLite）自建持久化补位

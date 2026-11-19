@@ -178,7 +178,7 @@ flowchart TD
 ```
 *图 3：read_document 深读链路。索引优先（省一次解析）、现场解析兜底（新文件未入索引也可读）。*
 
-- **词序号切片**（术语见 CONTEXT.md:83）是 read_document 专属寻址体系：中日韩文字每字算一词、其余按空白切分，1-based 闭区间。它是为中文长段落（整段一行）设计的细粒度寻址；词定义的单一真相源 `split_words_with_seps` 在 planify（doclens 有意跨层导入，见 ARCHITECTURE-planify-boundary.md）。
+- **词序号切片**（术语见 CONTEXT.md:83）是 read_document 专属寻址体系：中日韩文字每字算一词、其余按空白切分，1-based 闭区间。它是为中文长段落（整段一行）设计的细粒度寻址；词定义的单一真相源 `split_words_with_seps` 在 planify（doclens 有意跨层导入，见 `repo_wiki/ARCHITECTURE.md` §2.5）。
 - **ghost 拒读**：白名单外文本文件只「登记」不索引（documents 表有行、node_count=0、不进 FTS）——文件名可搜但全文检索不命中；read_document 遇到这类文件直接拒绝并提示改用通用 read_file（术语「登记」见 CONTEXT.md:143）。
 
 ## kb_grep 与降级链路
