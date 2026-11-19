@@ -97,7 +97,7 @@ export class SessionInfoDialog extends LitElement {
       color: var(--cortex-primary);
     }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
     }
   `];;
 

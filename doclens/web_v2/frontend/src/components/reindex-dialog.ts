@@ -26,9 +26,9 @@ export class ReindexDialog extends LitElement {
     button.warn { background: var(--cortex-danger); color: var(--cortex-on-danger); border: none; border-radius: var(--cortex-radius-lg); }
     @media (max-width: 1023px) {
       .reindex-body {
-        width: calc(100vw - 16px);
-        max-width: calc(100vw - 16px);
-        max-height: calc(100vh - 16px);
+        width: 100%;
+        max-width: 100%;
+        max-height: calc(100vh - 32px);
       }
     }
   `;

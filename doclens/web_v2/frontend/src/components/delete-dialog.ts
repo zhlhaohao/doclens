@@ -29,7 +29,7 @@ export class DeleteDialog extends LitElement {
     }
     .spinner { color: var(--cortex-text-muted); padding: var(--cortex-space-4); text-align: center; }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
     }
   `];;
 

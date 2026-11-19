@@ -64,7 +64,13 @@ export class CDialog extends LitElement {
 
   /** 是否打开。true 时组件在渲染后调用 showModal() 进 top-layer。 */
   @property({ type: Boolean, reflect: true }) open = false;
-  /** 卡片最小宽度（px；0 = 不设）。宿主按需覆盖（如 files-view 360px）。 */
+  /** 卡片最小宽度（px；0 = 不设）。宿主按需覆盖（如 files-view 360px）。
+   *
+   *  注入方式：自定义属性 `--c-dialog-min-width`（而非直接写
+   *  `min-width` 内联样式）——公共块 dialogCardStyles 读该变量，移动端
+   *  媒体查询里用 `min-width: 0` 覆盖即可归零（内联 min-width 优先级
+   *  更高，媒体查询压不住）。
+   */
   @property({ type: Number }) minWidth = 0;
 
   protected updated(changed: Map<string, unknown>) {
@@ -92,7 +98,9 @@ export class CDialog extends LitElement {
 
   render() {
     if (!this.open) return nothing;
-    const style = this.minWidth > 0 ? `min-width:${this.minWidth}px;` : "";
+    const style = this.minWidth > 0
+      ? `--c-dialog-min-width:${this.minWidth}px;`
+      : "";
     return html`
       <dialog style=${style} @cancel=${this._onCancel} @close=${this._onClose}>
         <div class="card">

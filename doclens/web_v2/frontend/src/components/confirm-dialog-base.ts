@@ -47,6 +47,14 @@ export abstract class ConfirmDialogBase extends LitElement {
         font-size: var(--cortex-fs-md);
         color: var(--cortex-text);
       }
+      /* 移动端（2026-11-18）：卡片外壳已内缩到视口宽 − 32px，340px 下限
+         在窄屏上会顶出卡片——归零让内容随卡片自适应。 */
+      @media (max-width: 1023px) {
+        :host {
+          min-width: 0;
+          max-width: 100%;
+        }
+      }
     `,
   ];
 

@@ -31,7 +31,15 @@ export class TranslateDialog extends LitElement {
        不受预览栏 overflow 裁剪（2026-10-08 修复：旧 absolute 定位只浮在
        预览列内）。 */
     /* 翻译对话框内容区：窄卡片 + 纵向流（外壳走 <c-dialog> 公共件，
-       卡片形态见 styles/dialog-frame 的 dialogCardStyles） */
+       卡片形态见 styles/dialog-frame 的 dialogCardStyles）
+
+       宽度分断点处理（2026-11-18）：
+       - 桌面：宿主 <dialog> 是 shrink-to-fit（宽度由内容反推），此时 100%
+         无确定父宽可依——实测塌成 272px，440px 上限失效。故用
+         min(440px, calc(100vw - 32px))，440px 固定宽度。
+       - 移动端：宿主 <dialog> 宽度由媒体查询固定为 calc(100vw - 32px)，
+         父宽确定，100% 正确跟随外层已内缩的卡片（并扣掉 .card 内边距）。
+         若沿用 vw 下限会顶出卡片右缘（358px > 可用 308px）。 */
     .translate-body {
       display: flex;
       flex-direction: column;
@@ -40,6 +48,9 @@ export class TranslateDialog extends LitElement {
       max-height: calc(100vh - 48px);
       color: var(--cortex-text);
       font-family: var(--cortex-font);
+    }
+    @media (max-width: 1023px) {
+      .translate-body { width: 100%; }
     }
     h3 {
       margin: 0;

@@ -56,14 +56,31 @@ describe("c-dialog", () => {
     expect(seen).toEqual(["cancel"]);
   });
 
-  it("minWidth 落到 dialog 内联样式", async () => {
+  it("minWidth 落到 dialog 的 --c-dialog-min-width 自定义属性", async () => {
     const el = document.createElement("c-dialog") as any;
     el.open = true;
     el.minWidth = 360;
     document.body.appendChild(el);
     await el.updateComplete;
     const dlg = el.shadowRoot!.querySelector("dialog") as HTMLElement;
-    expect(dlg.getAttribute("style")).toContain("min-width:360px");
+    // 走自定义属性而非 min-width 内联样式：移动端媒体查询才能覆盖归零
+    expect(dlg.getAttribute("style")).toContain("--c-dialog-min-width:360px");
+    // 不得出现裸的 min-width 内联声明（否则移动端媒体查询压不住）
+    expect(dlg.getAttribute("style")).not.toMatch(/(^|;)\s*min-width:/);
+  });
+
+  it("移动端卡片内缩：宽度留 16px 边距、min-width 归零", async () => {
+    const code = readFileSync(
+      resolve(process.cwd(), "src/styles/dialog-frame.ts"),
+      "utf-8",
+    );
+    // 移动端卡片不再占满 100vw（顶住屏幕左右边框），改为内缩 32px
+    expect(code).toContain("width: calc(100vw - 32px)");
+    expect(code).toContain("max-width: calc(100vw - 32px)");
+    expect(code).not.toMatch(/width:\s*100vw/);
+    // 移动端归零 min-width（宿主给的 340/360px 下限会顶出卡片）
+    const mobile = code.slice(code.indexOf("@media (max-width: 1023px)"));
+    expect(mobile).toMatch(/min-width:\s*0/);
   });
 
   it("内容走 slot 投影，.card 承载内边距", async () => {
@@ -109,6 +126,73 @@ describe("全仓契约守卫", () => {
     // 保留两块：卡片形态 + 标题行
     expect(code).toContain("export const dialogCardStyles");
     expect(code).toContain("export const dialogHeadStyles");
+  });
+
+  it("对话框内容件不得在桌面用 100% 撑宽（shrink-to-fit 下会塌陷）", () => {
+    // 回归守卫（2026-11-18）：宿主 <dialog> 是 shrink-to-fit 容器，桌面端
+    // 宽度由内容反推——内容件写 width:100% 时无确定父宽可依，实测
+    // translate-dialog 从 440px 塌成 272px（440px 上限失效）。
+    // 约定：这些内容件的 width:100% 只许出现在 @media (max-width:1023px) 内。
+    /** 剥离所有 @media 块（按花括号配对），返回剩余源码。 */
+    function stripMediaBlocks(code: string): string {
+      let out = "";
+      let i = 0;
+      while (i < code.length) {
+        const at = code.indexOf("@media", i);
+        if (at === -1) { out += code.slice(i); break; }
+        out += code.slice(i, at);
+        const brace = code.indexOf("{", at);
+        if (brace === -1) { out += code.slice(at); break; }
+        let depth = 0;
+        let j = brace;
+        for (; j < code.length; j++) {
+          if (code[j] === "{") depth++;
+          else if (code[j] === "}") {
+            depth--;
+            if (depth === 0) { j++; break; }
+          }
+        }
+        i = j;
+      }
+      return out;
+    }
+    // 只扫「直接挂在 <c-dialog> 内的内容件」——这些件的父是 shrink-to-fit
+    // 的 <dialog>，用 100% 会塌陷。其余组件（app-bar / file-list 等）的
+    // width:100% 父宽确定，不在本守卫范围。
+    //
+    // 只看**决定件整体宽度**的规则：`:host` / 顶层容器 class 上的 width。
+    // 内部控件（textarea / input）的 width:100% 父宽确定，属既有合法用法。
+    const DIALOG_CONTENT = [
+      "translate-dialog.ts",
+      "backup-dialog.ts",
+      "reindex-dialog.ts",
+      "skill-toolbox-dialog.ts",
+      "skill-run-dialog.ts",
+    ];
+    const offenders: string[] = [];
+    for (const f of DIALOG_CONTENT) {
+      const code = readCode(join(resolve(process.cwd(), "src/components"), f));
+      const outside = stripMediaBlocks(code);
+      // 逐个 CSS 块解析（Lit 的 css`` 是嵌套的，块内无花括号）
+      const re = /([^{}]+)\{([^{}]*)\}/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(outside)) !== null) {
+        const sel = m[1].trim().split("\n").pop()!.trim();
+        const body = m[2];
+        // 只看**顶层件**规则：`:host` 或单个类（`.xxx`）。
+        // 带空格/逗号的复合选择器（`.item .desc`）是内部控件——父宽确定，
+        // width:100% 合法（既有代码大量存在）。
+        if (!/^(:host|\.[a-z][\w-]*)$/.test(sel)) continue;
+        // 取 width 声明（排除 max-width / min-width）
+        const decl = body.match(/(?:^|[;{]|\s)width:\s*([^;]+)/);
+        if (!decl) continue;
+        // 判定：宽度值含 100% → 该件用 100% 撑宽（父宽不确定时会塌陷）
+        if (!/100%/.test(decl[1])) continue;
+        offenders.push(f);
+        break;
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it("卡片形态只有一份（dialogCardStyles 公共块）", () => {

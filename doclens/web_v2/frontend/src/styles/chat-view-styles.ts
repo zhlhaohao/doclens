@@ -168,11 +168,12 @@ export const chatViewStyles = [dialogCardStyles, css`
        initial 态 .input-row 与 focus 态 .input-bar 同步收紧，保证两态等宽 */
     .input-row,
     .input-bar { padding-left: var(--cortex-space-2); padding-right: var(--cortex-space-2); }
-    /* 移动端对话框占满屏幕宽度，与 files-view 决议一致 */
+    /* 移动端对话框内缩（2026-11-18）：与公共块 dialogCardStyles 同步——
+       左右各留 16px，卡片不再顶住屏幕左右边框 */
     dialog {
-      width: 100vw;
-      max-width: 100vw;
-      max-height: calc(100vh - 16px);
+      width: calc(100vw - 32px);
+      max-width: calc(100vw - 32px);
+      max-height: calc(100vh - 32px);
       border-radius: var(--cortex-radius-md);
     }
     dialog > * { padding: var(--cortex-space-4); }

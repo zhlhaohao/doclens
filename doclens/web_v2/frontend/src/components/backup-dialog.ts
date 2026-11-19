@@ -100,11 +100,20 @@ export class BackupDialog extends LitElement {
       border: 1px solid var(--cortex-border);
       border-radius: var(--cortex-radius-lg);
       padding: var(--cortex-space-5);
-      width: min(400px, 85vw);
+      /* 桌面：固定 400px 宽（原 min(400px, 85vw) 在桌面取 400px，等值）。
+         不用 100%——父 <dialog> 是 shrink-to-fit，100% 无确定父宽可依
+         （translate-dialog 曾因此从 440px 塌成 272px）。
+         移动端：父 .confirm-overlay 是 absolute inset:0（父宽确定），
+         按 100% 跟随外层已内缩的卡片（85vw 会顶出卡片右缘）。 */
+      width: 400px;
+      max-width: 100%;
       display: flex;
       flex-direction: column;
       gap: var(--cortex-space-3);
       box-shadow: var(--cortex-shadow-lg);
+    }
+    @media (max-width: 1023px) {
+      .confirm-card { width: 100%; }
     }
     .confirm-card p {
       margin: 0;

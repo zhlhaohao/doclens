@@ -60,7 +60,7 @@ export class SkillRunDialog extends LitElement {
       font-size: var(--cortex-fs-base);
     }
     @media (max-width: 1023px) {
-      :host { min-width: 0; }
+      :host { min-width: 0; max-width: 100%; }
       .files { max-height: 35vh; }
     }
   `];;
