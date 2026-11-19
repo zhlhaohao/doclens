@@ -355,10 +355,11 @@ export class InputBox extends LitElement {
    *  点「选择技能…」发 skill-browse。 */
   @property({ attribute: false }) skillItems: { name: string; icon?: string }[] | null = null;
 
-  /** 输入历史（chat 专属）：true 时启用 ↑/↓ 历史回溯——组件内部记录本次
-   *  会话内提交过的值；↑ 向上翻阅（multiline 仅当光标在首行时接管，否则保持
-   *  原生换行移动），↓ 向下翻阅，翻到底恢复未发送草稿。 */
-  @property({ type: Boolean }) inputHistory = false;
+  /** 输入历史（chat 专属）：非 null 时启用 ↑/↓ 历史回溯——列表由宿主注入
+   *  （chat-view 给当前会话里的用户消息），故打开任意历史会话都能回溯。
+   *  ↑ 向上翻阅（multiline 仅当光标在首行时接管，否则保持原生换行移动），
+   *  ↓ 向下翻阅，翻到底恢复未发送草稿。null = 关闭（search/diary 等）。 */
+  @property({ attribute: false }) historyItems: string[] | null = null;
 
   /** 斜杠技能引导（chat 专属）：非 null 时，输入以 "/" 开头且仍是纯技能名片段
    *  （/^\/[A-Za-z0-9_.-]*$/）显示过滤下拉；↑↓ 导航、Enter 补全为 "/name "
@@ -373,14 +374,16 @@ export class InputBox extends LitElement {
   @state() private _slashDismissed = false;
 
   /** ---------- 输入历史（↑/↓ 回溯） ---------- */
-  /** 本组件生命周期内提交过的值（含本次输入行之前的草稿）。 */
-  private _history: string[] = [];
-  /** 当前历史位置：-1 = 不在历史中（正在编辑草稿）；≥0 = _history 下标。 */
+  /** 当前历史位置：-1 = 不在历史中（正在编辑草稿）；≥0 = historyItems 下标。 */
   private _histIndex = -1;
   /** 进入历史前暂存的草稿：翻回最底（↓ 出历史）时恢复。 */
   private _histDraft = "";
 
-  @query("input, textarea") private inputEl!: HTMLInputElement | HTMLTextAreaElement;
+  /** 文本输入元素（单行 input / 多行 textarea）。
+   *  必须用 .field 类定位——裸 "input, textarea" 会先命中 📎 入口的隐藏
+   *  文件选择器（#img-input，DOM 上排在文本框前面），导致 focus() 落到文件
+   *  输入框、setSelectionRange 抛 InvalidStateError。 */
+  @query(".field") private inputEl!: HTMLInputElement | HTMLTextAreaElement;
   /** 隐藏文件选择器（📎 入口；移动端主路径） */
   @query("#img-input") private fileInputEl!: HTMLInputElement;
   /** 拖拽悬停高亮 */
@@ -398,6 +401,10 @@ export class InputBox extends LitElement {
     // value 外部更新（如提交后清空）或多行态切换时，重新计算高度
     if (changedProps.has("value") || changedProps.has("multiline")) {
       this._autoResize();
+    }
+    // 历史列表换了（切换会话/新消息落库）→ 旧索引失效，回到草稿态
+    if (changedProps.has("historyItems")) {
+      this._histIndex = -1;
     }
   }
 
@@ -486,14 +493,14 @@ export class InputBox extends LitElement {
         return;
       }
     }
-    // 输入历史回溯（chat 输入框）：↑ 取上一条提交值、↓ 向下翻/出历史恢复草稿。
+    // 输入历史回溯（chat 输入框）：↑ 取上一条用户问题、↓ 向下翻/出历史恢复草稿。
     // multiline 时光标不在首行（↑）/末行（↓）则让给原生光标移动。
-    if (this.inputHistory && !this.disabled && !this.streaming) {
+    if (this.historyItems !== null && !this.disabled && !this.streaming) {
       const caretAtTop = !this.multiline ||
         !this.value.slice(0, this.inputEl?.selectionStart ?? 0).includes("\n");
       const caretAtBottom = !this.multiline ||
         !this.value.slice(this.inputEl?.selectionEnd ?? 0).includes("\n");
-      if (e.key === "ArrowUp" && caretAtTop && this._history.length > 0) {
+      if (e.key === "ArrowUp" && caretAtTop && this.historyItems.length > 0) {
         e.preventDefault();
         this._navigateHistory(-1);
         return;
@@ -515,7 +522,8 @@ export class InputBox extends LitElement {
 
   /** ↑/↓ 历史导航：dir=-1 向旧翻、+1 向新翻；翻出底恢复进入历史前的草稿。 */
   private _navigateHistory(dir: -1 | 1) {
-    const h = this._history;
+    const h = this.historyItems ?? [];
+    if (h.length === 0) return;
     if (this._histIndex === -1) {
       if (dir === -1) {
         this._histDraft = this.value; // 暂存未发送草稿
@@ -552,11 +560,6 @@ export class InputBox extends LitElement {
   private _submit() {
     // 流式中由停止键接管，submit 不触发（textarea 已禁用，此为双保险）
     if (this.streaming || !this.trimmed || this.disabled) return;
-    // 记入输入历史：与最近一条相同则不重复入栈；提交即离开历史浏览态
-    if (this.inputHistory) {
-      if (this._history[this._history.length - 1] !== this.trimmed) this._history.push(this.trimmed);
-      this._histIndex = -1;
-    }
     const images = this.attachments && this.images.length > 0 ? this.images : undefined;
     this.dispatchEvent(
       new CustomEvent("submit", { detail: { value: this.trimmed, images } }),
@@ -796,10 +799,10 @@ export class InputBox extends LitElement {
     // 流式期间禁用输入（不能打字/回车），由停止键接管
     const fieldDisabled = this.disabled || this.streaming;
     const field = this.multiline
-      ? html`<textarea rows="1" .value=${this.value} placeholder=${this.placeholder}
+      ? html`<textarea class="field" rows="1" .value=${this.value} placeholder=${this.placeholder}
           ?disabled=${fieldDisabled} @input=${this._onInput} @keydown=${this._onKeydown}
           @paste=${this._onPaste}></textarea>`
-      : html`<input type="text" .value=${this.value} placeholder=${this.placeholder}
+      : html`<input class="field" type="text" .value=${this.value} placeholder=${this.placeholder}
           ?disabled=${fieldDisabled} @input=${this._onInput} @keydown=${this._onKeydown}
           @paste=${this._onPaste} />`;
     return html`

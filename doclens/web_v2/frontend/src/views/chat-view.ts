@@ -866,6 +866,23 @@ export class ChatView extends LitElement {
     return this.renderRoot.querySelector("chat-stream");
   }
 
+  /** 输入历史（↑/↓ 回溯）的候选：当前会话里的用户问题，按时间序。
+   *  数据源是 store 的 messages——打开任意历史会话时由 _loadSession 从
+   *  后端灌入，故历史会话同样可回溯；本会话新发的问题也即时进入列表。
+   *  按 messages 引用缓存：每次渲染派生新数组会让 Lit 的属性绑定拿到
+   *  恒变引用 → 无限更新循环。 */
+  private _historyItemsCache: { src: unknown; items: string[] } | null = null;
+  private get _historyItems(): string[] {
+    const msgs = this.viewState.messages;
+    const cached = this._historyItemsCache;
+    if (cached && cached.src === msgs) return cached.items;
+    const items = msgs
+      .filter((m) => m.role === "user" && m.content.trim().length > 0)
+      .map((m) => m.content);
+    this._historyItemsCache = { src: msgs, items };
+    return items;
+  }
+
   private async _submit(e: CustomEvent<{ value: string; images?: { data: string; media_type: string }[] }>) {
     this._resetPreview();
     const message = e.detail.value;
@@ -1533,7 +1550,7 @@ export class ChatView extends LitElement {
               .buttonLabel=${"发送"}
               multiline
               attachments
-              inputHistory
+              .historyItems=${this._historyItems}
               .value=${this.draft}
               .images=${this._pendingImages}
               .skillItems=${this._skills.recentItems}
@@ -1652,7 +1669,7 @@ export class ChatView extends LitElement {
             .buttonLabel=${"发送"}
             multiline
             attachments
-            inputHistory
+            .historyItems=${this._historyItems}
             ?streaming=${s.streaming || !!s.pendingAsk}
             .value=${this.draft}
             .images=${this._pendingImages}
