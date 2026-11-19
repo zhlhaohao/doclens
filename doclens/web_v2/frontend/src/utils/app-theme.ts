@@ -1,4 +1,4 @@
-/** 应用主题偏好（ADR-0043，localStorage 持久化）。
+/** 应用主题偏好（ADR-0055，localStorage 持久化）。
  *
  * 三套内置主题成套切换：light = Meta 白（默认）/ dark = 深夜（GitHub dark 系）/
  * paper = 暖纸（米黄长阅读）。纯前端实现（零后端）：

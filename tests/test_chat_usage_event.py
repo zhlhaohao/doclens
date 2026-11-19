@@ -100,7 +100,7 @@ def test_chat_emitter_notice_becomes_toast_and_not_persisted():
 
 
 def test_chat_emitter_compact_notice_becomes_compact_event():
-    """带 compact_phase 的 NOTICE（ADR-0044 回合末压缩）→ 专用 compact
+    """带 compact_phase 的 NOTICE（ADR-0056 回合末压缩）→ 专用 compact
     SSE 事件（phase/pre/post）；start 无 post、done 带 post。"""
     q: asyncio.Queue = asyncio.Queue()
     em = ChatEventEmitter(q, context_window=200000)

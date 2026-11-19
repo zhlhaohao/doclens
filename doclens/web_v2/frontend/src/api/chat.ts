@@ -99,7 +99,7 @@ export async function* chatStream(
         };
       }
     } else if (ev.event === "compact") {
-      // 回合末自动压缩进度（ADR-0044）：前端弹不可关闭模态进度框
+      // 回合末自动压缩进度（ADR-0056）：前端弹不可关闭模态进度框
       const d = parseData("compact", ev.data);
       if (d) {
         yield {

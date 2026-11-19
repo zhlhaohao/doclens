@@ -341,7 +341,7 @@ export class CmEditor extends LitElement {
 
   /** 依据代码主题三态算出深浅。 */
   private get _codeDark(): boolean {
-    // markdown 编辑态跟随应用主题，**不**消费「代码配色」（ADR-0043 作用范围：
+    // markdown 编辑态跟随应用主题，**不**消费「代码配色」（ADR-0055 作用范围：
     // 代码主题只管行号视图；md 文档的代码块/编辑态一律跟随应用主题）。
     // 否则行号视图里点过「深色」后，md 编辑器被永久锁成深底——而 md 预览
     // header 没有配色按钮（那只在行号视图出现），用户没有任何入口改回。

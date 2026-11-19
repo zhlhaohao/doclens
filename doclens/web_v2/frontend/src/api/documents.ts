@@ -11,7 +11,7 @@ export interface IndexedDocument {
   name: string;
   size: number;
   modifiedAt: string;
-  /** ADR-0034：仅登记行（文件名可搜、内容不可搜）。 */
+  /** ADR-0054：仅登记行（文件名可搜、内容不可搜）。 */
   ghost?: boolean;
 }
 

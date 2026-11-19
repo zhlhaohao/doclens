@@ -580,7 +580,7 @@ def _make_compacting_agent(provider, emitter, tmp_path):
 
 
 def test_compacted_replay_round2_prefix_identical(tmp_path):
-    """ADR-0026 幂等闭环验收（ADR-0044 回合末压缩后语义）：轮 1 终答后
+    """ADR-0026 幂等闭环验收（ADR-0056 回合末压缩后语义）：轮 1 终答后
     压缩落库，轮 2 回放首请求的头部 == 轮 1 末请求 + 摘要对重排——
     压缩后不再有「轮内压缩后请求」，前缀复用断言改为：
     轮 2 首请求含完整重注入头 + 摘要对，且无孤儿 tool_result。

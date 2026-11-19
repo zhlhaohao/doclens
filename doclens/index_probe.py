@@ -127,7 +127,7 @@ def indexed_children_of(index_path: str, dir_abs_path: str) -> set[str]:
 
 
 def ghost_children_of(index_path: str, dir_abs_path: str) -> set[str]:
-    """目录的直接子项中「仅登记」（ghost 行，ADR-0034）的子项名集合。
+    """目录的直接子项中「仅登记」（ghost 行，ADR-0054）的子项名集合。
 
     与 indexed_children_of 同构的单次前缀查询；三态徽标的数据源之一。
     """
@@ -191,7 +191,7 @@ def is_path_registered(index_path: str, abs_path: str) -> bool:
 
 
 def registered_doc_count(index_path: str) -> int:
-    """「仅登记」ghost 行总数（与已索引文档分开报，ADR-0034）。"""
+    """「仅登记」ghost 行总数（与已索引文档分开报，ADR-0054）。"""
     try:
         fts = _open(index_path)
         try:

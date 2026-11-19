@@ -194,7 +194,7 @@ class ChatEventEmitter(EventEmitter):
             self._push(ev)
 
         elif event.event_type == StreamEventType.NOTICE:
-            # 压缩进度（ADR-0044 回合末压缩）：带 compact_phase 的 notice 转
+            # 压缩进度（ADR-0056 回合末压缩）：带 compact_phase 的 notice 转
             # 专用 compact 事件——前端弹不可关闭模态进度框；不带
             # compact_phase 的普通 notice 仍走 toast。
             if event.data.get("compact_phase"):

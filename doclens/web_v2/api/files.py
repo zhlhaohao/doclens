@@ -121,7 +121,7 @@ def _build_entry(full: Path, base: Path, indexed_children: set[str] | None = Non
     else:
         rel = _posix_rel(full, base)
         indexed = False
-    # 三态徽标第二态（ADR-0034）：仅登记（ghost 行）——已索引优先，未索引时才判
+    # 三态徽标第二态（ADR-0054）：仅登记（ghost 行）——已索引优先，未索引时才判
     if not indexed and not outside_workdir:
         if ghost_children is not None:
             registered = full.name in ghost_children
@@ -147,7 +147,7 @@ def _build_entry(full: Path, base: Path, indexed_children: set[str] | None = Non
 def _indexed_documents(idx: IndexManager, base: Path) -> list[IndexedDocument]:
     """从索引库构建 IndexedDocument 列表（去重、跳过缺失文件）。
 
-    ghost 行（仅登记，ADR-0034）包含在内并打 ghost=True 标——文件名搜索
+    ghost 行（仅登记，ADR-0054）包含在内并打 ghost=True 标——文件名搜索
     可见，前端据此降级展示（不提供「索引内」语义的交互）。
 
     性能（2026-10-25，285k 文档语料实测）：

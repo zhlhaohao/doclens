@@ -13,7 +13,7 @@ class Entry(BaseModel):
     size: int
     modified_at: datetime
     indexed: bool
-    # ADR-0034 ghost 行：仅登记（元数据收录、空树、全文搜索不可见）。
+    # ADR-0054 ghost 行：仅登记（元数据收录、空树、全文搜索不可见）。
     # 三态 = indexed / registered / 未收录。registered=True 时 indexed 恒 False。
     registered: bool = False
     writable: bool
@@ -87,7 +87,7 @@ class IndexedDocument(BaseModel):
     name: str          # 文件名（含扩展名）
     size: int          # bytes
     modified_at: datetime
-    ghost: bool = False  # ADR-0034：仅登记行（文件名可搜、内容不可搜）
+    ghost: bool = False  # ADR-0054：仅登记行（文件名可搜、内容不可搜）
 
 
 class IndexedDocumentsResponse(BaseModel):

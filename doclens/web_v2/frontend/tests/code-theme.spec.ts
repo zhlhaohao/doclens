@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { readCodeTheme, writeCodeTheme } from "../src/utils/code-theme";
 
-describe("code-theme 三态（ADR-0043）", () => {
+describe("code-theme 三态（ADR-0055）", () => {
   beforeEach(() => {
     localStorage.clear();
   });

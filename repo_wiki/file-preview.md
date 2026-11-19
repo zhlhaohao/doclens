@@ -445,7 +445,7 @@ preview-pane 是无状态渲染壳，预览的获取与状态管理在各宿主�
 | 1 | ⚠ CLAUDE.md 项目结构树 | 注释只写 `preview.py # GET /api/preview`，实际该文件 9 个端点（GET/PUT/POST × pdf/raw/asset/download/rotate/upload-target/upload） |
 | 2 | ⚠ ADR-0017 §8 vs `doclens/config.py:398` | ADR 称 `VISION_AUTO_ROTATE` 默认开（逃生门=可关）；代码 `default=False` 需显式开启。**以代码为准** |
 | 3 | ⚠ ADR-0005 正文 vs 后记（2026-10-03） | 正文写附件落盘 `pst_attachments/<entry_id>/…`；实际多一层 PST 哈希目录。ADR 后记已自行修正，引用以后记为准 |
-| 4 | ⚠ ADR-0036 vs 现状 | ADR 定代码主题两态默认 light；现为三态默认 auto（ADR-0043 升级，0036 文首已自注取代）。`preview-pane.ts:741-742` 两行新旧注释层积并存，读码易误导 |
+| 4 | ⚠ ADR-0036 vs 现状 | ADR 定代码主题两态默认 light；现为三态默认 auto（ADR-0055 升级，0036 文首已自注取代）。`preview-pane.ts:741-742` 两行新旧注释层积并存，读码易误导 |
 | 5 | ADR 编号复用 | docs/adr 中 0034/0043/0044 各有两份不同主题文件，引用时有歧义风险（预览域自身未引用这三个编号） |
 | 6 | docs/jsbridge/download_bridge.md 行号漂移 | 引用 `preview.py:123`，download 现位于 :146 |
 | 7 | ARCHITECTURE.md 格式表 | 未列 csv/mhtml/mht 形态行（代码两者均在 BINARY_PREVIEW_EXTS） |

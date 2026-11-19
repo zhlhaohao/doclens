@@ -176,7 +176,7 @@ export class CompactConfirmDialog extends LitElement {
 
   private _renderDone() {
     const saved = this._savedPercent;
-    // auto 压缩（ADR-0044）SSE 通道只带 pre/post 估算值，无 compactedText
+    // auto 压缩（ADR-0056）SSE 通道只带 pre/post 估算值，无 compactedText
     return html`
       <h2 class="with-icon">
         <doclens-icon name="circle-check"></doclens-icon>压缩完成

@@ -13,7 +13,7 @@ function setKey(v: string | null) {
   else localStorage.setItem("cortex.theme", v);
 }
 
-describe("app-theme (ADR-0043)", () => {
+describe("app-theme (ADR-0055)", () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute("data-theme");

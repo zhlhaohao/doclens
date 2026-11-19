@@ -106,7 +106,7 @@ export class FileSearchResults extends LitElement {
       text-overflow: ellipsis;
       color: var(--cortex-text);
     }
-    /* ADR-0034：仅登记文件（ghost 行）——meta 区追加「仅登记」标记 */
+    /* ADR-0054：仅登记文件（ghost 行）——meta 区追加「仅登记」标记 */
     .ghost-tag {
       color: var(--cortex-text-subtle);
       font-size: var(--cortex-fs-xs);

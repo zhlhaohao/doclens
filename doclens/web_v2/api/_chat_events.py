@@ -48,7 +48,7 @@ class ToastEvent(TypedDict):
 
 
 class CompactEvent(TypedDict, total=False):
-    """回合末自动压缩进度（ADR-0044）——前端转不可关闭模态进度框。"""
+    """回合末自动压缩进度（ADR-0056）——前端转不可关闭模态进度框。"""
     type: str  # "compact"
     phase: str  # "start" | "done"
     detail: str
@@ -173,7 +173,7 @@ def compact_event(
     pre_tokens: Optional[int] = None,
     post_tokens: Optional[int] = None,
 ) -> CompactEvent:
-    """回合末自动压缩进度（ADR-0044）：phase="start" | "done"。
+    """回合末自动压缩进度（ADR-0056）：phase="start" | "done"。
 
     前端据此弹不可关闭的模态进度框（start → running spinner；
     done → 压缩结果 + 用户点「完成」关闭）。"""

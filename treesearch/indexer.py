@@ -1651,7 +1651,7 @@ async def build_index(
         # Explicit `prune=True`: reduce the index to exactly `paths`.
         if prune and all_meta:
             expanded_abs = {os.path.abspath(p) for p in expanded}
-            # Ghost candidates are in scope too (ADR-0034): a whitelist-excluded
+            # Ghost candidates are in scope too (ADR-0054): a whitelist-excluded
             # file's ghost row must not be pruned-and-re-registered each run.
             expanded_abs |= ghost_candidates
             # Pre-compute allowed extensions from source_type filter (if any)

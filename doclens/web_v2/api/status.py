@@ -49,7 +49,7 @@ def _status_payload(idx: IndexManager | None) -> dict:
     watcher_obj = get_watcher()
     return {
         "indexed_docs": indexed_docs,
-        "registered_docs": registered_docs,  # 仅登记（ghost 行，ADR-0034）
+        "registered_docs": registered_docs,  # 仅登记（ghost 行，ADR-0054）
         "index_failed_count": last_failed,
         # 首次建库后台化（ADR-0043）：True 时前端显示「索引构建中」
         "index_building": building,

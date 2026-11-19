@@ -336,7 +336,7 @@ def test_doclens_no_full_document_materialization():
     assert not violations, "doclens 全量物化回潮（ADR-0019）：\n" + "\n".join(violations)
 
 
-# 红线 4（ADR-0043 应用主题包）：前端组件样式硬编码颜色——深夜/暖纸主题下
+# 红线 4（ADR-0055 应用主题包）：前端组件样式硬编码颜色——深夜/暖纸主题下
 # 泄漏为浅色残留。颜色只允许定义在主题层（tokens.css）与色板文件
 # （code-palette.ts / file-type.ts / appearance-section 色卡预览）。
 _HEX_COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")
@@ -368,7 +368,7 @@ def test_frontend_no_hardcoded_colors():
             if line_text.startswith(("*", "//", "<!--")):
                 continue
             violations.append(f"{rel}:{line}: {m.group(0)} in {line_text[:80]}")
-    assert not violations, "组件硬编码颜色（ADR-0043：颜色只能来自 tokens.css / 色板白名单）:\n" + "\n".join(violations)
+    assert not violations, "组件硬编码颜色（ADR-0055：颜色只能来自 tokens.css / 色板白名单）:\n" + "\n".join(violations)
 
 
 def test_no_private_import_in_tests():
@@ -476,4 +476,26 @@ def test_no_external_refs_into_repo_wiki():
         "（引用纪律见 CONTEXT.md 术语「架构报告 / 架构分册」；"
         "改引稳定源：docs/adr/、CLAUDE.md、CONTEXT.md 术语，或只声明目录位置）：\n"
         + "\n".join(violations)
+    )
+
+
+def test_no_duplicate_adr_numbers():
+    """ADR 编号不得重复——同号两篇会让「ADR-XXXX」引用指向歧义。
+
+    编号一经分配即冻结（历史引用不动）；新增走下一个未用号。
+    历史事故：0034 / 0043 / 0044 / 0049 各有两篇（2026-11-19 重编号，
+    后创建者迁至 0054-0057）。
+    """
+    import collections
+
+    adr_dir = REPO / "docs" / "adr"
+    nums = collections.defaultdict(list)
+    for p in sorted(adr_dir.glob("*.md")):
+        m = re.match(r"^(\d{4})-", p.name)
+        assert m, f"ADR 文件名不以编号开头：{p.name}"
+        nums[m.group(1)].append(p.name)
+    dupes = {n: files for n, files in nums.items() if len(files) > 1}
+    assert not dupes, (
+        "ADR 编号重复（同号两篇使引用歧义）：\n"
+        + "\n".join(f"  ADR-{n}: {', '.join(fs)}" for n, fs in sorted(dupes.items()))
     )

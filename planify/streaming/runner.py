@@ -679,7 +679,7 @@ class StreamingAgent:
                             continue
 
                 # === 压缩管道（microcompact only；auto compact 已搬到回合末，
-                # ADR-0044——压缩不打断任务，回合全程在完整上下文上执行）===
+                # ADR-0056——压缩不打断任务，回合全程在完整上下文上执行）===
                 # token 估算（usage-based：实测基线 + 增量 ÷4）算一次两用——
                 # microcompact 门控与（回合末的）compact 阈值同源
                 baseline = self._usage_baseline
@@ -776,7 +776,7 @@ class StreamingAgent:
                             }
                         )
                         continue
-                    # === 回合末自动压缩（ADR-0044）===
+                    # === 回合末自动压缩（ADR-0056）===
                     # 终答已流完、emit_done 之前：超阈上下文在此压缩——
                     # 回合全程在完整上下文上执行（压缩不再打断任务），
                     # 压缩期间宿主可经 notice 通道弹模态进度（不可关）。
@@ -953,7 +953,7 @@ class StreamingAgent:
     async def _finalize_round_compaction(
         self, messages: List[Dict], session_id: str
     ) -> None:
-        """回合末自动压缩（ADR-0044，2026-10-16）。
+        """回合末自动压缩（ADR-0056，2026-10-16）。
 
         终答流完、emit_done 之前执行——回合全程在完整上下文上跑
         （旧制：工具循环内超阈即压，后半程任务在摘要上下文上执行，

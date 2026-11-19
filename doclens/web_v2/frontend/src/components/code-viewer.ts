@@ -53,7 +53,7 @@ export class CodeViewer extends LitElement {
       flex: 1;
       min-height: 0;
     }
-    /* 行号视图双表面 token（utils/code-palette.ts；ADR-0043 三态代码主题） */
+    /* 行号视图双表面 token（utils/code-palette.ts；ADR-0055 三态代码主题） */
     .body {
       --code-tok-c: ${unsafeCSS(codeTokensLight.c)};
       --code-tok-k: ${unsafeCSS(codeTokensLight.k)};

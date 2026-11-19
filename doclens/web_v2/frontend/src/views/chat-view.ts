@@ -587,7 +587,7 @@ export class ChatView extends LitElement {
   /** 手动压缩当前会话历史（ADR-0026 手动入口）：LLM 摘要落库 compacted
    *  条目，下轮起上下文从摘要开始；对话流展示不受影响。压缩期间模态框
 
-  /** auto 压缩模态兜底收尾（ADR-0044）：SSE done 已到而压缩 done 事件
+  /** auto 压缩模态兜底收尾（ADR-0056）：SSE done 已到而压缩 done 事件
    *  丢失/未发（未触发压缩、网络丢包）时撤下 running 模态，防止卡死
 
   /** 重新拉取 detail 并聚合压缩信息（会话信息弹窗打开时刷新）。 */
@@ -1042,7 +1042,7 @@ export class ChatView extends LitElement {
         } else if (ev.type === "toast") {
           this._pushToast(ev.detail, ev.level, 5000);
         } else if (ev.type === "compact") {
-          // 回合末自动压缩（ADR-0044）：start → 不可关闭模态 running 态；
+          // 回合末自动压缩（ADR-0056）：start → 不可关闭模态 running 态；
           // done → 框内展示 pre→post 结果（「完成」按钮才可关）。
           // 手动压缩弹窗在场时让位（同一次压缩不叠两个模态）。
           if (this._ops.compactDialog && !this._ops.compactDialog.auto) break;

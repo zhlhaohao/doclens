@@ -1228,7 +1228,7 @@ def handle_read_document(
 
     ext = os.path.splitext(abs_path)[1].lower()
 
-    # 登记闸门（ADR-0034 ghost 行）：仅登记未索引的文件（空树 ghost 行命中
+    # 登记闸门（ADR-0054 ghost 行）：仅登记未索引的文件（空树 ghost 行命中
     # DB）拒绝读取——与「不读取内容」的登记语义自洽，AI 读代码走 read_file。
     # 索引读失败显式报错（AP-8）：不能静默放行后走现场解析掩盖 DB 故障。
     try:
@@ -1299,7 +1299,7 @@ def handle_read_document(
 
 
 def _is_ghost_registered(idx_manager: IndexManager, abs_path: str) -> bool:
-    """路径是否为「仅登记」的 ghost 行（ADR-0034）——documents 有行但空树。
+    """路径是否为「仅登记」的 ghost 行（ADR-0054）——documents 有行但空树。
 
     判据 = DB 命中该 source_path 且 node_count == 0。true 索引文档至少有
     一个节点（无 heading 的 md/txt 也有单节点兜底）。
@@ -1417,7 +1417,7 @@ def handle_file_info(
 
     ext = os.path.splitext(abs_path)[1].lower()
 
-    # 登记态如实标注（ADR-0034）：ghost 行 = 已收录元数据、未建树——
+    # 登记态如实标注（ADR-0054）：ghost 行 = 已收录元数据、未建树——
     # 概况按「仅登记」报告，不走索引树（空树无概况可言）。
     # 索引读失败显式报错（AP-8）：不能把 DB 故障伪装成「非 ghost」。
     try:

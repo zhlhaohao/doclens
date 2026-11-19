@@ -298,7 +298,7 @@ class EventEmitter(Protocol):
         Args:
             detail: 通知正文（宿主 UI 语言，短句）
             level: 提示级别（"info" | "success" | "error"，默认 info）
-            compact_phase: 压缩进度标识（"start" | "done"；ADR-0044 回合末
+            compact_phase: 压缩进度标识（"start" | "done"；ADR-0056 回合末
                 压缩通知协议）——宿主据此弹不可关闭的模态进度框；
                 不识别的旧宿主可忽略（退化为 toast）
             pre_tokens / post_tokens: 压缩前/后 token 估算（phase="done"

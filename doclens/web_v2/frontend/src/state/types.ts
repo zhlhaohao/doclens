@@ -185,7 +185,7 @@ export interface ReindexState {
 
 export interface SystemStatus {
   indexed_docs: number;
-  /** ADR-0034：仅登记（ghost 行）文档数，与已索引分开报。可选（旧后端无此字段）。 */
+  /** ADR-0054：仅登记（ghost 行）文档数，与已索引分开报。可选（旧后端无此字段）。 */
   registered_docs?: number;
   index_path: string;
   /** 首次建库后台化（ADR-0043）：True = 目标库正在后台全量索引，UI 可提示「索引构建中」。 */
@@ -244,7 +244,7 @@ export interface IndexedDocument {
   name: string;
   size: number;
   modifiedAt: string;  // ISO8601
-  /** ADR-0034：仅登记行（文件名可搜、内容不可搜）。可选（测试夹具省略）。 */
+  /** ADR-0054：仅登记行（文件名可搜、内容不可搜）。可选（测试夹具省略）。 */
   ghost?: boolean;
 }
 

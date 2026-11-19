@@ -172,7 +172,7 @@ export class AppBar extends LitElement {
     /* Git 同步徽标：非交互（纯状态展示），复用 watch-badge 视觉 */
     .sync-badge { cursor: default; }
     .sync-badge:hover { background: var(--cortex-surface-muted); border-color: var(--cortex-border); }
-    /* 应用主题快捷钮（ADR-0043）：视觉同 watch-badge 的 icon-only pill */
+    /* 应用主题快捷钮（ADR-0055）：视觉同 watch-badge 的 icon-only pill */
     .theme-btn {
       display: inline-flex;
       align-items: center;
@@ -290,7 +290,7 @@ export class AppBar extends LitElement {
   @state() private _backupDialogOpen = false;
   /** 关于对话框开关（用户菜单「关于」）：显示前后端构建版本 */
   @state() private _aboutOpen = false;
-  /** 应用主题（ADR-0043）：app-bar 快捷钮循环切换；订阅外部变更（设置页色卡）同步图标。 */
+  /** 应用主题（ADR-0055）：app-bar 快捷钮循环切换；订阅外部变更（设置页色卡）同步图标。 */
   @state() private _appTheme: AppTheme = readAppTheme();
   private _offAppThemeChange?: () => void;
   /** 移动视口（≤1023px，与 theme-btn/watch-badge 断点同口径）：主题入口只在
@@ -476,7 +476,7 @@ export class AppBar extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** 应用主题快捷钮（ADR-0043）：循环三主题 + toast 反馈当前主题名；
+  /** 应用主题快捷钮（ADR-0055）：循环三主题 + toast 反馈当前主题名；
    *  菜单内入口点击后收起菜单（同其他菜单项惯例）。 */
   private _cycleAppTheme(fromMenu = false) {
     if (fromMenu) this._menuOpen = false;

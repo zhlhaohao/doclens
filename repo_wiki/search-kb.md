@@ -164,7 +164,7 @@ flowchart TD
     B -->|仍未命中| E[path_map 精确 / endswith 匹配]
     B -->|都没中| F[裸路径兜底]
     C & D & E & F --> G{_is_ghost_registered?}
-    G -->|是：DB 有行但空树| H[⚠ 拒读 + 提示改用 read_file<br/>ADR-0034 登记语义]
+    G -->|是：DB 有行但空树| H[⚠ 拒读 + 提示改用 read_file<br/>ADR-0054 登记语义]
     G -->|否| I{图像扩展名?}
     I -->|是| J[只能读索引树<br/>_load_indexed_image_tree]
     I -->|否| K{索引里能按 source_path 找到?}

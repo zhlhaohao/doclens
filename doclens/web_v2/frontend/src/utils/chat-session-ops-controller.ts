@@ -171,7 +171,7 @@ export class ChatSessionOpsController implements ReactiveController {
     this._touch();
   }
 
-  /** auto 压缩模态兜底收尾（ADR-0044）：SSE done 已到而压缩 done 事件
+  /** auto 压缩模态兜底收尾（ADR-0056）：SSE done 已到而压缩 done 事件
    *  丢失/未发时撤下 running 模态，防止卡死页面；正常路径已先行切换。 */
   finalizeAutoCompactDialog(): void {
     const d = this.compactDialog;

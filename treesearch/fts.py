@@ -2721,7 +2721,7 @@ class FTS5Index:
 
         ``document_count`` counts real (indexed) documents only; ghost rows
         (metadata-only, node_count = 0) are reported separately as
-        ``ghost_count`` (ADR-0034).
+        ``ghost_count`` (ADR-0054).
         """
         # Single-pass aggregate: two separate COUNT(*) WHERE scans cost
         # ~1s at 285k docs even with the node_count covering index; one

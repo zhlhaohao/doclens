@@ -411,7 +411,7 @@ describe("<app-bar> 控制面板 menu item", () => {
   });
 });
 
-describe("<app-bar> 主题入口的视口分治（ADR-0043）", () => {
+describe("<app-bar> 主题入口的视口分治（ADR-0055）", () => {
   afterEach(() => {
     // 还原 matchMedia stub
     vi.unstubAllGlobals();

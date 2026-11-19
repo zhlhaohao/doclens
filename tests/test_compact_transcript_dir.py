@@ -145,7 +145,7 @@ def _run_compacting_round(runtime_config, tmp_path):
 def test_compaction_marker_reinjection_and_round_start(tmp_path):
     """压缩打标契约：last_compaction 形状 / 压缩后重注入 head / round_start_index
     重置到全部重注入完成后（摘要对不进 raw_messages 切片区间）。
-    （ADR-0044：压缩在回合末、emit_done 前触发——终答流完才压。）"""
+    （ADR-0056：压缩在回合末、emit_done 前触发——终答流完才压。）"""
     config = SimpleNamespace(
         workdir=tmp_path, assets_dir=tmp_path / "none",
     )
@@ -185,7 +185,7 @@ def test_cleared_ids_collected_across_loop_turns(tmp_path):
     assert sa.round_cleared_tool_use_ids == ["r0", "r1"]
 
 
-# === ADR-0044：auto compact 回合末触发（终答后、emit_done 前）===
+# === ADR-0056：auto compact 回合末触发（终答后、emit_done 前）===
 
 class _SequenceEmitter(_NullEmitter):
     """记录事件时序（notice/done 相对顺序）与 notice kwargs。"""
