@@ -280,6 +280,7 @@ class Renderer:
         self.slide_count = 0
         self.embed_images = True
         self._draft = False
+        self._narr_pages: list[int] = []
 
     # ------------------------------------------------------------------ 主流程
 
@@ -320,6 +321,7 @@ class Renderer:
                 except ValueError:
                     narr_rel = narrate_dir.resolve().as_uri()
 
+        self._narr_pages = sorted(narr_pages)   # 先赋值：_slide_html 里的 _has_narr 要用
         slides_html: list[str] = []
         for i, slide in enumerate(deck.slides, 1):
             page_html = self._slide_html(slide, i)
@@ -330,7 +332,6 @@ class Renderer:
             slides_html.append(page_html)
         self.slide_count = len(deck.slides)
         self._draft = draft
-        self._narr_pages = sorted(narr_pages)
 
         doc = self._document(slides_html, cw, ch)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -417,10 +418,28 @@ class Renderer:
             mods.append("has-footmeta")
         mod_attr = (" " + " ".join(mods)) if mods else ""
 
+        # 页脚控件区：喇叭 toggle（仅该页有口播音频时显示）+ 页码
+        narr_btn = (
+            '<button class="narr-toggle" type="button" title="旁白（V）" '
+            'aria-label="开启或关闭口播音频" onclick="event.stopPropagation();'
+            'window.deck && window.deck.toggleNarration()">'
+            '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" '
+            'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+            'stroke-linejoin="round" aria-hidden="true">'
+            '<path d="M11 5 6 9H2v6h4l5 4z"/>'
+            '<path class="nt-waves" d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>'
+            '<line class="nt-slash" x1="23" y1="9" x2="17" y2="15"/>'
+            '<line class="nt-slash" x1="17" y1="9" x2="23" y2="15"/>'
+            '</svg></button>') if self._has_narr(idx) else ""
+
         return f"""  <section class="slide layout-{layout_name}{mod_attr}" data-index="{idx}"{trans_attr}{style}>
 {fill(layout, slots)}{chrome_html}
-    <div class="pageno"></div>{notes}
+    <div class="slide-footer">{narr_btn}<div class="pageno"></div></div>{notes}
   </section>"""
+
+    def _has_narr(self, idx: int) -> bool:
+        """该页是否有口播音频（决定喇叭按钮是否显示）。"""
+        return idx in getattr(self, "_narr_pages", [])
 
     def _arrange(self, layout_name: str, blocks: list[Block],
                  page_anim: str, d: dict | None = None) -> dict[str, str]:

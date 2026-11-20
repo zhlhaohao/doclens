@@ -310,11 +310,7 @@
         break;
       case "p": case "P": window.print(); break;
       case "h": case "H": document.body.classList.toggle("hide-hint"); break;
-      case "v": case "V":
-        narration = !narration;
-        document.body.classList.toggle("narration-on", narration);
-        if (narration) playNarr(slides[index]); else stopNarr();
-        break;
+      case "v": case "V": setNarration(!narration); break;
     }
   });
 
@@ -391,10 +387,21 @@
     setTimeout(function () { playNarr(slides[index]); }, 300);
   };
 
+  function setNarration(on) {
+    narration = !!on;
+    document.body.classList.toggle("narration-on", narration);
+    document.querySelectorAll(".narr-toggle").forEach(function (b) {
+      b.classList.toggle("is-on", narration);
+      b.setAttribute("aria-pressed", narration ? "true" : "false");
+    });
+    if (narration) playNarr(slides[index]); else stopNarr();
+  }
+
   // 供外部（自动化/嵌入）调用
   window.deck = {
     next: next, prev: prev, go: jump,
-    setNarration: function (on) { narration = !!on; document.body.classList.toggle("narration-on", narration); if (narration) playNarr(slides[index]); else stopNarr(); },
+    setNarration: setNarration,
+    toggleNarration: function () { setNarration(!narration); },
     get index() { return index; },
     get count() { return slides.length; }
   };

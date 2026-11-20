@@ -715,3 +715,46 @@ body.narration-on .hint::after {
   content: " · 🔊 旁白中";
   color: var(--c-accent, #e8622d);
 }
+
+/* ---------- 页脚控件区：喇叭 toggle + 页码 ---------- */
+
+.slide-footer {
+  position: absolute;
+  right: var(--pad, 72px);
+  bottom: calc(var(--pad, 72px) * .36);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+/* pageno 原为绝对定位，挪进页脚区后改为静态 */
+.slide-footer .pageno { position: static; right: auto; bottom: auto; }
+
+.narr-toggle {
+  display: inline-flex;
+  align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--c-text-muted, #6b7280) 30%, transparent);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-text-muted, #6b7280);
+  cursor: pointer;
+  opacity: .7;
+  transition: all .18s ease;
+}
+.narr-toggle:hover { opacity: 1; border-color: var(--c-accent, #e8622d); color: var(--c-accent, #e8622d); }
+.narr-toggle .nt-waves { display: none; }        /* 关：只显示喇叭+斜线 */
+.narr-toggle .nt-slash { display: block; }
+body.narration-on .narr-toggle {
+  background: color-mix(in srgb, var(--c-accent, #e8622d) 12%, transparent);
+  border-color: var(--c-accent, #e8622d);
+  color: var(--c-accent, #e8622d);
+  opacity: 1;
+}
+body.narration-on .narr-toggle .nt-waves { display: block; }  /* 开：波纹 */
+body.narration-on .narr-toggle .nt-slash { display: none; }   /* 开：无斜线 */
+body.narration-on .narr-toggle { animation: narr-pulse 1.6s ease-in-out infinite; }
+@keyframes narr-pulse { 0%,100%{ box-shadow: 0 0 0 0 color-mix(in srgb, var(--c-accent) 25%, transparent); } 50%{ box-shadow: 0 0 0 6px transparent; } }
+
+@media print { .narr-toggle { display: none !important; } }
+body.qa-mode .narr-toggle { display: none !important; }  /* 验收截图不拍 UI */
