@@ -352,12 +352,12 @@
   /* ---------------- 旁白模式（V 键）：每页自动播口播音频，按节奏自动翻页 ----------------
      音频由渲染器以 <audio class="narr" src=".../p01.mp3"> 注入每页。
      浏览器自动播放策略要求先有用户交互——所以必须按键开启，不能自动响。
-     翻页节奏：每页最短停留 NARR_MIN_MS（3 秒）；音频比这更长则等读完再翻，
+     翻页节奏：每页最短停留 NARR_MIN_MS（3 秒）；口播播完后还要再停 NARR_MIN_MS 才翻页，
      不截断语音。手动翻页不受此节奏影响（仅旁白模式生效）。 */
   var narration = false;
   var narrAudio = null;   // 当前正在播的 <audio>
   var narrTimer = null;   // 旁白自动翻页计时器
-  var NARR_MIN_MS = 3000; // 每页最短停留 3 秒（短于此的音频等满 3 秒才翻）
+  var NARR_MIN_MS = 3000; // 最短停留 3 秒；口播播完后也再停 3 秒才翻
 
   function narrOf(slide) {
     return slide ? slide.querySelector("audio.narr") : null;
@@ -389,7 +389,7 @@
     narrAudio = a;
     a.currentTime = 0;
     a.play().catch(function () { /* 被浏览器拦截：忽略，用户再按 V */ });
-    // 翻页时机：等满 3 秒，且音频必须读完（长音频不截断）
+    // 翻页时机：最短停留 NARR_MIN_MS，且口播播完后还要再停 NARR_MIN_MS
     var startedAt = Date.now();
     var advance = function () {
       narrTimer = null;
@@ -401,20 +401,24 @@
         // 3 秒到了但音频还没读完：交给 onended 处理
         return;
       }
-      advance();
+      // 音频已结束（或本页无音频）：保证最短停留 3 秒
+      var elapsed = Date.now() - startedAt;
+      var remain = NARR_MIN_MS - elapsed;
+      if (remain > 0) {
+        narrTimer = setTimeout(advance, remain);
+      } else {
+        advance();
+      }
     }, NARR_MIN_MS);
     a.onended = function () {
       if (narrAudio !== a) return;   // 已被停止或切页：丢弃过期回调
       narrAudio = null;
+      // 口播完成后，再停留 NARR_MIN_MS 才翻页（短音频则补足到最短停留）
       var elapsed = Date.now() - startedAt;
       var remain = NARR_MIN_MS - elapsed;
-      if (remain > 0) {
-        if (narrTimer) clearTimeout(narrTimer);
-        narrTimer = setTimeout(advance, remain);
-      } else {
-        if (narrTimer) { clearTimeout(narrTimer); narrTimer = null; }
-        advance();
-      }
+      var delay = remain > 0 ? remain : NARR_MIN_MS;
+      if (narrTimer) { clearTimeout(narrTimer); narrTimer = null; }
+      narrTimer = setTimeout(advance, delay);
     };
   }
 

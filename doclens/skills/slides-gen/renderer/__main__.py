@@ -363,14 +363,23 @@ def cmd_qa(args: argparse.Namespace) -> int:
     return _run_qa(args.input, args)
 
 
-def _resolve_narr_dir(args: argparse.Namespace, md: Path) -> Path | None:
-    """解析 --narrate 的音频目录（cmd_render 与 cmd_build 晋升共用）。"""
-    if not getattr(args, "narrate", False):
+def _resolve_narr_dir(args: argparse.Namespace, md: Path,
+                      auto: bool = False) -> Path | None:
+    """解析 --narrate 的音频目录（cmd_render 与 cmd_build 晋升共用）。
+
+    auto=True 时不依赖 --narrate 开关：只要 <名>-audio/ 目录存在就自动挂上。
+    修的是「build 晋升正式稿丢口播与喇叭按钮」的缺陷——此前只有显式传
+    --narrate 才会注入，导致 draft 有声、正式稿无声。
+    """
+    if not getattr(args, "narrate", False) and not auto:
         return None
     cand = md.parent / (md.stem + "-audio")
     if cand.exists():
+        if not getattr(args, "narrate", False):
+            print(f"提示：自动挂上口播目录 {cand}")
         return cand
-    print(f"提示：未找到 {cand}，先跑 narrate 生成音频；本次不含口播。")
+    if getattr(args, "narrate", False):
+        print(f"提示：未找到 {cand}，先跑 narrate 生成音频；本次不含口播。")
     return None
 
 
@@ -380,7 +389,10 @@ def cmd_build(args: argparse.Namespace) -> int:
     # build 也是先渲染到 draft；验收全过才晋升正式名
     if not args.output:
         args.output = _default_html(args.input, draft=True)
-    narr_dir = _resolve_narr_dir(args, args.input)
+    narr_dir = _resolve_narr_dir(args, args.input, auto=True)
+    if narr_dir is not None:
+        # draft 也要有声：cmd_render 靠 --narrate 开关决定是否挂音频
+        args.narrate = True
     rc = cmd_render(args)
     if rc != 0:
         return rc
