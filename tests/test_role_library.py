@@ -98,3 +98,27 @@ class TestRoleLibrary:
         for rid in PIBOT_ROLES:
             raw = json.loads((ROLES_DIR / rid / "role.json").read_text(encoding="utf-8"))
             assert "Pi Bot" in raw.get("source", ""), f"{rid}: source missing"
+
+    # ---------------------------------------------------------- MCP 授权（本系统决策，非 Pi Bot 原文）
+
+    def test_researcher_gets_anysearch_only(self):
+        """researcher 显式授权 anysearch 三件（2026-11-24）：能搜/抓网页，拿不到 shell
+        与产生副作用的 MCP 工具（即梦生图 / Excel）。"""
+        lib = RoleLibrary()
+        fake = ["read_file", "grep", "glob", "write_file", "edit_file", "load_skill", "bash",
+                "mcp__anysearch__search", "mcp__anysearch__batch_search", "mcp__anysearch__extract",
+                "mcp__jimeng__generate", "mcp__gridcraft__set_cell"]
+        allowed = set(lib.get("researcher").allowed_tools(fake))
+        assert {"mcp__anysearch__search", "mcp__anysearch__batch_search", "mcp__anysearch__extract"} <= allowed
+        assert "bash" not in allowed
+        assert not any(t.startswith("mcp__jimeng") or t.startswith("mcp__gridcraft") for t in allowed)
+
+    def test_other_roles_have_no_mcp(self):
+        """MCP 按角色显式授权而非通配：其余角色一个 MCP 工具都没有。"""
+        lib = RoleLibrary()
+        fake = ["read_file", "mcp__anysearch__search", "mcp__jimeng__generate"]
+        for rid in lib.ids():
+            if rid == "researcher":
+                continue
+            mcp = [t for t in lib.get(rid).allowed_tools(fake) if t.startswith("mcp__")]
+            assert mcp == [], f"{rid}: {mcp}"

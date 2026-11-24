@@ -33,8 +33,31 @@ ROLES_OUT = ROOT / "planify" / "roles"
 ALL_CAPABILITY_TOOLS = ["read_file", "grep", "glob", "write_file", "edit_file", "bash", "load_skill"]
 SHELL_TOOLS = ["bash", "powershell", "background_run"]
 
+#: 本系统的授权决策（非 Pi Bot 原文）——按角色显式追加工具。只允许具体工具名，
+#: 不开 `mcp__*` 通配：角色 = 用户授予的权限包（CONTEXT「角色」条目），通配会让
+#: 新接入的任何 MCP server 自动对所有该角色 Bot 可用。
+#: researcher：Pi Bot 给的是「不能联网、不能跑命令」；本系统只补搜索/抓网页的
+#: anysearch 三件（它的 norms 本就要求「附本次实际抓取的 URL」），不开 shell。
+LOCAL_TOOL_GRANTS = {
+    "researcher": [
+        "mcp__anysearch__search",
+        "mcp__anysearch__batch_search",
+        "mcp__anysearch__extract",
+    ],
+}
 
-def _perm(overrides: dict) -> dict:
+#: 对应的 description 口径修订（Pi Bot 原文说「不能联网」——与授权不符时改写）
+_LOCAL_DESC_PATCH = {
+    "researcher": {
+        "zh": ("基于**本地文件与 anysearch 网页搜索/抓取**查资料、做调研（不能跑命令），结论附来源；"
+               "写调研产物（md）。需要执行命令的任务派给有 shell 的角色"),
+        "en": ("Researches from **local files and anysearch web search/extraction** (no shell), cites every conclusion; "
+               "writes research artifacts (md). Assign command-running tasks to a role with shell"),
+    },
+}
+
+
+def _perm(overrides: dict, role_id: str | None = None) -> dict:
     tools = list(ALL_CAPABILITY_TOOLS)
     forbid = []
     rc = overrides.get("run_command")
@@ -45,6 +68,10 @@ def _perm(overrides: dict) -> dict:
     if wf == "never":
         forbid += ["write_file", "edit_file"]
         tools = [t for t in tools if t not in ("write_file", "edit_file")]
+    if role_id and role_id in LOCAL_TOOL_GRANTS:
+        for t in LOCAL_TOOL_GRANTS[role_id]:
+            if t not in tools and t not in forbid:
+                tools.append(t)
     return {"tools": tools, "forbid": forbid}
 
 
@@ -114,12 +141,12 @@ def convert_role(src_dir: Path, role_id: str) -> dict:
         "version": b["role"]["version"],
         "name": b["role"]["name"],
         "category": b["role"]["category"],
-        "description": b["description"],
+        "description": _LOCAL_DESC_PATCH.get(role_id, b["description"]),
         "persona": b["systemPrompt"],
         "norms": b.get("norms", {"zh": "", "en": ""}),
         "model": b.get("model"),
         "thinking_level": b.get("thinkingLevel"),
-        "permissions": _perm(b.get("permissionOverrides", {}) or {}),
+        "permissions": _perm(b.get("permissionOverrides", {}) or {}, role_id),
         "skills": [s["folder"] for s in b.get("skills", []) if s.get("enabled", True)],
         "ui": {
             "avatar": {"shape": b.get("avatarShape"), "color": b.get("avatarColor"), "eyes": b.get("avatarEyes")},
