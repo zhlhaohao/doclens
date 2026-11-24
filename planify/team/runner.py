@@ -29,6 +29,14 @@ logger = logging.getLogger("planify.team.runner")
 
 _MAX_TURNS = 50
 
+
+def D_update(sc, dag_id, mutator):
+    """原子更新 DAG（read→改→write 加锁）——避免与调度器/验收线程的丢失更新。"""
+    from . import dag as _D
+    if dag_id is None:
+        return None
+    return _D.update_dag(sc.dags_dir, int(dag_id), mutator)
+
 #: 通信/任务工具定义由 BotRunner 内置（不依赖宿主传入——宿主 lead 工具表可能
 #: 没有它们，且这些工具的 handler 就在本类里，不走宿主 handler）
 _BUILTIN_TOOL_DEFS = [
@@ -101,6 +109,7 @@ class BotRunner:
         key = (scope, name)
         with self._lock:
             if self.is_alive(scope, name):
+                logger.info("[bot:%s] start skipped: thread alive", name)
                 return False
             ev = threading.Event()
             self._alive[key] = ev
@@ -108,6 +117,7 @@ class BotRunner:
                                  name=f"bot-{name}@{scope[:8]}", daemon=True)
             self._threads[key] = t
             t.start()
+            logger.info("[bot:%s] thread started (scope=%s)", name, scope[:8])
             return True
 
     # ------------------------------------------------------------ 主循环
@@ -135,6 +145,7 @@ class BotRunner:
         held_task: Optional[int] = None
         held_output_dir: Optional[str] = None
         budget_stopped = False  # 预算超限退出：按主动停止语义（任务回 ready），不是失败
+        crashed = False         # LLM 异常退出：任务标 failed（§11b）
         try:
             while not stop.is_set():
                 # ---------- WORK（一轮：消费收件箱 → LLM → 工具，直到非 tool_use 或 idle）
@@ -168,8 +179,10 @@ class BotRunner:
                     try:
                         resp = self.provider.chat(messages=messages, system=sys_prompt, tools=to_tool_defs(tool_defs))
                     except Exception:  # noqa: BLE001
-                        # LLM 失败 → 线程退出（finally 把持有任务标 failed，§11b）
+                        # LLM 失败 = 崩溃：持有任务标 failed（§11b）。其余退出路径（idle 超时、
+                        # 进程退出、主动停止）都不是崩溃——任务回 ready 由调度器重派。
                         logger.exception("[bot:%s] LLM call failed; thread exits", name)
+                        crashed = True
                         return
                     # 预算（ADR-0059 §12）：持有任务时给所属 DAG 计数；超限 → 调度器已把 DAG 转
                     # stalled 并发 shutdown_request，本线程按主动停止路径退出（任务回 ready）
@@ -233,13 +246,13 @@ class BotRunner:
         finally:
             registry.set_status(name, "shutdown", scope)
             if held_task is not None:
-                if stop.is_set() or budget_stopped:
-                    # 主动停止（shutdown_bot / 停止=停全部 / 会话删除 / 预算超限）：任务释放回 ready，
-                    # 由调度器重派——不是失败
-                    self._release_held_task(sc, held_task)
-                else:
-                    # 线程自然退出（idle 超时 / LLM 异常）：持有 in_progress 任务 → failed（§11b）
+                if crashed:
+                    # 崩溃（LLM 异常）：持有任务 → failed（§11b）
                     self._fail_held_task(sc, held_task, name)
+                else:
+                    # 非崩溃退出（主动停止 / 预算刹车 / idle 超时 / 进程退出）：任务回 ready，
+                    # 由调度器重派——idle 超时和进程退出都不是 Bot 的失败
+                    self._release_held_task(sc, held_task)
             self._persist_session(name, messages)
             with self._lock:
                 self._threads.pop((scope, name), None)
@@ -279,31 +292,36 @@ class BotRunner:
             return f"Error: task #{task_id} not found"
         if inp.get("status") == "completed":
             # 程序验收：标 verifying，调度器线程池跑验收（不阻塞本线程）
-            t["status"] = "verifying"
-            sc.tasks.save_raw(t)
+            sc.tasks.update_raw(task_id, status="verifying")
             dag = self._dag_of(sc, t.get("dag_id"))
             if dag:
-                dag["steps"][t["step_id"]]["status"] = "verifying"
-                from . import dag as D
-                D.write_dag(sc.dags_dir, dag)
+                step_id = t.get("step_id")
+                def _mut(d):
+                    st = d["steps"].get(step_id)
+                    if st and st["status"] == "in_progress":
+                        st["status"] = "verifying"
+                D_update(sc, t.get("dag_id"), _mut)
             if self.hub.scheduler:
                 self.hub.scheduler.wake()
             return json.dumps({"ok": True, "status": "verifying", "note": "Acceptance is running; wait for result."})
         return json.dumps({"ok": False, "error": "only status=completed is handled in spike"})
 
     def _release_held_task(self, sc, task_id: int) -> None:
-        """主动停止时把 in_progress 任务回 ready（调度器重派）。verifying 态不动。"""
+        """非崩溃退出时把 in_progress 任务回 ready（调度器重派）。verifying 态不动——
+        验收在调度器线程池里跑，归属不在 Bot；动了会与验收的失败写入竞争（verifying→failed
+        被这里的 ready 覆盖）。"""
         t = sc.tasks.get_raw(task_id)
         if t and t.get("status") == "in_progress":
-            t["status"] = "pending"
-            sc.tasks.save_raw(t)
-            dag = self._dag_of(sc, t.get("dag_id"))
-            if dag:
-                st = dag["steps"].get(t.get("step_id"))
-                if st and st["status"] == "in_progress":
-                    st["status"] = "ready"
-                    from . import dag as D
-                    D.write_dag(sc.dags_dir, dag)
+            sc.tasks.update_raw(task_id, status="pending")
+            dag_id = t.get("dag_id")
+            step_id = t.get("step_id")
+            if dag_id is not None:
+                def _mut(dag):
+                    st = dag["steps"].get(step_id)
+                    # 仅当该步骤还在 in_progress 时才回 ready（verifying 归验收线程所有）
+                    if st and st["status"] == "in_progress":
+                        st["status"] = "ready"
+                D_update(sc, dag_id, _mut)
             if self.hub.scheduler:
                 self.hub.scheduler.wake()
 
@@ -312,16 +330,15 @@ class BotRunner:
         # 只对 in_progress 动手：verifying 的归属已是调度器（线程池验收中），
         # Bot idle 退出是正常的——不是「线程死亡持有任务」
         if t and t.get("status") == "in_progress":
-            t["status"] = "failed"
-            t["fail_reason"] = "bot_thread_died"
-            sc.tasks.save_raw(t)
-            dag = self._dag_of(sc, t.get("dag_id"))
-            if dag:
-                st = dag["steps"].get(t.get("step_id"))
-                if st and st["status"] == "in_progress":
-                    st["status"] = "failed"
-                    from . import dag as D
-                    D.write_dag(sc.dags_dir, dag)
+            sc.tasks.update_raw(task_id, status="failed", fail_reason="bot_thread_died")
+            dag_id = t.get("dag_id")
+            step_id = t.get("step_id")
+            if dag_id is not None:
+                def _mut(dag):
+                    st = dag["steps"].get(step_id)
+                    if st and st["status"] == "in_progress":
+                        st["status"] = "failed"
+                D_update(sc, dag_id, _mut)
             if self.hub.scheduler:
                 self.hub.scheduler.wake()
             logger.warning("[bot:%s] thread died holding task #%s → failed", name, task_id)

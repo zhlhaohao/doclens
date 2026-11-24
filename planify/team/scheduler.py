@@ -243,7 +243,11 @@ class Scheduler:
         return t
 
     def _dispatch(self, sc, bot_name: str, task: Dict[str, Any]) -> None:
-        """派单 = 写收件箱 + 确保线程活着。"""
+        """派单 = 确保线程活着 + 写收件箱（先线程后消息：新线程起来即可读到）。"""
+        if not self.thread_alive(sc.scope_id, bot_name):
+            # 复活：实体已在（租约在），只起线程——不重 spawn（避免覆盖租约/记忆）
+            self.spawner(sc.scope_id, bot_name, "You have a new assignment; check your inbox.")
+            logger.info("[scheduler] revived bot %s for scope %s", bot_name, sc.scope_id)
         sc.bus.send("system", bot_name, json.dumps({
             "type": "assignment",
             "task_id": task["id"],
@@ -255,9 +259,7 @@ class Scheduler:
             "acceptance": task["acceptance"],
             "output_dir": task["output_dir"],
         }, ensure_ascii=False), msg_type="assignment")
-        if not self.thread_alive(sc.scope_id, bot_name):
-            self.spawner(sc.scope_id, bot_name, "You have a new assignment; check your inbox.")
-            logger.info("[scheduler] revived bot %s for scope %s", bot_name, sc.scope_id)
+        logger.info("[scheduler] dispatched task #%s step=%s to %s", task["id"], task["step_id"], bot_name)
 
     # ------------------------------------------------------------ 预算
 
@@ -321,25 +323,30 @@ class Scheduler:
             task = json.loads(sc.tasks.get(st["task_id"]))
             ok, failures, manuals = run_acceptance(Path(output_dir), task.get("acceptance", []))
             if ok:
-                st["status"] = D.STEP_DONE
-                st["done_at"] = time.time()
-                # 交付物 mtime 快照：供下游派单前的「被并行步骤覆盖」检测比对
                 snap = {p: (output_dir / p).stat().st_mtime for p in self._deliverable_paths(task) if (output_dir / p).exists()}
-                st["deliverable_mtimes"] = snap
-                task["status"] = "completed"
-                task["manual_items"] = manuals
-                sc.tasks._save(task)
+                def _mut_ok(d):
+                    s = d["steps"].get(sid)
+                    if s:
+                        s["status"] = D.STEP_DONE
+                        s["done_at"] = time.time()
+                        # 交付物 mtime 快照：供下游派单前的「被并行步骤覆盖」检测比对
+                        s["deliverable_mtimes"] = snap
+                D.update_dag(sc.dags_dir, dag_id, _mut_ok)
+                sc.tasks.update_raw(task["id"], status="completed", manual_items=manuals)
                 sc.bus.send("system", "lead", json.dumps({"type": "step_done", "dag_id": dag_id, "step_id": sid}), msg_type="step_done")
             else:
-                task["fix_rounds"] = int(task.get("fix_rounds", 0)) + 1
-                if task["fix_rounds"] > int(task.get("max_fix_rounds", 1)):
-                    st["status"] = D.STEP_FAILED
-                    task["status"] = "failed"
-                    sc.tasks._save(task)
+                cur = sc.tasks.get_raw(task["id"]) or task
+                rounds = int(cur.get("fix_rounds", 0)) + 1
+                if rounds > int(cur.get("max_fix_rounds", 1)):
+                    def _mut_fail(d):
+                        s = d["steps"].get(sid)
+                        if s:
+                            s["status"] = D.STEP_FAILED
+                    D.update_dag(sc.dags_dir, dag_id, _mut_fail)
+                    sc.tasks.update_raw(task["id"], status="failed", fix_rounds=rounds)
                 else:
                     # 打回：task 回 in_progress，Bot 收件箱收到未达标项
-                    task["status"] = "in_progress"
-                    sc.tasks._save(task)
+                    sc.tasks.update_raw(task["id"], status="in_progress", fix_rounds=rounds)
                     sc.bus.send("system", task["assignee"], json.dumps({
                         "type": "fix_required", "task_id": task["id"], "failures": failures,
                     }, ensure_ascii=False), msg_type="fix_required")

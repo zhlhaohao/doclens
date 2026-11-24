@@ -20,16 +20,18 @@ from typing import Any, Dict, List, Optional
 
 # DAG 文件写入锁（按路径）：调度器主循环与验收线程可能同时写同一 DAG，
 # Windows 上 os.replace 在另一线程读的瞬间会 PermissionError。
-_write_locks: Dict[str, threading.Lock] = {}
+_write_locks: Dict[str, "threading.RLock"] = {}
 _write_locks_guard = threading.Lock()
 
 
-def _lock_for(path: Path) -> threading.Lock:
+def _lock_for(path: Path) -> threading.RLock:
+    """按路径的写锁。**必须 RLock**——update_dag 持锁调 _atomic_write，后者又取同一把锁
+    （普通 Lock 不可重入 → 死锁）。"""
     key = str(path)
     with _write_locks_guard:
         lk = _write_locks.get(key)
         if lk is None:
-            lk = threading.Lock()
+            lk = threading.RLock()
             _write_locks[key] = lk
         return lk
 
@@ -417,6 +419,31 @@ def next_dag_id(dags_dir: Path) -> int:
 
 def write_dag(dags_dir: Path, dag: Dict[str, Any]) -> None:
     _atomic_write(dags_dir / f"{dag['id']}.json", dag)
+
+
+def update_dag(dags_dir: Path, dag_id: int, mutator) -> Optional[Dict[str, Any]]:
+    """**原子**读-改-写 DAG（加锁）——并发写 DAG 的唯一安全入口。
+
+    调度器主循环、验收线程池、Bot 线程都可能改同一个 DAG（step 状态、fix_rounds、
+    deliverable_mtimes）。各自 read→改→write 的序列会**丢失更新**（后写覆盖前写）——
+    表现为「step 卡在 in_progress」这类幽灵状态。mutator 收到 dag 副本，返回值
+    可选地替换整个 dag（None = 用传入对象）。
+
+    返回更新后的 dag（不存在返回 None）。
+    """
+    path = dags_dir / f"{dag_id}.json"
+    with _lock_for(path):
+        if not path.exists():
+            return None
+        try:
+            dag = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        result = mutator(dag)
+        if result is not None:
+            dag = result
+        _atomic_write(path, dag)
+        return dag
 
 
 def read_dag(dags_dir: Path, dag_id: int) -> Optional[Dict[str, Any]]:

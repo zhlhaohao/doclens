@@ -21,12 +21,16 @@
 """
 
 import json
+import threading
 from pathlib import Path
 from typing import Optional
 
 
 class TaskManager:
     """持久化任务管理器"""
+
+    #: update_raw 的「不写入」哨兵（None 是合法值——「清空字段」）
+    _UNSET = object()
 
     def __init__(self, tasks_dir: Path):
         """
@@ -37,6 +41,9 @@ class TaskManager:
         """
         tasks_dir.mkdir(exist_ok=True, parents=True)
         self.tasks_dir = tasks_dir
+        # 写锁：调度器线程 / 验收线程池 / Bot 线程并发写同一 task 文件（§竞态）——
+        # 无锁时 read-modify-write 会互相覆盖（verifying↔ready、failed↔pending）
+        self._lock = threading.RLock()
 
     def _next_id(self) -> int:
         """获取下一个可用的任务 ID"""
@@ -202,5 +209,22 @@ class TaskManager:
             return None
 
     def save_raw(self, task: dict) -> None:
-        """整写回（scheduler 更新 DAG 步骤字段用）。"""
-        self._save(task)
+        """整写回（scheduler 更新 DAG 步骤字段用）。加锁——见 __init__ 的竞态说明。"""
+        with self._lock:
+            self._save(task)
+
+    def update_raw(self, tid: int, **changes) -> Optional[dict]:
+        """原子读-改-写（加锁）。并发写 task 的唯一安全入口。
+
+        返回更新后的 task（不存在返回 None）。changes 为 None 值时**不**写入该键
+        （None 有时表示「清空」，由调用方用 sentinel 表达删除）。
+        """
+        with self._lock:
+            task = self.get_raw(tid)
+            if task is None:
+                return None
+            for k, v in changes.items():
+                if v is not self._UNSET:
+                    task[k] = v
+            self._save(task)
+            return task
