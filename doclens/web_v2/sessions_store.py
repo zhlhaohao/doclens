@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import secrets
 import sqlite3
 import threading
@@ -40,6 +41,7 @@ def _parse_db_ts(value: str) -> datetime:
 class SessionType(str, Enum):
     SEARCH = "search"
     CHAT = "chat"
+    BOT = "bot"  # Bot 会话（ADR-0060 §3）：按父会话隔离，不进 chat 历史/计数/校验
 
 
 def _sanitize_tool_pairing(history: list[dict]) -> list[dict]:
@@ -152,6 +154,10 @@ class SessionSummary(BaseModel):
     updated_at: datetime
     message_count: int = 0
     starred: bool = False  # 加星即置顶 + 删除保护（2026-09-17）
+    # Bot 会话归属（ADR-0060 §3）：仅 type=bot 时有值，其余 None
+    bot_name: Optional[str] = None
+    parent_session_id: Optional[str] = None
+    task_id: Optional[int] = None
 
 
 class SessionItem(BaseModel):
@@ -161,6 +167,8 @@ class SessionItem(BaseModel):
     payload: str  # JSON 字符串
     created_at: Optional[datetime] = None
 
+
+logger = logging.getLogger(__name__)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -172,7 +180,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
     message_count INTEGER NOT NULL DEFAULT 0,
-    starred      INTEGER NOT NULL DEFAULT 0
+    starred      INTEGER NOT NULL DEFAULT 0,
+    bot_name     TEXT,
+    parent_session_id TEXT,
+    task_id      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_type_updated
     ON sessions(type, updated_at DESC);
@@ -266,6 +277,14 @@ class _SessionDB:
                     conn.execute(
                         "ALTER TABLE sessions ADD COLUMN starred INTEGER NOT NULL DEFAULT 0"
                     )
+                # 迁移：Bot 会话归属三列（ADR-0060 §3）
+                for col in ("bot_name", "parent_session_id", "task_id"):
+                    if col not in cols:
+                        conn.execute(f"ALTER TABLE sessions ADD COLUMN {col} TEXT")
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_sessions_bot "
+                    "ON sessions(type, bot_name, parent_session_id, task_id)"
+                )
                 # 迁移：mode='skill' 上线前的存量技能会话——首条 message_user
                 # （按 seq 最小）以「[调用技能:」开头的 chat 会话补 mode。
                 # 幂等：已有非空 mode 或首条不匹配的不会被更新；新库无数据 no-op
@@ -964,12 +983,107 @@ class SessionsStore(_StorePart):
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
         now = ts.isoformat()
+        try:
+            with self._lock, self._conn() as conn:
+                conn.execute(
+                    """INSERT INTO session_items (session_id, seq, kind, payload, created_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (item.session_id, item.seq, item.kind, item.payload, now),
+                )
+        except sqlite3.IntegrityError:
+            # 父会话已被删除（drop_scope 的 join 上限之后 Bot 线程才落库）——
+            # 留痕随会话消亡，静默丢弃，不炸进 Bot 线程（ADR-0060 §3）
+            logger.debug("append_item dropped (session gone): %s", item.session_id)
+
+    # ------------------------------------------------------------------ Bot 会话（ADR-0060 §3）
+
+    def find_or_create_bot_session(
+        self, bot_name: str, parent_session_id: str, task_id: Optional[int],
+    ) -> str:
+        """按 (bot_name, task_id) 复用；无 task 按 (bot_name, parent, task_id IS NULL)
+        取最新。返回 bot 会话 id（专用 SQL，不复用 find_or_create——它按
+        (type, title, mode) 匹配，task_id 进不了 mode）。"""
         with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT id FROM sessions
+                   WHERE type = 'bot' AND bot_name = ? AND parent_session_id = ?
+                     AND (task_id = ? OR (task_id IS NULL AND ? IS NULL))
+                   ORDER BY datetime(created_at) DESC LIMIT 1""",
+                (bot_name, parent_session_id, task_id, task_id),
+            ).fetchone()
+            if row:
+                return row["id"]
+            import ulid as _ulid
+            sid = str(_ulid.new())
+            now = datetime.now(timezone.utc).isoformat()
+            title = f"{bot_name} · task #{task_id}" if task_id is not None else f"{bot_name} · 对话"
             conn.execute(
-                """INSERT INTO session_items (session_id, seq, kind, payload, created_at)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (item.session_id, item.seq, item.kind, item.payload, now),
+                """INSERT INTO sessions (id, type, title, preview, mode, created_at, updated_at,
+                                         message_count, starred, bot_name, parent_session_id, task_id)
+                   VALUES (?, 'bot', ?, '', NULL, ?, ?, 0, 0, ?, ?, ?)""",
+                (sid, title, now, now, bot_name, parent_session_id, task_id),
             )
+            return sid
+
+    def get_bot_session_meta(self, session_id: str) -> Optional[dict]:
+        """Bot 会话的归属元信息（隔离校验 + last_persisted_seq）。"""
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT bot_name, parent_session_id, task_id,
+                          (SELECT MAX(seq) FROM session_items WHERE session_id = ?) AS last_seq
+                   FROM sessions WHERE id = ? AND type = 'bot'""",
+                (session_id, session_id),
+            ).fetchone()
+            if not row:
+                return None
+            return {"bot_name": row["bot_name"], "parent_session_id": row["parent_session_id"],
+                    "task_id": row["task_id"], "last_persisted_seq": row["last_seq"] or 0}
+
+    def find_bot_session(self, bot_name: str, parent_session_id: str) -> Optional[str]:
+        """该 Bot 在当前父会话下最近的 bot 会话 id（覆盖层打开时用）。"""
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT id FROM sessions
+                   WHERE type = 'bot' AND bot_name = ? AND parent_session_id = ?
+                   ORDER BY datetime(created_at) DESC LIMIT 1""",
+                (bot_name, parent_session_id),
+            ).fetchone()
+            return row["id"] if row else None
+
+    def list_ids_by_type(self, type_: SessionType, exclude_starred: bool = True) -> list:
+        """按类型列会话 id（clear_sessions 先 drop_scope 再删行的两阶段用）。"""
+        with self._lock, self._conn() as conn:
+            sql = "SELECT id FROM sessions WHERE type = ?"
+            if exclude_starred:
+                sql += " AND starred = 0"
+            return [r["id"] for r in conn.execute(sql, (type_.value,)).fetchall()]
+
+    def next_seq(self, session_id: str) -> int:
+        """下一条 item 的 seq（Bot sink 在 Bot 线程逐条 append 用）。"""
+        with self._lock, self._conn() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM session_items WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            return int(row["n"])
+
+    def delete_bot_sessions_of(self, parent_session_id: str) -> int:
+        """删父会话的级联（ADR-0060 §5）：其全部 bot 子会话（items FK 级联）。"""
+        with self._lock, self._conn() as conn:
+            cur = conn.execute(
+                "DELETE FROM sessions WHERE type = 'bot' AND parent_session_id = ?",
+                (parent_session_id,),
+            )
+            return cur.rowcount
+
+    def delete_bot_sessions_for_bot(self, bot_name: str, parent_session_id: str) -> int:
+        """删实体时只删本会话的该 Bot 会话行（其他会话的历史留痕保留不可读）。"""
+        with self._lock, self._conn() as conn:
+            cur = conn.execute(
+                "DELETE FROM sessions WHERE type = 'bot' AND bot_name = ? AND parent_session_id = ?",
+                (bot_name, parent_session_id),
+            )
+            return cur.rowcount
 
     def update_count_and_time(self, session_id: str, message_count: int) -> None:
         with self._lock, self._conn() as conn:

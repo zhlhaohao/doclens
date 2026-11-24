@@ -583,6 +583,12 @@ class CortexAgent:
             asm.tool_handlers.update(_handlers)
             asm.team_hub = _hub
             self.team_hub = _hub  # 同步挂到 agent，供 request_stop 等不经过 runtime 的路径访问
+            # Bot 会话落库 sink（ADR-0060 §3）：Bot 线程逐条 append 到 sessions.db
+            try:
+                from doclens.web_v2.api.team import make_session_sink
+                _hub.runner.set_session_sink(make_session_sink())
+            except Exception:  # noqa: BLE001
+                logging.getLogger(__name__).exception("[team] session sink wiring failed")
         except Exception:  # noqa: BLE001
             logging.getLogger(__name__).exception("[team] bootstrap failed; team tools stay disabled")
             asm.team_hub = None

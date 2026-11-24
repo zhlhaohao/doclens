@@ -91,8 +91,28 @@ class TeamHub:
         with self._lock:
             return self._scopes.get(scope_id)
 
-    def drop_scope(self, scope_id: str) -> None:
-        """会话删除：释放租约、销毁目录、移出注册表。活 Bot 的 shutdown 由调度器做。"""
+    def drop_scope(self, scope_id: str, join_timeout: float = 5.0) -> None:
+        """会话删除：先停 Bot 等收尾（ADR-0060 §5），再释放租约、销毁目录、移出注册表。
+
+        顺序严格：发 shutdown_request → join Bot 线程（超时兜底，sink 落库的
+        IntegrityError 由 store 静默）→ 释放租约 → 销毁协调目录。join 之前删行
+        会让 Bot 线程的 sink 撞 FK（与 lead 的 _stop_orphan_agent 同一教训）。
+        """
+        with self._lock:
+            sc = self._scopes.get(scope_id)
+        if sc is not None:
+            for bot in self.registry.leased_by_scope(scope_id):
+                sc.bus.send("system", bot["name"], "", msg_type="shutdown_request")
+            if self._runner is not None:
+                # 只停本 scope 的线程（其他 scope 的 Bot 不受影响）
+                import time as _t
+                deadline = _t.time() + join_timeout
+                for bot in self.registry.leased_by_scope(scope_id):
+                    name = bot["name"]
+                    self._runner.shutdown_bot(scope_id, name)
+                    t = getattr(self._runner, "_threads", {}).get((scope_id, name))
+                    if t is not None and t.is_alive():
+                        t.join(max(0.0, deadline - _t.time()))
         with self._lock:
             sc = self._scopes.pop(scope_id, None)
             if sc is None:

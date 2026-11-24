@@ -541,6 +541,17 @@ async def delete_session(session_id: str):
     # 丢失（debug_20261023.log 三会话实证）。与 /chat/stop 同一层信号 +
     # cancel，落库在 task finally 自理（半截保留，ADR-0028 语义不变）。
     await _stop_orphan_agent(session_id)
+    # 团队级联（ADR-0060 §5）：先 drop_scope（停 Bot、销毁协调目录）再删行
+    try:
+        from doclens.web_v2 import deps as _deps
+        _ag = _deps.get_agent_if_ready()
+        _hub = getattr(_ag, "team_hub", None) if _ag else None
+        if _hub is not None:
+            import asyncio as _aio
+            await _aio.to_thread(_hub.drop_scope, session_id)
+        store.delete_bot_sessions_of(session_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("team cascade on delete failed: %s", session_id, exc_info=True)
     store.delete(session_id)
     # 顺带清理该会话的 AI 临时工作区（.cortex/tmp/<session_id>/）
     cleanup_session_tmp(_get_workdir(), session_id)
@@ -587,6 +598,20 @@ async def clear_sessions(
 
     for sid in chat_runner.running_sessions():
         await _stop_orphan_agent(sid)
+    # 团队级联（ADR-0060 §5）：先对候选 id（含加星排除）drop_scope，再删行
+    try:
+        from doclens.web_v2 import deps as _deps
+        _ag = _deps.get_agent_if_ready()
+        _hub = getattr(_ag, "team_hub", None) if _ag else None
+        if _hub is not None:
+            import asyncio as _aio
+            from doclens.web_v2.sessions_store import SessionType as _ST
+            candidates = store.list_ids_by_type(_ST.CHAT) if type in (None, _ST.CHAT) else []
+            for sid in candidates:
+                await _aio.to_thread(_hub.drop_scope, sid)
+                store.delete_bot_sessions_of(sid)
+    except Exception:  # noqa: BLE001
+        logger.warning("team cascade on clear failed", exc_info=True)
     deleted, skipped_starred, deleted_ids = store.delete_by_type(type)
     # 涉及聊天会话时清空 AI 临时工作区（仅 chat 会话会产生 tmp 文件）
     if type is None or type == SessionType.CHAT:

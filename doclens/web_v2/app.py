@@ -99,7 +99,15 @@ async def lifespan(app: FastAPI):
     from doclens.web_v2.watch_broker import get_watch_broker
     # 先绑定事件循环，保证 start_watcher 的回调触发时 broadcast 可用
     get_watch_broker().bind(asyncio.get_running_loop())
-
+    # Bot 事件总线（ADR-0060 §3）：Bot 线程 → SSE 的跨线程扇出
+    try:
+        from doclens.web_v2 import deps as _deps
+        _ag = _deps.get_agent_if_ready()
+        _hub = getattr(_ag, "team_hub", None) if _ag else None
+        if _hub is not None:
+            _hub.events.bind(asyncio.get_running_loop())
+    except Exception:  # noqa: BLE001
+        logger.warning("team event bus bind failed", exc_info=True)
     def _start_components() -> None:
         from pathlib import Path
         from doclens.web_v2.tmp_workspace import cleanup_all_tmp
@@ -229,6 +237,8 @@ def create_app() -> FastAPI:
     app.include_router(git.router, prefix="/api")
     from doclens.web_v2.api import translate
     app.include_router(translate.router, prefix="/api")
+    from doclens.web_v2.api import team as team_api
+    app.include_router(team_api.router, prefix="/api")
 
     @app.get("/api/health")
     async def health():
