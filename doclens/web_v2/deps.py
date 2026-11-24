@@ -375,7 +375,12 @@ def reset_singletons() -> None:
     stop_mcp_server()
     stop_mcp_client()
     _reset_translate_service()
-    # 会话库周期备份定时器（ADR-0047）：切目录前停掉，新目录构建时重启
+    # 团队装配（ADR-0060 §6）：停旧 Scheduler + Bot 线程——旧线程会扫旧目录
+    try:
+        from planify.team import shutdown_team
+        shutdown_team()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("shutdown_team on reset failed: %s", exc)
     try:
         from doclens.web_v2 import session_backup
         session_backup.stop_periodic_backup()
@@ -478,6 +483,12 @@ def swap_workdir(target: str) -> dict:
             stop_watcher()
             # AP-17：翻译单例冻结了 workdir，不重置则切换后仍读写旧目录
             _reset_translate_service()
+            # 团队装配（ADR-0060 §6）：旧 hub 的 Scheduler / Bot 线程必须停
+            try:
+                from planify.team import shutdown_team
+                shutdown_team()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("shutdown_team on swap failed: %s", exc)
             # 持全部构造锁置空（防构造进行中发布旧实例），与注册表锁分开获取
             with _singleton_guards(), _lock:
                 _config = None

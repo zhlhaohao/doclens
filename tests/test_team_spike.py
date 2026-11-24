@@ -568,6 +568,38 @@ class TestStopAndRecover:
         _wait(lambda: D.read_dag(hub2.scope("S1").dags_dir, r["dag_id"])["status"] == D.DAG_DONE, timeout=8, msg="recovered dag done")
 
 
+class TestShutdownTeam:
+    def test_shutdown_stops_scheduler_and_clears_hub(self, tmp_path):
+        """shutdown_team（ADR-0060 §6）：Scheduler 停、Bot 线程退、hub 清空；
+        bootstrap_team 替换前自动调用。"""
+        from planify.team import get_hub, shutdown_team
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "go")
+        prov.set("alice", [_text("thinking...")] * 50)
+        hub.scope("S1")
+        sched.ensure_started()
+        assert sched._thread is not None and sched._thread.is_alive()
+        shutdown_team(timeout=3.0, hub=hub)
+        _wait(lambda: not sched._thread.is_alive(), msg="scheduler stopped")
+        assert not runner.is_alive("S1", "alice")
+        assert get_hub() is None
+        # 再次调用幂等（hub 已 None）
+        shutdown_team()
+
+    def test_bootstrap_replaces_old_hub(self, tmp_path):
+        from planify.team import bootstrap_team, get_hub
+        hub1 = bootstrap_team(tmp_path, FakeProvider(), [], {}, lang="zh", poll_interval=0.05)
+        hub1.scope("S1")
+        assert get_hub() is hub1
+        sched1 = hub1.scheduler
+        sched1.ensure_started()
+        hub2 = bootstrap_team(tmp_path, FakeProvider(), [], {}, lang="zh", poll_interval=0.05)
+        assert get_hub() is hub2 and hub2 is not hub1
+        _wait(lambda: sched1._thread is None or not sched1._thread.is_alive(), msg="old scheduler stopped on re-bootstrap")
+        from planify.team import shutdown_team
+        shutdown_team()
+
+
 # ====================================================================== contextvar 穿透
 
 class TestContextvar:

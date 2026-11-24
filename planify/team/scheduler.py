@@ -79,6 +79,12 @@ class Scheduler:
         self._stop.set()
         self._wake.set()
 
+    def join(self, timeout: float = 5.0) -> None:
+        """等调度器主循环真正退出（shutdown_team 用）。"""
+        t = self._thread
+        if t is not None and t.is_alive():
+            t.join(timeout)
+
     def on_scope_dropped(self, scope_id: str) -> None:
         """会话删除：由 hub 调用，唤醒以重算退出条件。"""
         self.wake()

@@ -19,7 +19,7 @@ logger = logging.getLogger("planify.team")
 
 __all__ = [
     "BotRegistry", "BotRegistryError", "TeamHub", "TeamScope", "Role", "RoleLibrary", "RoleError",
-    "dag", "acceptance", "bootstrap_team", "get_hub",
+    "dag", "acceptance", "bootstrap_team", "get_hub", "shutdown_team",
 ]
 
 _hub: Optional[TeamHub] = None
@@ -44,6 +44,7 @@ def bootstrap_team(
     这里返回的 hub 已可用于 ``make_plan_tools(lambda: hub, workdir)``。
     """
     global _hub
+    shutdown_team()  # ADR-0060 §6：替换前先停旧实例（Scheduler / Bot / 事件总线）
     from .runner import BotRunner
     from .scheduler import Scheduler
 
@@ -65,6 +66,40 @@ def bootstrap_team(
     _hub = hub
     logger.info("[team] bootstrapped at %s (roles: %s)", team_dir, ", ".join(hub.roles.ids()))
     return hub
+
+
+def shutdown_team(timeout: float = 5.0, hub=None) -> None:
+    """关停团队装配（ADR-0060 §6）：bootstrap_team 替换前 / 宿主 reset_singletons /
+    swap_workdir 调用。
+
+    `hub` 缺省用模块级单例；测试直接构造 TeamHub 时可显式传入。
+
+    顺序严格（评审三轮）：① Scheduler.stop + join → ② 全部 scope 的 Bot 发
+    shutdown_request → ③ join Bot 线程（含超时兜底）→ ④ **最后**才 unbind 事件总线
+    ——unbind 提前会让 Bot 线程 finally 阶段的末轮落库事件打到已清空的订阅者。
+    """
+    global _hub
+    hub = hub if hub is not None else _hub
+    if hub is None:
+        return
+    try:
+        if hub.scheduler is not None:
+            hub.scheduler.stop()
+            hub.scheduler.join(timeout=timeout)
+        for sc in hub.all_scopes():
+            for bot in hub.registry.leased_by_scope(sc.scope_id):
+                sc.bus.send("system", bot["name"], "", msg_type="shutdown_request")
+        if hub.runner is not None:
+            hub.runner.shutdown_all(timeout=timeout)
+        # 事件总线（P0 引入）最后清理
+        events = getattr(hub, "events", None)
+        if events is not None and hasattr(events, "unbind"):
+            events.unbind()
+    except Exception:  # noqa: BLE001
+        logger.exception("[team] shutdown failed")
+    finally:
+        if _hub is hub:
+            _hub = None
 
 
 def recover_scope_on_first_use(hub: TeamHub, scope_id: str) -> int:

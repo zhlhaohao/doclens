@@ -107,6 +107,32 @@ class BotRunner:
             if ev:
                 ev.set()
 
+    def shutdown_all(self, timeout: float = 5.0) -> None:
+        """停止全部 Bot 线程并 join（ADR-0060 §6 shutdown_team 用）。
+
+        顺序：先 set 全部 stop Event（线程在循环顶 / idle 轮询点退出），再逐个 join。
+        join 超时的线程可能阻塞在一次 LLM 调用中——不硬等，由调用方决定后续
+        （落库的 IntegrityError 兜底 / daemon 消亡）。
+        """
+        with self._lock:
+            items = list(self._alive.items())
+            threads = list(self._threads.items())
+            for ev in self._alive.values():
+                ev.set()
+        deadline = time.time() + timeout
+        for key, t in threads:
+            remaining = max(0.0, deadline - time.time())
+            if remaining <= 0:
+                logger.warning("[bot:%s] join timed out; leaving daemon thread", key[1])
+                continue
+            t.join(remaining)
+        with self._lock:
+            for key in list(self._threads):
+                t = self._threads.get(key)
+                if t is not None and not t.is_alive():
+                    self._threads.pop(key, None)
+                    self._alive.pop(key, None)
+
     # ------------------------------------------------------------ 起线程
 
     def start(self, scope: str, name: str, prompt: str) -> bool:
