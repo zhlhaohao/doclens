@@ -28,6 +28,8 @@ from ..tools.basic import to_tool_defs
 logger = logging.getLogger("planify.team.runner")
 
 _MAX_TURNS = 50
+#: 模型忘记报完成时的程序兜底提醒次数上限（防死循环）
+_MAX_DONE_NAGS = 3
 
 
 def D_update(sc, dag_id, mutator):
@@ -91,10 +93,13 @@ class BotRunner:
     # ------------------------------------------------------------ 查询
 
     def is_alive(self, scope: str, name: str) -> bool:
+        """线程是否存活。**只看 Event 未 set**——不要求 Thread.is_alive()：线程刚 start
+        时 is_alive() 可能还没为 True（Python 线程启动有延迟），会被误判成「线程死了」
+        → 调度器重复起线程 → 两个线程抢同一个 task（真机验证踩到）。Event 在线程
+        退出（finally）时才 set。"""
         with self._lock:
             ev = self._alive.get((scope, name))
-            t = self._threads.get((scope, name))
-            return bool(ev and not ev.is_set() and t and t.is_alive())
+            return bool(ev) and not ev.is_set()
 
     def shutdown_bot(self, scope: str, name: str) -> None:
         with self._lock:
@@ -150,6 +155,7 @@ class BotRunner:
             while not stop.is_set():
                 # ---------- WORK（一轮：消费收件箱 → LLM → 工具，直到非 tool_use 或 idle）
                 idle_req = False
+                task_done_nags = 0
                 for _ in range(_MAX_TURNS):
                     # 每轮先消费收件箱；收件箱为空且上一条已是 assistant（模型已说完）才退出 WORK
                     inbox = sc.bus.read_inbox(name)
@@ -164,6 +170,8 @@ class BotRunner:
                                 payload = {}
                             held_task = payload.get("task_id", held_task)
                             held_output_dir = payload.get("output_dir") or held_output_dir
+                            logger.info("[bot:%s] got assignment task=%s output=%s",
+                                        name, held_task, held_output_dir)
                             # 给 Bot 的任务说明：指令 + 交付物 + 验收 + 输出目录（程序组装，不靠模型猜）
                             msg = {**msg, "content": (
                                 f"Assignment task_id={held_task}\n"
@@ -205,6 +213,21 @@ class BotRunner:
                                 blocks.append({"type": "tool_use", "id": b.id, "name": b.name, "input": dict(b.input or {})})
                     messages.append({"role": "assistant", "content": blocks})
                     if resp.stop_reason != "tool_use":
+                        # 模型说完就结束了。若它持有未报完成的任务 → 程序兜底提醒它报完成
+                        # （模型常忘记走「报完成」协议；Pi Bot 靠 coordinator 催，我们靠程序催）。
+                        if held_task is not None and self._task_pending(sc, held_task) and not idle_req:
+                            n = task_done_nags + 1
+                            if n <= _MAX_DONE_NAGS:
+                                task_done_nags = n
+                                logger.info("[bot:%s] task #%s not reported done; reminding (round %d)",
+                                            name, held_task, n)
+                                messages.append({"role": "user", "content": (
+                                    "System reminder: you still hold task "
+                                    f"#{held_task}. The program only marks it complete when you call "
+                                    "task_update(status='completed') — your reply alone does not complete it. "
+                                    "Call task_update now (after checking the acceptance items yourself)."
+                                )})
+                                continue  # 再跑一轮
                         break
                     results = []
                     for b in blocks:
@@ -284,12 +307,24 @@ class BotRunner:
             return f"Error: no handler for '{block['name']}'"
         return str(h(**inp))
 
+    def _task_pending(self, sc, task_id: Optional[int]) -> bool:
+        """持有任务是否仍未完成（in_progress / verifying）。"""
+        if task_id is None:
+            return False
+        t = sc.tasks.get_raw(task_id)
+        return bool(t) and t.get("status") in ("in_progress", "verifying")
+
     def _task_update(self, sc, task_id: Optional[int], inp: dict) -> str:
         if task_id is None:
             return "Error: no assignment held; nothing to update"
         t = sc.tasks.get_raw(task_id)
         if not t:
             return f"Error: task #{task_id} not found"
+        if t.get("status") not in ("in_progress",):
+            # 已完成/验收中/失败的任务不再重标——模型常重复报完成（脚本化调用、
+            # 多轮兜底），重标会让已完成的任务回到 verifying 反复验收
+            return json.dumps({"ok": True, "status": t.get("status"),
+                               "note": "task already reported; ignored duplicate completion"}, ensure_ascii=False)
         if inp.get("status") == "completed":
             # 程序验收：标 verifying，调度器线程池跑验收（不阻塞本线程）
             sc.tasks.update_raw(task_id, status="verifying")

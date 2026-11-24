@@ -127,65 +127,76 @@ class Scheduler:
                 continue
             self._advance_dag(sc, dag_meta)
 
-    def _advance_dag(self, sc, dag: Dict[str, Any]) -> None:
-        output_dir = Path(dag["output_dir"])
-        plan_steps = {s["step_id"]: s for s in dag["plan"]["steps"]}
-        dirty = False
+    def _advance_dag(self, sc, dag_meta: Dict[str, Any]) -> None:
+        """推进一个 active DAG。**全部 DAG 变更在 update_dag 的 mutator 内做**——
+        调度器主循环 / 验收线程池 / Bot 线程并发写同一个 DAG，各自 read→改→write 会
+        丢失更新（表现为「step 卡在 in_progress」「DAG 状态不更新」）。"""
+        dag_id = dag_meta["id"]
+        output_dir = Path(dag_meta["output_dir"])
+        plan_steps = {s["step_id"]: s for s in dag_meta["plan"]["steps"]}
+        to_verify: List[str] = []
 
-        # 1. 拓扑：pending → ready
-        for sid, st in dag["steps"].items():
-            if st["status"] != D.STEP_PENDING:
-                continue
-            deps = plan_steps[sid].get("depends_on", []) or []
-            if all(dag["steps"][d]["status"] == D.STEP_DONE for d in deps):
-                st["status"] = D.STEP_READY
-                dirty = True
+        def _mut(dag: Dict[str, Any]) -> Dict[str, Any]:
+            nonlocal to_verify
+            steps = dag["steps"]
+            # 1. 拓扑：pending → ready
+            for sid, st in steps.items():
+                if st["status"] != D.STEP_PENDING:
+                    continue
+                deps = plan_steps[sid].get("depends_on", []) or []
+                if all(steps.get(d, {}).get("status") == D.STEP_DONE for d in deps):
+                    st["status"] = D.STEP_READY
+            # 2. ready → 派单
+            for sid, st in list(steps.items()):
+                if st["status"] != D.STEP_READY:
+                    continue
+                if st.get("task_id") is not None:
+                    # 已有 task（派过单）——不重复建；step 回到 ready 是重派场景，
+                    # 复用原 task 记录（更新 assignee 即可）
+                    existing = sc.tasks.get_raw(st["task_id"])
+                    if existing is not None:
+                        st["status"] = D.STEP_IN_PROGRESS
+                        self._dispatch(sc, existing.get("assignee") or "", existing)
+                        continue
+                step = plan_steps[sid]
+                broken = self._upstream_deliverables_intact(dag, plan_steps, sid, output_dir)
+                if broken:
+                    self._stall(sc, dag, sid, "upstream_deliverable_changed", broken)
+                    return dag
+                assignee = self._pick_assignee(sc, dag, step)
+                if assignee is None:
+                    continue  # 无可用 Bot，等 lead spawn
+                task = self._create_task(sc, dag, step, assignee)
+                st["task_id"] = task["id"]
+                st["status"] = D.STEP_IN_PROGRESS
+                st["assignee"] = assignee
+                self._dispatch(sc, assignee, task)
+            # 3. verifying → 线程池验收（收集，mutator 外提交——线程池在锁内提交会死锁）
+            for sid, st in steps.items():
+                if st["status"] == D.STEP_VERIFYING:
+                    to_verify.append(sid)
+            # 4. 失败 → stalled
+            for sid, st in steps.items():
+                if st["status"] == D.STEP_FAILED:
+                    self._stall(sc, dag, sid, "step_failed", f"step '{sid}' exceeded max_fix_rounds")
+                    return dag
+            # 5. 全部 done → DAG done
+            if steps and all(st["status"] == D.STEP_DONE for st in steps.values()):
+                dag["status"] = D.DAG_DONE
+                sc.bus.send("system", "lead", json.dumps({"type": "dag_done", "dag_id": dag_id, "name": dag["name"]}), msg_type="dag_done")
+            return dag
 
-        # 2. ready → 派单
-        for sid, st in dag["steps"].items():
-            if st["status"] != D.STEP_READY:
-                continue
-            step = plan_steps[sid]
-            # 交付物被改检测：上游 deliverable 须仍存在且不早于上游 done
-            broken = self._upstream_deliverables_intact(dag, plan_steps, sid, output_dir)
-            if broken:
-                self._stall(sc, dag, sid, "upstream_deliverable_changed", broken)
-                return
-            assignee = self._pick_assignee(sc, dag, step)
-            if assignee is None:
-                continue  # 无可用 Bot，等 lead spawn
-            task = self._create_task(sc, dag, step, assignee)
-            st["task_id"] = task["id"]
-            st["status"] = D.STEP_IN_PROGRESS
-            st["assignee"] = assignee
-            self._dispatch(sc, assignee, task)
-            dirty = True
-
-        # 3. verifying → 线程池验收
-        for sid, st in dag["steps"].items():
-            if st["status"] != D.STEP_VERIFYING:
-                continue
-            key = (sc.scope_id, dag["id"], sid)
+        updated = D.update_dag(sc.dags_dir, dag_id, _mut)
+        if updated is None:
+            return
+        # 提交验收（锁外）
+        for sid in to_verify:
+            key = (sc.scope_id, dag_id, sid)
             with self._lock:
                 if key in self._pending_verifies:
                     continue
                 self._pending_verifies.add(key)
-            self._pool.submit(self._verify_task, sc.scope_id, dag["id"], sid, output_dir)
-
-        # 4. 失败 → stalled（由 _verify_task 置 failed 后此处转 stalled）
-        for sid, st in dag["steps"].items():
-            if st["status"] == D.STEP_FAILED:
-                self._stall(sc, dag, sid, "step_failed", f"step '{sid}' exceeded max_fix_rounds")
-                return
-
-        # 5. 全部 done → DAG done
-        if all(st["status"] == D.STEP_DONE for st in dag["steps"].values()):
-            dag["status"] = D.DAG_DONE
-            sc.bus.send("system", "lead", json.dumps({"type": "dag_done", "dag_id": dag["id"], "name": dag["name"]}), msg_type="dag_done")
-            dirty = True
-
-        if dirty:
-            D.write_dag(sc.dags_dir, dag)
+            self._pool.submit(self._verify_task, sc.scope_id, dag_id, sid, output_dir)
 
     # ------------------------------------------------------------ 动作
 
@@ -243,11 +254,12 @@ class Scheduler:
         return t
 
     def _dispatch(self, sc, bot_name: str, task: Dict[str, Any]) -> None:
-        """派单 = 确保线程活着 + 写收件箱（先线程后消息：新线程起来即可读到）。"""
-        if not self.thread_alive(sc.scope_id, bot_name):
-            # 复活：实体已在（租约在），只起线程——不重 spawn（避免覆盖租约/记忆）
-            self.spawner(sc.scope_id, bot_name, "You have a new assignment; check your inbox.")
-            logger.info("[scheduler] revived bot %s for scope %s", bot_name, sc.scope_id)
+        """派单 = 写收件箱 + 确保线程活着。
+
+        **顺序：先写消息再确保线程**——新线程起来后读收件箱能读到已存在的 assignment；
+        反过来（先起线程再写）会让新线程的第一轮读空收件箱，白耗一轮模型调用，
+        还会让脚本/上下文错位。
+        """
         sc.bus.send("system", bot_name, json.dumps({
             "type": "assignment",
             "task_id": task["id"],
@@ -259,6 +271,10 @@ class Scheduler:
             "acceptance": task["acceptance"],
             "output_dir": task["output_dir"],
         }, ensure_ascii=False), msg_type="assignment")
+        if not self.thread_alive(sc.scope_id, bot_name):
+            # 复活：实体已在（租约在），只起线程——不重 spawn（避免覆盖租约/记忆）
+            self.spawner(sc.scope_id, bot_name, "You have a new assignment; check your inbox.")
+            logger.info("[scheduler] revived bot %s for scope %s", bot_name, sc.scope_id)
         logger.info("[scheduler] dispatched task #%s step=%s to %s", task["id"], task["step_id"], bot_name)
 
     # ------------------------------------------------------------ 预算
@@ -345,12 +361,16 @@ class Scheduler:
                     D.update_dag(sc.dags_dir, dag_id, _mut_fail)
                     sc.tasks.update_raw(task["id"], status="failed", fix_rounds=rounds)
                 else:
-                    # 打回：task 回 in_progress，Bot 收件箱收到未达标项
+                    # 打回：task 与 step 都回 in_progress（Bot 继续修），并把未达标项发回给 Bot
+                    def _mut_back(d):
+                        s = d["steps"].get(sid)
+                        if s and s.get("status") == D.STEP_VERIFYING:
+                            s["status"] = D.STEP_IN_PROGRESS
+                    D.update_dag(sc.dags_dir, dag_id, _mut_back)
                     sc.tasks.update_raw(task["id"], status="in_progress", fix_rounds=rounds)
                     sc.bus.send("system", task["assignee"], json.dumps({
                         "type": "fix_required", "task_id": task["id"], "failures": failures,
                     }, ensure_ascii=False), msg_type="fix_required")
-            D.write_dag(sc.dags_dir, dag)
         except Exception:  # noqa: BLE001
             logger.exception("[scheduler] verify failed dag=%s step=%s", dag_id, sid)
         finally:
@@ -427,20 +447,32 @@ class Scheduler:
         """scope 首次建立时调用：该 scope 的 active DAG 中 in_progress/verifying → ready。
 
         进程重启后 Bot 线程全灭，这些任务无人持有；回 ready 由调度器重派（派单时
-        目标 Bot 为 shutdown 态会自动复活）。返回恢复的 active DAG 数。
+        目标 Bot 为 shutdown 态会自动复活）。**先重新上租约**——重启清了租约，
+        不恢复的话调度器找不到可复活的 Bot（§11e）。
+        返回恢复的 active DAG 数。
         """
         sc = self.hub.try_scope(scope_id)
         if sc is None:
             return 0
+        self.hub.registry.reclaim_for_scope(scope_id)
         n = 0
         for dag in D.read_all_dags(sc.dags_dir):
             if dag["status"] not in (D.DAG_ACTIVE, D.DAG_PAUSED):
                 continue
             changed = False
-            for st in dag["steps"].values():
+            plan_steps = {s["step_id"]: s for s in dag["plan"]["steps"]}
+            for sid, st in dag["steps"].items():
                 if st["status"] in (D.STEP_IN_PROGRESS, D.STEP_VERIFYING):
                     st["status"] = D.STEP_READY
                     changed = True
+                # **重投递 assignment**：旧 Bot 线程退出时已把 assignment 读走
+                # （read_inbox 是读清空），新 Bot 复活后不知道任务是什么——任务信息
+                # 在 DAG/task 里，不在收件箱。凡「已派单但未完成」的步骤都重发一条，
+                # 等复活后的 Bot 读（否则它起来不知道干什么）。
+                if st["status"] in (D.STEP_READY, D.STEP_IN_PROGRESS) and st.get("task_id"):
+                    task = self._task_of_step(sc, dag, sid)
+                    if task and task.get("status") not in ("completed", "failed"):
+                        self._dispatch(sc, task.get("assignee") or "", task)
             if changed:
                 D.write_dag(sc.dags_dir, dag)
             if dag["status"] == D.DAG_ACTIVE:
@@ -448,6 +480,14 @@ class Scheduler:
         if n:
             self.wake()
         return n
+
+    @staticmethod
+    def _task_of_step(sc, dag: Dict[str, Any], sid: str) -> Optional[Dict[str, Any]]:
+        st = dag["steps"].get(sid) or {}
+        tid = st.get("task_id")
+        if tid is None:
+            return None
+        return sc.tasks.get_raw(tid)
 
     def recover_on_startup(self) -> int:
         """启动时：active DAG 的 in_progress/verifying → ready；有 active DAG 则起线程。"""

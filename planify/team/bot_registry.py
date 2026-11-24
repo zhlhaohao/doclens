@@ -189,7 +189,11 @@ class BotRegistry:
     # ------------------------------------------------------------------ 启动恢复
 
     def release_all_leases(self) -> int:
-        """进程启动时调用：租约是运行态，全部清空；status 归 shutdown。"""
+        """进程启动时调用：租约是运行态，全部清空；status 归 shutdown。
+
+        但**保留 created_by**——它是「这个 Bot 属于哪个 scope」的持久依据，重启恢复
+        要靠它重新上租约（§11e：重启后 Bot 线程全灭，调度器派单时自动复活它）。
+        """
         with self._lock:
             n = 0
             for bot in self.list_all():
@@ -199,6 +203,22 @@ class BotRegistry:
                     self._save(bot)
                     n += 1
             return n
+
+    def reclaim_for_scope(self, scope: str) -> List[Dict[str, Any]]:
+        """重启恢复：把 created_by == scope 的 Bot 重新租给该 scope。
+
+        租约是运行态（重启清空），但「Bot 属于哪个 scope」是持久事实（created_by）——
+        靠它恢复，否则调度器派单时找不到可复活的 Bot（§11e）。
+        """
+        with self._lock:
+            out = []
+            for bot in self.list_all():
+                if bot.get("created_by") == scope and not bot.get("leased_by"):
+                    bot["leased_by"] = scope
+                    bot["status"] = BOT_SHUTDOWN
+                    self._save(bot)
+                    out.append(bot)
+            return out
 
     # ------------------------------------------------------------------ 记忆
 
