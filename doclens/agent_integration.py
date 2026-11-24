@@ -565,12 +565,12 @@ class CortexAgent:
             from doclens.web_v2.api._chat_emitter import get_current_emitter as _get_current_emitter
             from planify.team import get_hub as _get_hub
 
-            # Bot 能力工具表 = 过滤后的 lead 工具（不含 lead 专属的 plan_*/team 工具）
-            _lead_only = {"spawn_teammate", "list_teammates", "send_message", "read_inbox",
-                          "broadcast", "shutdown_teammate"}
-            _bot_defs = [t for t in asm.tools if not t["name"].startswith("group_plan") and t["name"] not in _lead_only]
-            _bot_handlers = {k: v for k, v in asm.tool_handlers.items()
-                             if not k.startswith("group_plan") and k not in _lead_only}
+            # Bot 能力工具表 = lead 工具表**本体**（不含 lead 专属的 plan_*/team 工具——
+            # 过滤在 BotRunner.bot_tool_defs() 里现算）。必须传 asm.tools 本身而非推导
+            # 出的新 list：MCP 工具装配后异步 reconcile 进 asm.tools（原位 [:] 更新），
+            # 推导结果是指向旧快照的独立 list，永远拿不到。
+            _bot_defs = asm.tools
+            _bot_handlers = asm.tool_handlers
             _hub = _bootstrap_team(
                 workdir=self.workdir, provider=asm.client,
                 tool_defs=_bot_defs, tool_handlers=_bot_handlers,

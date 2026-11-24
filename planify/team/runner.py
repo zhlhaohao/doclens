@@ -59,9 +59,17 @@ _BUILTIN_TOOL_DEFS = [
 ]
 
 
+#: lead 专属工具——不进 Bot 工具表（即使角色白名单碰巧放行也不给）
+_LEAD_ONLY_TOOLS = frozenset({
+    "spawn_teammate", "list_teammates", "shutdown_teammate", "broadcast",
+})
+
+
 def _bot_tool_defs(host_defs: list) -> list:
-    """能力工具（宿主）+ 内置通信/任务工具，按名去重（内置优先）。"""
-    out = {t["name"]: t for t in host_defs}
+    """能力工具（宿主）+ 内置通信/任务工具，按名去重（内置优先）。
+    剔除 lead 专属的 plan_*/team 工具。每次调用现算（宿主表可能后加入 MCP 工具）。"""
+    out = {t["name"]: t for t in host_defs
+           if not t["name"].startswith("group_plan") and t["name"] not in _LEAD_ONLY_TOOLS}
     for t in _BUILTIN_TOOL_DEFS:
         out[t["name"]] = t
     return list(out.values())
@@ -190,6 +198,8 @@ class BotRunner:
 
         all_defs = self.bot_tool_defs()
         tool_defs = [t for t in all_defs if t["name"] in role.allowed_tools([x["name"] for x in all_defs])]
+        logger.info("[bot:%s] tools (%d/%d): %s", name, len(tool_defs), len(all_defs),
+                    ",".join(sorted(t["name"] for t in tool_defs)))
         allowed = {t["name"] for t in tool_defs}
         if "write_file" in role.tools:
             self._role_explicit_write[name] = {"write_file"}

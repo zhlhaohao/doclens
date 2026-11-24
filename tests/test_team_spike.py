@@ -704,6 +704,10 @@ class TestSessionSink:
         r = RoleLibrary().get("default")
         assert "mcp__anysearch__search" not in r.allowed_tools(list(names))
         assert "mcp__anysearch__search" in RoleLibrary().get("researcher").allowed_tools(list(names))
+        # lead 专属工具不进 Bot 表（group_plan* / spawn_teammate 等）
+        host_defs.append({"name": "group_plan", "description": "x", "input_schema": {"type": "object"}})
+        host_defs.append({"name": "spawn_teammate", "description": "x", "input_schema": {"type": "object"}})
+        assert not ({"group_plan", "spawn_teammate"} & {t["name"] for t in runner.bot_tool_defs()})
 
     def test_plan_card_emitted_via_sink(self, tmp_path):
         """group_plan / revise / replan 返回前经 event_sink 发 plan_card（ADR-0060 §1）。"""
