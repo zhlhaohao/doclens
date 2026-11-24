@@ -213,15 +213,21 @@ class TaskManager:
         with self._lock:
             self._save(task)
 
-    def update_raw(self, tid: int, **changes) -> Optional[dict]:
+    def update_raw(self, tid: int, expect_status: Optional[str] = None, **changes) -> Optional[dict]:
         """原子读-改-写（加锁）。并发写 task 的唯一安全入口。
 
-        返回更新后的 task（不存在返回 None）。changes 为 None 值时**不**写入该键
-        （None 有时表示「清空」，由调用方用 sentinel 表达删除）。
+        `expect_status` 给定时是**条件更新**：task 当前 status 不等于它则**不写**、
+        返回 None。用于「验收结果写回前 task 已被 pause/重派改变」的竞态防护
+        （ADR-0060 §4）——调用方据此丢弃过期结果。
+
+        返回更新后的 task（不存在或条件不满足返回 None）。changes 为 None 值时**不**
+        写入该键（None 有时表示「清空」，由调用方用 sentinel 表达删除）。
         """
         with self._lock:
             task = self.get_raw(tid)
             if task is None:
+                return None
+            if expect_status is not None and task.get("status") != expect_status:
                 return None
             for k, v in changes.items():
                 if v is not self._UNSET:

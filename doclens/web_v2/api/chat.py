@@ -719,7 +719,7 @@ async def chat_stop(req: ChatStopRequest):
         _ag = _deps.get_agent_if_ready()
         _hub = getattr(_ag, "team_hub", None) if _ag else None
         if _hub is not None and _hub.scheduler is not None:
-            paused = _hub.scheduler.pause_scope(req.session_id)
+            paused = _hub.scheduler.pause_scope(req.session_id, dag_ids=None)  # 会话级 = 停全部
     except Exception:  # noqa: BLE001
         logger.warning("pause DAGs on stop failed", exc_info=True)
     from doclens.web_v2 import chat_runner

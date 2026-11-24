@@ -324,7 +324,6 @@ class Scheduler:
         return [d["path"] for d in task.get("deliverables", []) or [] if d.get("path")]
 
     def _verify_task(self, scope_id: str, dag_id: int, sid: str, output_dir: Path) -> None:
-        key = (scope_id, scope_id and dag_id, sid)
         try:
             sc = self.hub.try_scope(scope_id)
             if sc is None:
@@ -338,38 +337,69 @@ class Scheduler:
                 return
             task = json.loads(sc.tasks.get(st["task_id"]))
             ok, failures, manuals = run_acceptance(Path(output_dir), task.get("acceptance", []))
+
+            def _current():
+                """验收期间的竞争检查（ADR-0060 §4）。
+
+                pause_scope / cancel 可能在本函数验收期间把 DAG 转 paused/cancelled、
+                task 转 pending（`_release_held_task`）：此时验收结果必须整体丢弃。
+
+                **只查 DAG active + task verifying，不查 step**——`_advance_dag` 的收集
+                循环每 tick 重读 step，Bot 退出时 `_release_held_task` 只动 task 不动
+                verifying step，step 状态在此期间会反复变动（合法的重验），不能当前置。
+                task 才是验收结果的唯一闸门（三处 update_raw 用 expect_status 条件写）。
+                """
+                d = D.read_dag(sc.dags_dir, dag_id) or {}
+                t = sc.tasks.get_raw(st["task_id"]) or {}
+                return d.get("status") == D.DAG_ACTIVE and t.get("status") == "verifying"
+
+            if not _current():
+                return  # 已被暂停 / 取消 / 重派——丢弃验收结果
+
             if ok:
                 snap = {p: (output_dir / p).stat().st_mtime for p in self._deliverable_paths(task) if (output_dir / p).exists()}
                 def _mut_ok(d):
+                    if d.get("status") != D.DAG_ACTIVE:
+                        return  # 暂停后不再标完成
                     s = d["steps"].get(sid)
-                    if s:
+                    if s and s.get("status") == D.STEP_VERIFYING:
                         s["status"] = D.STEP_DONE
                         s["done_at"] = time.time()
                         # 交付物 mtime 快照：供下游派单前的「被并行步骤覆盖」检测比对
                         s["deliverable_mtimes"] = snap
                 D.update_dag(sc.dags_dir, dag_id, _mut_ok)
-                sc.tasks.update_raw(task["id"], status="completed", manual_items=manuals)
+                sc.tasks.update_raw(st["task_id"], expect_status="verifying",
+                                    status="completed", manual_items=manuals)
                 sc.bus.send("system", "lead", json.dumps({"type": "step_done", "dag_id": dag_id, "step_id": sid}), msg_type="step_done")
             else:
                 cur = sc.tasks.get_raw(task["id"]) or task
                 rounds = int(cur.get("fix_rounds", 0)) + 1
                 if rounds > int(cur.get("max_fix_rounds", 1)):
                     def _mut_fail(d):
+                        if d.get("status") != D.DAG_ACTIVE:
+                            return
                         s = d["steps"].get(sid)
-                        if s:
+                        if s and s.get("status") == D.STEP_VERIFYING:
                             s["status"] = D.STEP_FAILED
                     D.update_dag(sc.dags_dir, dag_id, _mut_fail)
-                    sc.tasks.update_raw(task["id"], status="failed", fix_rounds=rounds)
+                    sc.tasks.update_raw(task["id"], expect_status="verifying",
+                                        status="failed", fix_rounds=rounds)
                 else:
                     # 打回：task 与 step 都回 in_progress（Bot 继续修），并把未达标项发回给 Bot
                     def _mut_back(d):
+                        if d.get("status") != D.DAG_ACTIVE:
+                            return
                         s = d["steps"].get(sid)
                         if s and s.get("status") == D.STEP_VERIFYING:
                             s["status"] = D.STEP_IN_PROGRESS
                     D.update_dag(sc.dags_dir, dag_id, _mut_back)
-                    sc.tasks.update_raw(task["id"], status="in_progress", fix_rounds=rounds)
+                    if not _current():
+                        return  # 写回间隙被暂停——不再发打回消息
+                    sc.tasks.update_raw(task["id"], expect_status="verifying",
+                                        status="in_progress", fix_rounds=rounds)
                     sc.bus.send("system", task["assignee"], json.dumps({
                         "type": "fix_required", "task_id": task["id"], "failures": failures,
+                        "output_dir": str(output_dir),
                     }, ensure_ascii=False), msg_type="fix_required")
         except Exception:  # noqa: BLE001
             logger.exception("[scheduler] verify failed dag=%s step=%s", dag_id, sid)
@@ -390,24 +420,40 @@ class Scheduler:
             "reason": reason, "detail": detail,
         }, ensure_ascii=False), msg_type="dag_stalled")
 
-    def pause_scope(self, scope_id: str) -> int:
-        """停止 = 停全部：scope 内全部 active DAG → paused，在跑任务 → ready。"""
+    def pause_scope(self, scope_id: str, dag_ids: Optional[list] = None) -> int:
+        """停止 = 停全部：`dag_ids=None` 时 scope 内全部 active DAG → paused、在跑
+        任务 → ready、全部租借 Bot 收 shutdown（会话级「停全部」，语义不变）。
+
+        `dag_ids` 给定时**只暂停列表内 DAG**（Bot 会话页的「暂停」——ADR-0060 §4）：
+        shutdown_request **只发给这些 DAG 涉及步骤的 assignee**，scope 内其他 Bot 与
+        其他 active DAG 照常推进。调度器不停（`wake()` 照发）。
+        """
         sc = self.hub.try_scope(scope_id)
         if sc is None:
             return 0
+        wanted = set(dag_ids) if dag_ids is not None else None
         n = 0
+        affected: set = set()
         for dag in D.read_all_dags(sc.dags_dir):
             if dag["status"] != D.DAG_ACTIVE:
+                continue
+            if wanted is not None and dag["id"] not in wanted:
                 continue
             dag["status"] = D.DAG_PAUSED
             for st in dag["steps"].values():
                 if st["status"] in (D.STEP_IN_PROGRESS, D.STEP_VERIFYING):
                     st["status"] = D.STEP_READY
                     st["interrupted"] = True
+                    if st.get("assignee"):
+                        affected.add(st["assignee"])
             D.write_dag(sc.dags_dir, dag)
             n += 1
-        for bot in self.hub.registry.leased_by_scope(scope_id):
-            sc.bus.send("system", bot["name"], "", msg_type="shutdown_request")
+        if wanted is None:
+            for bot in self.hub.registry.leased_by_scope(scope_id):
+                sc.bus.send("system", bot["name"], "", msg_type="shutdown_request")
+        else:
+            for name in affected:
+                sc.bus.send("system", name, "", msg_type="shutdown_request")
         self.wake()
         return n
 

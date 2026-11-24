@@ -444,6 +444,69 @@ class TestStopAndRecover:
         assert n == 1
         _wait(lambda: len(hub2.scope("S1").bus.read_inbox("alice")) > 0, msg="assignment redelivered")
 
+    def test_pause_one_dag_does_not_stop_other_bots(self, tmp_path):
+        """per-DAG 暂停（Bot 会话页「暂停」）：只停目标 DAG 的 Bot，其他 Bot 不收 shutdown。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        prov.set("alice", [_text("thinking...")] * 50)
+        prov.set("bob", [_text("thinking...")] * 50)
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "go")
+        _with_scope("S1", H["spawn_teammate"], "bob", "researcher", "go")
+        plan1 = {"name": "p1", "steps": [{"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher", "assignee": "alice"}]}
+        plan2 = {"name": "p2", "steps": [{"step_id": "s1", "subject": "b", "instructions": "x", "role": "researcher", "assignee": "bob"}]}
+        d1 = json.loads(_with_scope("S1", H["group_plan"], plan1))["dag_id"]
+        d2 = json.loads(_with_scope("S1", H["group_plan"], plan2))["dag_id"]
+        _with_scope("S1", H["group_plan_start"], d1)
+        _with_scope("S1", H["group_plan_start"], d2)
+        sc = hub.scope("S1")
+        _wait(lambda: any(s["status"] == D.STEP_IN_PROGRESS for s in D.read_dag(sc.dags_dir, d1)["steps"].values()))
+        _wait(lambda: any(s["status"] == D.STEP_IN_PROGRESS for s in D.read_dag(sc.dags_dir, d2)["steps"].values()))
+        sc.bus.clear_inbox("alice")
+        sc.bus.clear_inbox("bob")
+        n = sched.pause_scope("S1", dag_ids=[d1])
+        assert n == 1
+        assert D.read_dag(sc.dags_dir, d1)["status"] == D.DAG_PAUSED
+        assert D.read_dag(sc.dags_dir, d2)["status"] == D.DAG_ACTIVE
+        assert any(m["type"] == "shutdown_request" for m in sc.bus.read_inbox("alice"))
+        assert sc.bus.read_inbox("bob") == []  # bob 不被误停
+        # 全量暂停（/chat/stop）覆盖全部
+        n2 = sched.pause_scope("S1", dag_ids=None)
+        assert n2 == 1
+        assert any(m["type"] == "shutdown_request" for m in sc.bus.read_inbox("bob"))
+
+    def test_verify_result_dropped_when_paused(self, tmp_path):
+        """验收结果在 DAG 暂停后整体丢弃：step 不被标 done、task 不被标 completed、
+        不发打回消息（ADR-0060 §4）。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        sc = hub.scope("S1")
+        # 手工构造一个 verifying 的 active DAG（不经 Bot 线程——本用例只测验收写回）
+        plan = {"name": "x", "steps": [{"step_id": "s1", "subject": "a", "instructions": "x",
+                                        "role": "researcher", "assignee": "alice",
+                                        "deliverables": [{"id": "d1", "path": "r.md"}],
+                                        "acceptance": [{"check": "exists", "path": "r.md"}]}]}
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "go")
+        r = json.loads(_with_scope("S1", H["group_plan"], plan))
+        dag_id = r["dag_id"]
+        _with_scope("S1", H["group_plan_start"], dag_id)
+        _wait(lambda: any(s["status"] == D.STEP_IN_PROGRESS for s in D.read_dag(sc.dags_dir, dag_id)["steps"].values()))
+        runner.shutdown_bot("S1", "alice")  # 不再让 Bot 推进，只留 verifying 状态
+        _wait(lambda: not runner.is_alive("S1", "alice"))
+        dag = D.read_dag(sc.dags_dir, dag_id)
+        st = dag["steps"]["s1"]
+        tid = st["task_id"]
+        sc.tasks.update_raw(tid, status="verifying")
+        def _to_verifying(d):
+            d["steps"]["s1"]["status"] = D.STEP_VERIFYING
+        D.update_dag(sc.dags_dir, dag_id, _to_verifying)
+        # 验收时 DAG 已被暂停 → 写回必须丢弃
+        sched.pause_scope("S1", dag_ids=[dag_id])
+        out_dir = Path(dag["output_dir"])
+        sched._verify_task("S1", dag_id, "s1", out_dir)
+        d2 = D.read_dag(sc.dags_dir, dag_id)
+        assert d2["status"] == D.DAG_PAUSED
+        assert d2["steps"]["s1"]["status"] == D.STEP_READY
+        assert sc.tasks.get_raw(tid)["status"] == "verifying"  # 过期结果未写回（非 completed/failed）
+        assert not any(m["type"] == "fix_required" for m in sc.bus.read_inbox("alice"))  # 过期打回未发送
+
     @pytest.mark.xfail(reason=(
         "重启后 Bot 拿不到任务上下文：旧 Bot 退出时已把 assignment 读走（read_inbox 读清空），"
         "复活的新 Bot 读不到任何 assignment——需在恢复时把 assignment 持久化到 task 记录并在"
