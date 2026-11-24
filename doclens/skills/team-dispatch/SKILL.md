@@ -36,6 +36,8 @@ description: 多 Bot 派活方法论。当用户要求把一件事拆给多个 B
 - **每步 ≤ 20 个步骤**一个 DAG；再多就拆成多个 DAG。
 - 每步写清三样：`instructions`（给 Bot 的任务正文，含输入在哪、产出长什么样）、`deliverables`（产出文件路径，相对 output_dir）、`acceptance`（程序能查的验收项）。
 
+**`path` 只写文件名（或 output_dir 下的子路径），不要带 `输出/` 前缀**。output_dir 由程序按 DAG 自动分配（`<工作目录>/输出/<dag_id>-<slug>/`），`path` 会拼在它下面——用户在指令里说「写到 输出/摘要.md」是把 output_dir 本身说出来了，你提交时须剥掉 `输出/` 只留 `摘要.md`。否则产物落成 `输出/1-xxx/输出/摘要.md`，多嵌一层；`instructions` 里告诉 Bot 的目标路径同理。`acceptance[].path` 与 `deliverables[].path` 必须一致。
+
 ## 第三步：定依赖——只写真实输入关系
 
 `depends_on` 只在**下游真的要读上游的交付物**时写。审查、测试、汇总类步骤天然依赖它们审/测/汇的对象。
