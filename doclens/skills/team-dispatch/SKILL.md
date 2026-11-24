@@ -21,6 +21,11 @@ description: 多 Bot 派活方法论。当用户要求把一件事拆给多个 B
 
 可用角色在 system prompt 的「团队角色」节（程序从内置角色表派生）。**只能用清单里的角色 id**，不能自造。每个角色一句话说明它能干什么；`description` 里没写的能力它就没有。
 
+**派活前核对角色能力**——这是真机验证踩过的坑：给 `researcher` 派「用网络搜索调研」，它**没有联网工具也没有 shell**，会陷入反复尝试、零产出的循环（16 次 LLM 调用、4 分钟、一个文件没写）。规则：
+- `description` 写了「不能联网/不能跑命令」的角色，**不要派需要抓网页的任务**。
+- 需要联网 / 跑脚本的任务 → 派给有 shell 的角色（`data-analyst` / `fullstack-dev` / `qa-engineer` / `plugin-builder` / `personal-assistant` / `general-assistant`）。
+- 角色做不到的任务，程序校验**拦不住**（它只验格式不验意图）——这是你的责任。
+
 需要某个角色但还没有对应 Bot 时，先 `spawn_teammate(name, role, prompt)`——`prompt` 只写初始任务，**不要描述性格**（身份由角色提供）。`list_teammates` 看哪些 Bot 可用；被其他会话租借的不能用。
 
 ## 第二步：拆步骤
