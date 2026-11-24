@@ -135,3 +135,10 @@ Pi Bot 为 Apache-2.0，本仓库同为 Apache-2.0。移植 persona/norms/skills
 - **三层角色来源（内置 → 用户覆盖 → lead 自写逃生口）**：用户明确否决逃生口与用户覆盖层。
 - **复活时注入旧会话尾部**：撑爆上下文且与本次任务无关，记忆文件才是蒸馏产物。否决。
 - **按时间自动清理 shutdown 实体**：删除应是显式决定。否决。
+
+## 2026-11-24 修订：会话删除与实体生命周期（ADR-0060 §5）
+
+- 删父会话**不再**与 Bot 实体生死绑定：级联删该会话的 bot 子会话 + `drop_scope`（停活 Bot、销毁协调目录），**实体与记忆保留**成为无主空闲实体（`created_by` 指向已删会话），任何会话可租借。动机：「清空全部对话」不得抹掉所有 Bot 记忆；记忆属于 Bot 不属于会话（本 ADR §租约已定）。
+- 删实体（`shutdown_teammate(delete=True)` / `POST /api/team/bots/{name}/delete`）只删**持有者会话**的 bot 会话行，其他会话里的历史留痕不动。
+- Bot 名加保留字 `{user, lead, system}`（`user` 是用户对 Bot 直接说话时的 sender 身份，ADR-0060 §3）+ 字符集 `^[\w\-]{1,32}$`（名字直接当文件名 / 目录名）。
+- Bot 会话留痕从 `bots/<name>/sessions/<ts>.jsonl` 迁至 sessions.db（`SessionType.BOT`，按 task_id 聚合、逐条 append）；**复活不注入不变**；jsonl 写入下线（`_persist_session` / `sessions_dir`），历史文件不读不迁。

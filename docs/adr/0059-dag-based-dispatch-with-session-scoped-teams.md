@@ -61,7 +61,7 @@ Step{ step_id, subject, instructions,
 
 - `group_plan(Plan)` → 校验 → DAG **草稿态**，返回 dag_id + 计划卡文本。
 - 校验（只报**首个错** + 字段路径 + 合法示例——Pi Bot 教训：报一串模型会放弃）：step_id 唯一 / depends_on 无环且引用存在 / inputs 引用的 deliverable 存在于所依赖步骤 / assignee 存在且 role 匹配 / skill 存在于该角色 skills / acceptance check 类型与 deliverable kind 匹配。
-- **用户确认**（否决自动开始）：lead 用现有 `ask_user_question` 发计划卡（开始 / 修改）；用户也可直接打字，lead 下一轮 `group_plan_revise(dag_id, Plan)`（完整替换草稿，非增量 patch——模型做 JSON 合并不可靠）。
+- **用户确认**（否决自动开始）：~~lead 用现有 `ask_user_question` 发计划卡（开始 / 修改）~~ **2026-11-24 修订（ADR-0060 §1）**：确认载体 = 计划卡片自身的按钮，直接作用于 DAG（不经 lead）；「修改」预填输入框，用户打字，lead 下一轮 `group_plan_revise(dag_id, Plan)`（完整替换草稿，非增量 patch——模型做 JSON 合并不可靠）。
 - 草稿态可任意改；`group_plan_start(dag_id)` → **执行态不可变**，唤醒调度器。执行态变更只能重规划。
 
 ### 5. 程序验收
