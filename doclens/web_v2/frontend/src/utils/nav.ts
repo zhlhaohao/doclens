@@ -10,12 +10,14 @@ export interface NavItem {
   label: string;
 }
 
-/** 主导航四视图（icon 名对齐 icon.ts ICONS 注册表）。 */
+/** 主导航五视图（icon 名对齐 icon.ts ICONS 注册表）。「团队」(ADR-0060)：
+ *  icon "bot" 已被「个人助手」占用，用 "users"。 */
 export const NAV_ITEMS: NavItem[] = [
   { id: "search", icon: "search", label: "全库搜索" },
   { id: "chat", icon: "bot", label: "个人助手" },
   { id: "diary", icon: "book-open", label: "岁月微笺" },
   { id: "files", icon: "folder", label: "文件管理" },
+  { id: "team", icon: "users", label: "团队" },
 ];
 
 /** 日记 tab 显隐（ADR-0030）：diaryEnabled=false 时过滤 diary 项（未知按显示）。 */

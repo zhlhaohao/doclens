@@ -19,6 +19,11 @@ import folderOpenIcon from "lucide-static/icons/folder-open.svg?raw";
 import fileIcon from "lucide-static/icons/file.svg?raw";
 import messageCircleIcon from "lucide-static/icons/message-circle.svg?raw";
 import botIcon from "lucide-static/icons/bot.svg?raw";
+import usersIcon from "lucide-static/icons/users.svg?raw";
+import networkIcon from "lucide-static/icons/network.svg?raw";
+import pauseIcon from "lucide-static/icons/pause.svg?raw";
+import playIcon from "lucide-static/icons/play.svg?raw";
+import listRestartIcon from "lucide-static/icons/list-restart.svg?raw";
 import uploadIcon from "lucide-static/icons/upload.svg?raw";
 import downloadIcon from "lucide-static/icons/download.svg?raw";
 import folderPlusIcon from "lucide-static/icons/folder-plus.svg?raw";
@@ -57,7 +62,6 @@ import cameraIcon from "lucide-static/icons/camera.svg?raw";
 import imageIcon from "lucide-static/icons/image.svg?raw";
 import calendarIcon from "lucide-static/icons/calendar.svg?raw";
 import chevronLeftIcon from "lucide-static/icons/chevron-left.svg?raw";
-import squareIcon from "lucide-static/icons/square.svg?raw";
 import userIcon from "lucide-static/icons/user.svg?raw";
 import logOutIcon from "lucide-static/icons/log-out.svg?raw";
 import sendIcon from "lucide-static/icons/send.svg?raw";
@@ -70,7 +74,6 @@ import slidersHorizontalIcon from "lucide-static/icons/sliders-horizontal.svg?ra
 import starIcon from "lucide-static/icons/star.svg?raw";
 import archiveIcon from "lucide-static/icons/archive.svg?raw";
 import historyIcon from "lucide-static/icons/history.svg?raw";
-import gitForkIcon from "lucide-static/icons/git-fork.svg?raw";
 import codeIcon from "lucide-static/icons/code.svg?raw";
 import sunIcon from "lucide-static/icons/sun.svg?raw";
 import moonIcon from "lucide-static/icons/moon.svg?raw";
@@ -101,6 +104,11 @@ const ICONS: Record<string, string> = {
   file: fileIcon,
   "message-circle": messageCircleIcon,
   bot: botIcon,
+  users: usersIcon,
+  network: networkIcon,
+  pause: pauseIcon,
+  play: playIcon,
+  "list-restart": listRestartIcon,
   upload: uploadIcon,
   download: downloadIcon,
   "folder-plus": folderPlusIcon,
@@ -139,7 +147,6 @@ const ICONS: Record<string, string> = {
   "chevron-left": chevronLeftIcon,
   "maximize-2": maximize2Icon,
   copy: copyIcon,
-  square: squareIcon,
   user: userIcon,
   "log-out": logOutIcon,
   send: sendIcon,
@@ -152,7 +159,6 @@ const ICONS: Record<string, string> = {
   star: starIcon,
   archive: archiveIcon,
   history: historyIcon,
-  "git-fork": gitForkIcon,
   code: codeIcon,
   sun: sunIcon,
   moon: moonIcon,

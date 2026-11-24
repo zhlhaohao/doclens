@@ -16,7 +16,7 @@ const KEY = "cortex.session.lastSelection";
 const MAX_SELECTED_PATHS = 100;
 const MAX_STR_LEN = 4096;
 
-export type MainView = "search" | "chat" | "files" | "diary";
+export type MainView = "search" | "chat" | "files" | "diary" | "team";
 export type DiaryTab = "record" | "review";
 
 export interface SessionMemory {
@@ -27,7 +27,7 @@ export interface SessionMemory {
   diary?: { tab: DiaryTab; reviewDate: string };
 }
 
-const MAIN_VIEWS: readonly MainView[] = ["search", "chat", "files", "diary"];
+const MAIN_VIEWS: readonly MainView[] = ["search", "chat", "files", "diary", "team"];
 
 function isPlainString(v: unknown): v is string {
   return typeof v === "string" && v.length <= MAX_STR_LEN;

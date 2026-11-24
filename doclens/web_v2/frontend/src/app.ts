@@ -31,6 +31,7 @@ import "./views/chat-view";
 import "./views/settings-view";
 import "./views/files-view";
 import "./views/diary-view";
+import "./views/team-view";
 import "./views/login-view";
 import "./components/app-bar";
 import "./components/reindex-dialog";
@@ -278,6 +279,7 @@ export class CortexApp extends LitElement {
       ${this._mountedViews.has("chat") ? html`<chat-view ?hidden=${view !== "chat"}></chat-view>` : null}
       ${this._mountedViews.has("files") ? html`<files-view ?hidden=${view !== "files"}></files-view>` : null}
       ${this._mountedViews.has("diary") ? html`<diary-view ?hidden=${view !== "diary"}></diary-view>` : null}
+      ${this._mountedViews.has("team") ? html`<team-view ?hidden=${view !== "team"}></team-view>` : null}
       ${this._mountedViews.has("settings") ? html`<settings-view ?hidden=${view !== "settings"}></settings-view>` : null}
     `;
   }

@@ -1,6 +1,6 @@
 /** 前端全局状态类型定义。 */
 
-export type ViewId = "search" | "chat" | "settings" | "files" | "diary" | "login";
+export type ViewId = "search" | "chat" | "settings" | "files" | "diary" | "team" | "login";
 export type FocusState = "initial" | "focus";
 export type SearchMode = "keyword" | "grep";
 
@@ -84,6 +84,9 @@ export interface ChatMessage {
   /** 消息时刻（ISO8601，后端 created_at 权威；流式中本地打戳，刷新归正）。
    *  hover/点击浮现于操作行（今天 HH:MM，非今天 MM-DD HH:MM）。 */
   created_at?: string;
+  /** Bot 会话系统条目标记（ADR-0060 §3）：assignment / fix_required / redispatched /
+   *  shutdown / user_reply——以 user 侧气泡渲染但样式区分；仅 bot-session-dialog 使用。 */
+  notice?: string;
 }
 
 /** ask_user_question 悬置问题（SSE ask 事件 → store → ask-card 组件） */
