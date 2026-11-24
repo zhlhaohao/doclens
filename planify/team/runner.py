@@ -168,7 +168,19 @@ class BotRunner:
                                 payload = json.loads(msg.get("content") or "{}")
                             except json.JSONDecodeError:
                                 payload = {}
-                            held_task = payload.get("task_id", held_task)
+                            incoming = payload.get("task_id")
+                            # 最后一道锁（ADR-0060 §4）：已持有未完成任务时拒绝第二条
+                            # assignment——recover_scope 的重投递不经 _pick_assignee，
+                            # 两个 active DAG 同轮 recover 可给同一 Bot 双派。被拒的
+                            # task + step 一起回 ready（复用 _release_held_task），
+                            # 调度器稍后重派；不覆盖 held_task。
+                            if self._task_pending(sc, held_task) and incoming != held_task:
+                                logger.warning("[bot:%s] busy on task #%s, rejecting assignment task=%s",
+                                               name, held_task, incoming)
+                                if incoming is not None:
+                                    self._release_held_task(sc, int(incoming))
+                                continue
+                            held_task = incoming if incoming is not None else held_task
                             held_output_dir = payload.get("output_dir") or held_output_dir
                             logger.info("[bot:%s] got assignment task=%s output=%s",
                                         name, held_task, held_output_dir)
@@ -181,6 +193,28 @@ class BotRunner:
                                 f"Acceptance (program checks): {json.dumps(payload.get('acceptance', []), ensure_ascii=False)}\n"
                                 f"When done call task_update(status='completed')."
                             )}
+                        elif msg.get("type") == "fix_required":
+                            # 打回恢复（ADR-0060 §3）：Bot 可能在报完成后 idle 退出、由用户
+                            # 消息复活成无任务线程——此时 held_task=None，打回消息须把
+                            # task / output_dir 装回，否则 Bot 修不了也报不了完成。
+                            try:
+                                payload = json.loads(msg.get("content") or "{}")
+                            except json.JSONDecodeError:
+                                payload = {}
+                            if held_task is None and payload.get("task_id") is not None:
+                                held_task = payload["task_id"]
+                                held_output_dir = payload.get("output_dir") or held_output_dir
+                                logger.info("[bot:%s] resumed held task #%s from fix_required", name, held_task)
+                        elif msg.get("type") == "user_message":
+                            # 用户直接消息（ADR-0060 §3）：不是系统通知——用户在观看会话
+                            # 并对 Bot 说话，须与 assignment / Bot 间消息区分。
+                            text = msg.get("content") or ""
+                            messages.append({"role": "user", "content": (
+                                f"[用户直接消息] {text}\n"
+                                "（用户正在观看你的会话并直接对你说话；这不是系统通知，"
+                                "请如实、简短地回答，然后继续手头任务。）"
+                            )})
+                            continue
                         messages.append({"role": "user", "content": json.dumps(msg, ensure_ascii=False) if msg.get("type") != "assignment" else msg["content"]})
                     if not inbox and (not messages or messages[-1]["role"] == "assistant"):
                         break
@@ -241,7 +275,15 @@ class BotRunner:
                         elif b["name"] == "task_update":
                             out = self._task_update(sc, held_task, b["input"])
                         elif b["name"] == "send_message":
-                            out = sc.bus.send(name, b["input"].get("to", "lead"), b["input"].get("content", ""))
+                            to = b["input"].get("to", "lead")
+                            if to == "user":
+                                # 用户对 Bot 说话后 Bot 的直接回信走 Bot 会话（§3），
+                                # 不进 lead 收件箱——避免污染 lead 上下文。
+                                content = b["input"].get("content", "")
+                                self._emit_bot_notice(scope, name, "user_reply", content)
+                                out = "Delivered to user"
+                            else:
+                                out = sc.bus.send(name, to, b["input"].get("content", ""))
                         elif b["name"] == "read_inbox":
                             out = json.dumps(sc.bus.read_inbox(name), ensure_ascii=False)
                         elif b["name"] == "load_skill":
@@ -282,6 +324,25 @@ class BotRunner:
                 self._alive.pop((scope, name), None)
 
     # ------------------------------------------------------------ 工具
+
+    def _emit_bot_notice(self, scope: str, name: str, notice_type: str, text: str) -> None:
+        """Bot 会话的系统条目（ADR-0060 §3）——经 sink 落库（无 sink 时只记日志）。
+
+        sink 由宿主在 bootstrap_team 时注入（`set_session_sink`）；Bot 侧只发事件，
+        不知道 sessions.db 存在。
+        """
+        sink = getattr(self, "_session_sink", None)
+        if sink is not None:
+            try:
+                sink(scope, name, {"type": "bot_notice", "notice_type": notice_type, "text": text})
+            except Exception:  # noqa: BLE001
+                logger.exception("[bot:%s] session sink failed", name)
+        else:
+            logger.info("[bot:%s] %s: %s", name, notice_type, text[:200])
+
+    def set_session_sink(self, sink) -> None:
+        """注入 Bot 会话落库回调（宿主侧 append_item 到 sessions.db）。"""
+        self._session_sink = sink
 
     def _run_capability(self, block: dict, scope: str, bot_name: str, output_dir: Optional[str] = None) -> str:
         # write_file 限路径 memory.md（ADR-0058 §8 / 评审 M2）：不是门禁的事——memory.md

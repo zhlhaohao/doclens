@@ -365,6 +365,30 @@ class TestEndToEnd:
 # ====================================================================== 停止 / 重启
 
 class TestStopAndRecover:
+    def test_busy_bot_rejects_second_assignment(self, tmp_path):
+        """已持有未完成任务的 Bot 拒绝第二条 assignment：被拒 task + step 一起回
+        ready，held_task 不被覆盖（ADR-0060 §4）。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        prov.set("alice", [_text("thinking...")] * 50)
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "go")
+        # 两个 DAG 都派 alice
+        d1 = json.loads(_with_scope("S1", H["group_plan"], {"name": "p1", "steps": [{"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher", "assignee": "alice"}]}))["dag_id"]
+        _with_scope("S1", H["group_plan_start"], d1)
+        sc = hub.scope("S1")
+        _wait(lambda: any(s["status"] == D.STEP_IN_PROGRESS for s in D.read_dag(sc.dags_dir, d1)["steps"].values()))
+        task1 = D.read_dag(sc.dags_dir, d1)["steps"]["s1"]["task_id"]
+        # 手工塞第二条 assignment（模拟 recover 的双派窗口）
+        raw = sc.tasks.get_raw(task1)
+        other = sc.tasks.create("other", "other instructions")
+        other_id = json.loads(other)["id"]
+        sc.bus.send("system", "alice", json.dumps({"type": "assignment", "task_id": other_id,
+                                                   "instructions": "second", "output_dir": raw["output_dir"]}),
+                    msg_type="assignment")
+        # Bot 读到后应拒绝第二条：task 回 pending，held_task 保持第一条
+        _wait(lambda: sc.tasks.get_raw(other_id)["status"] == "pending", msg="rejected task back to pending")
+        assert sc.tasks.get_raw(task1)["status"] == "in_progress"
+        assert sc.tasks.get_raw(other_id)["status"] == "pending"
+
     def test_stop_pauses_and_resume(self, tmp_path):
         hub, runner, sched, H, prov, wd = _build(tmp_path)
         # Bot 永远沉默（不写文件不完成）——任务卡 in_progress
