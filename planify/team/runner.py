@@ -88,6 +88,8 @@ class BotRunner:
         self._threads: Dict[Tuple[str, str], threading.Thread] = {}
         self._alive: Dict[Tuple[str, str], threading.Event] = {}
         self._lock = threading.RLock()
+        # 每线程当前持有的 task_id（sink 落库按 task 归会话用；线程退出时清）
+        self._held: Dict[Tuple[str, str], Optional[int]] = {}
         # 角色 tools 是否**显式**含 write_file（researcher 要写交付物；default 仅靠 FORCED 写记忆）
         self._role_explicit_write: Dict[str, set] = {}
 
@@ -209,6 +211,7 @@ class BotRunner:
                                 continue
                             held_task = incoming if incoming is not None else held_task
                             held_output_dir = payload.get("output_dir") or held_output_dir
+                            self._held[(scope, name)] = held_task
                             logger.info("[bot:%s] got assignment task=%s output=%s",
                                         name, held_task, held_output_dir)
                             # 给 Bot 的任务说明：指令 + 交付物 + 验收 + 输出目录（程序组装，不靠模型猜）
@@ -231,6 +234,7 @@ class BotRunner:
                             if held_task is None and payload.get("task_id") is not None:
                                 held_task = payload["task_id"]
                                 held_output_dir = payload.get("output_dir") or held_output_dir
+                                self._held[(scope, name)] = held_task
                                 logger.info("[bot:%s] resumed held task #%s from fix_required", name, held_task)
                         elif msg.get("type") == "user_message":
                             # 用户直接消息（ADR-0060 §3）：不是系统通知——用户在观看会话
@@ -331,6 +335,7 @@ class BotRunner:
                         self._emit_to_sink(scope, name, {
                             "type": "tool_step", "tool_use_id": b["id"],
                             "name": b["name"], "input": b.get("input") or {}, "output": str(out)[:4000],
+                            "task_id": self._held.get((scope, name)),
                         })
                     messages.append({"role": "user", "content": results})
                     if idle_req:
@@ -362,6 +367,7 @@ class BotRunner:
             with self._lock:
                 self._threads.pop((scope, name), None)
                 self._alive.pop((scope, name), None)
+                self._held.pop((scope, name), None)
 
     # ------------------------------------------------------------ 工具
 
@@ -369,7 +375,7 @@ class BotRunner:
         """轮末 assistant 消息落库（ADR-0060 §3：流式增量不落库，终态才落）。"""
         text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
         if text:
-            self._emit_to_sink(scope, name, {"type": "message_ai", "text": text})
+            self._emit_to_sink(scope, name, {"type": "message_ai", "text": text, "task_id": self._held.get((scope, name))})
 
     def _emit_to_sink(self, scope: str, name: str, event: dict) -> None:
         sink = getattr(self, "_session_sink", None)

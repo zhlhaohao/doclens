@@ -94,9 +94,9 @@ export class TeamView extends LitElement {
     .step-id { font-family: var(--cortex-font-mono, monospace); font-size: var(--cortex-fs-xs); color: var(--cortex-text-secondary); }
     .step-subject { flex: 1; font-size: var(--cortex-fs-sm); font-weight: 500; }
     .badge { font-size: var(--cortex-fs-xs); padding: 1px 8px; border-radius: var(--cortex-radius-pill); background: var(--cortex-bg); color: var(--cortex-text-secondary); white-space: nowrap; }
-    .badge.done { background: var(--cortex-success); color: #fff; }
+    .badge.done { background: var(--cortex-success); color: var(--cortex-on-danger); }
     .badge.in_progress, .badge.verifying { background: var(--cortex-warning); }
-    .badge.failed { background: var(--cortex-danger); color: #fff; }
+    .badge.failed { background: var(--cortex-danger); color: var(--cortex-on-danger); }
     .badge.active, .badge.paused, .badge.stalled, .badge.draft { font-weight: 500; }
     .owner {
       display: inline-flex; align-items: center; gap: 4px; cursor: pointer;

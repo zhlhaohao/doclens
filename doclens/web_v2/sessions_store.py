@@ -1008,7 +1008,7 @@ class SessionsStore(_StorePart):
                 """SELECT id FROM sessions
                    WHERE type = 'bot' AND bot_name = ? AND parent_session_id = ?
                      AND (task_id = ? OR (task_id IS NULL AND ? IS NULL))
-                   ORDER BY datetime(created_at) DESC LIMIT 1""",
+                   ORDER BY id DESC LIMIT 1""",
                 (bot_name, parent_session_id, task_id, task_id),
             ).fetchone()
             if row:
@@ -1045,7 +1045,7 @@ class SessionsStore(_StorePart):
             row = conn.execute(
                 """SELECT id FROM sessions
                    WHERE type = 'bot' AND bot_name = ? AND parent_session_id = ?
-                   ORDER BY datetime(created_at) DESC LIMIT 1""",
+                   ORDER BY id DESC LIMIT 1""",
                 (bot_name, parent_session_id),
             ).fetchone()
             return row["id"] if row else None

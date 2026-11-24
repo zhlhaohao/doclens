@@ -121,6 +121,19 @@ async def list_bots(session_id: str = Query(...)):
     return {"bots": out}
 
 
+def _held_task_id(hub, scope: str, name: str) -> Optional[int]:
+    """该 Bot 在 scope 内当前持有（in_progress/verifying）任务的 task_id。"""
+    sc = hub.try_scope(scope)
+    if sc is None:
+        return None
+    from planify.team import dag as D
+    for d in D.read_all_dags(sc.dags_dir):
+        for st in d["steps"].values():
+            if st.get("assignee") == name and st["status"] in (D.STEP_IN_PROGRESS, D.STEP_VERIFYING):
+                return st.get("task_id")
+    return None
+
+
 # ------------------------------------------------------------------ Bot 会话读
 
 @router.get("/team/bots/{name}/session")
@@ -193,8 +206,9 @@ async def bot_send(name: str, req: BotSendRequest):
     """
     hub, bot = require_bot(req.session_id, name)
     store = _store()
-    # 无任务纯对话按 (bot, parent) 复用最新会话；用户的输入触发会话创建
-    sid = store.find_or_create_bot_session(name, req.session_id, task_id=None)
+    # 会话归属：Bot 当前持有任务 → 该 task 的会话；否则纯对话会话（按 bot,parent 复用）
+    task_id = _held_task_id(hub, req.session_id, name)
+    sid = store.find_or_create_bot_session(name, req.session_id, task_id=task_id)
     store.append_item(SessionItem(session_id=sid, seq=store.next_seq(sid), kind="message_user",
                                   payload=json.dumps({"text": req.text}, ensure_ascii=False)))
     if hub.runner is not None and hub.runner.is_alive(req.session_id, name):

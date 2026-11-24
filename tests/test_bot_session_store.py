@@ -83,3 +83,14 @@ class TestBotSessionStore:
         store.append_item(SessionItem(session_id=sid, seq=1, kind="message_ai", payload="{}"))
         assert store.next_seq(sid) == 2
         assert store.get_bot_session_meta(sid)["last_persisted_seq"] == 1
+
+    def test_find_latest_prefers_newest_regardless_of_task(self, tmp_path):
+        """覆盖层打开时取最新会话（task 会话晚于纯对话创建时命中 task 会话）。"""
+        import time
+        store = _store(tmp_path)
+        parent = _mk_chat(store)
+        chat_sid = store.find_or_create_bot_session("alice", parent, task_id=None)
+        time.sleep(0.05)  # created_at 是 ISO 字串，需保证严格递增
+        task_sid = store.find_or_create_bot_session("alice", parent, task_id=3)
+        assert store.find_bot_session("alice", parent) == task_sid
+        assert chat_sid != task_sid
