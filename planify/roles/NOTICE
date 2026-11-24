@@ -1,0 +1,36 @@
+# NOTICE — planify/roles/
+
+本目录下的内置角色（`role.json` 与 `skills/`）移植自 **Pi Bot**：
+
+    Pi Bot — https://github.com/w01fb0ss/PiBot
+    Copyright 2026 The Pi Bot Authors
+    Licensed under the Apache License, Version 2.0.
+
+移植日期：2026-11-24（来源版本 v0.0.3，HEAD 7ad34f0）。本仓库同为 Apache-2.0。
+
+## 修改说明（Apache-2.0 §4(b)）
+
+以下文件为 Pi Bot 原始文件的**修改版**，非原样复制：
+
+- `*/role.json` — 由 Pi Bot `packages/teams/builtin/roles/<id>.pibot/team.json` 机械转换：
+  - `permissionOverrides` 翻译为 planify 工具白名单 `permissions.tools` / 黑名单 `permissions.forbid`
+    （`run_command: never` → forbid shell 工具；`write_file: never` → forbid write/edit；
+    `send_out` 无对应，丢弃）
+  - `systemPrompt` → `persona`；`avatarShape/Color/Eyes` + `quickPrompts` → `ui`；
+    `needs.imageGeneration` → `needs.image_generation`
+  - `groups[]` 不移植（本系统无群概念）
+  - 新增 `source` 字段注明来源
+- `*/skills/*/SKILL.md` — 由 Pi Bot 同路径 SKILL.md 转换：
+  - frontmatter `pibot-contract` → `contract`、`pibot-params` → `params`、`pibot-name` → `display_name`；
+    `pibot-version` 丢弃
+  - 正文顶部追加「运行环境说明」段（Pi Bot 专属工具 `office_*` / `review_finding` / `ask_bot` /
+    `assign_task` 在本环境不可用的替代说明）
+  - 正文其余内容原样保留
+- `default/role.json` — **非** Pi Bot 内容，为 planify 自加的安全兜底角色。
+
+转换脚本：`scripts/import_pibot_roles.py`（可从 Pi Bot 仓库重新生成）。
+
+## 商标
+
+「Pi Bot」「PiBot」名称与标识未经 Apache-2.0 §6 授权。本目录仅在与来源相关的描述性文字中
+使用该名称（`source` 字段、本文件、环境说明段），不以之作为本仓库任何产品、模块或角色的名称。

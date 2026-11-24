@@ -1,0 +1,7 @@
+{
+  "name": "my-plugin",
+  "version": "0.0.1",
+  "description": "Read-only example plugin",
+  "pibotApp": true,
+  "userConfig": {}
+}

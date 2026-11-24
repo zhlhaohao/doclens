@@ -1,0 +1,24 @@
+{
+  "format": "pibot-application",
+  "schemaVersion": 1,
+  "id": "my-plugin",
+  "card": {
+    "name": { "zh": "我的应用", "en": "My app" },
+    "category": "development",
+    "description": { "zh": "读取并处理数据", "en": "Read and process data" },
+    "modes": [
+      {
+        "id": "default",
+        "auth": "none",
+        "capability": { "zh": "通过 Pi Bot 使用", "en": "Use through Pi Bot" },
+        "help": { "zh": "应用由 Pi Bot 沙箱运行。", "en": "The app runs in Pi Bot's sandbox." },
+        "documentationUrl": "https://example.com"
+      }
+    ],
+    "platforms": ["darwin", "win32", "linux"]
+  },
+  "server": {
+    "entry": "server.mjs",
+    "networkDomains": []
+  }
+}
