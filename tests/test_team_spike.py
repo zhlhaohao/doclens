@@ -459,6 +459,8 @@ class TestStopAndRecover:
         assert all(s["status"] in (D.STEP_PENDING, D.STEP_READY) for s in d["steps"].values())
         assert sched.resume_dag("S1", r["dag_id"])
         assert D.read_dag(sc.dags_dir, r["dag_id"])["status"] == D.DAG_ACTIVE
+        # resume 清除 interrupted 标记（§4）：UI 的「（中断）」只标记 pause 留下的痕迹
+        assert not any(st.get("interrupted") for st in D.read_dag(sc.dags_dir, r["dag_id"])["steps"].values())
 
     def test_recover_paused_not_redispatched(self, tmp_path):
         """paused DAG 重启后不得复活（ADR-0060 §4）：状态归位但不重投递 assignment、
@@ -656,6 +658,38 @@ class TestShutdownTeam:
 
 
 class TestSessionSink:
+    def test_bot_notices_emitted(self, tmp_path):
+        """系统条目（ADR-0060 §3）：assignment 首派、redispatched 重派分隔行、
+        fix_required 打回、shutdown 退出——都经 sink 带 task_id。"""
+        events = []
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        runner.set_session_sink(lambda scope, name, ev: events.append(ev))
+        prov.set("alice", [
+            _idle(),
+            _write("r.md", "# r\n"), _complete(), _idle(),          # s1 首次
+            _text("thinking..."), _text("thinking..."), _text("thinking..."),
+        ])
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "start")
+        plan = {"name": "x", "steps": [{"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher",
+                                        "assignee": "alice", "max_fix_rounds": 2,
+                                        "acceptance": [{"check": "sections", "path": "r.md", "names": ["摘要"]}]}]}
+        r = json.loads(_with_scope("S1", H["group_plan"], plan))
+        _with_scope("S1", H["group_plan_start"], r["dag_id"])
+        sc = hub.scope("S1")
+        # 等到打回发生（fix_required 已发出）
+        _wait(lambda: any(e.get("notice_type") == "fix_required" for e in events), timeout=8, msg="fix_required notice")
+        # 手工塞第二条同 task 的 assignment → redispatched（Bot 线程活着在 idle）
+        tid = D.read_dag(sc.dags_dir, r["dag_id"])["steps"]["s1"]["task_id"]
+        sc.bus.send("system", "alice", json.dumps({"type": "assignment", "task_id": tid, "subject": "a",
+                                                   "instructions": "x", "output_dir": ""}), msg_type="assignment")
+        _wait(lambda: any(e.get("notice_type") == "redispatched" for e in events), timeout=5, msg="redispatched notice")
+        # 停线程 → shutdown notice
+        runner.shutdown_bot("S1", "alice")
+        _wait(lambda: any(e.get("notice_type") == "shutdown" for e in events), timeout=5, msg="shutdown notice")
+        types = [e["notice_type"] for e in events if e.get("type") == "bot_notice"]
+        assert types[0] == "assignment" and types.index("redispatched") > types.index("fix_required")
+        assert all(e.get("task_id") == tid for e in events if e.get("type") == "bot_notice")
+
     def test_plan_card_emitted_via_sink(self, tmp_path):
         """group_plan / revise / replan 返回前经 event_sink 发 plan_card（ADR-0060 §1）。"""
         hub, runner, sched, H, prov, wd = _build(tmp_path)

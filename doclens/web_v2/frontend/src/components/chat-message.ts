@@ -44,6 +44,28 @@ export class ChatMessageEl extends LitElement {
       display: block;
       max-width: 78%;
     }
+    /* Bot 会话系统条目（ADR-0060 §3）：居中分隔条，覆盖 user 侧的右对齐 */
+    :host([role="user"]:has(.notice)) {
+      align-self: center;
+      max-width: 100%;
+      align-items: center;
+    }
+    .notice {
+      max-width: 100%;
+      margin: 0.3em auto;
+      padding: 3px 12px;
+      border-radius: var(--cortex-radius-pill);
+      background: var(--cortex-bg);
+      color: var(--cortex-text-secondary);
+      font-size: var(--cortex-fs-xs);
+      text-align: center;
+      white-space: pre-wrap;
+    }
+    .notice.assign { background: var(--cortex-bg); color: var(--cortex-text); }
+    .notice.fix { background: var(--cortex-warning); color: var(--cortex-on-danger); }
+    .notice.redispatch { border: 1px dashed var(--cortex-border); background: transparent; }
+    .notice.stop { background: transparent; border: 1px solid var(--cortex-border-muted); }
+    .notice.reply { font-style: italic; }
     :host([role="user"]) {
       align-self: flex-end;
       /* 气泡 + 重问钮 纵向堆叠并靠右对齐 */
@@ -621,10 +643,19 @@ export class ChatMessageEl extends LitElement {
     return html`<plan-card .card=${card}></plan-card>`;
   }
 
+  private _renderNotice(m: ChatMessage) {
+    const t = m.notice ?? "";
+    const cls = { assignment: "assign", redispatched: "redispatch", fix_required: "fix",
+                  shutdown: "stop", user_reply: "reply" }[t] ?? "";
+    return html`<div class="notice ${cls}" role="note"><span>${m.content}</span></div>`;
+  }
+
   render() {
     if (!this.message) return null;
     // 计划卡（ADR-0060 §1）：独立卡片，不走气泡/操作行
     if (this.message.plan_card) return this._renderPlanCard(this.message.plan_card);
+    // Bot 会话系统条目（ADR-0060 §3）：居中分隔条，按 notice_type 着色，无操作行
+    if (this.message.notice) return this._renderNotice(this.message);
     const steps = this.message.tool_steps;
     // ask_user_question 的历史 step 渲染为折叠问答卡片（复用 ask-card 摘要态），
     // 不进 tool trace；check_background（后台命令轮询检查）频繁且无信息量，

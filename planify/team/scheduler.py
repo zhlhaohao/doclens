@@ -477,6 +477,9 @@ class Scheduler:
             return False
         dag["status"] = D.DAG_ACTIVE
         dag["stall_reason"] = None
+        # 被中断标记（§4）：resume 后清除——UI 的「（中断）」只标记 pause 留下的痕迹
+        for st in dag["steps"].values():
+            st.pop("interrupted", None)
         D.write_dag(sc.dags_dir, dag)
         self.reset_budget(scope_id, dag_id)  # 续跑给新一轮预算
         self.ensure_started()

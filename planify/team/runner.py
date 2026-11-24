@@ -90,6 +90,8 @@ class BotRunner:
         self._lock = threading.RLock()
         # 每线程当前持有的 task_id（sink 落库按 task 归会话用；线程退出时清）
         self._held: Dict[Tuple[str, str], Optional[int]] = {}
+        # 已在该会话里发过 assignment 条目的 task（再收到 = redispatched 分隔行）
+        self._noticed_tasks: Dict[Tuple[str, str, Optional[int]], bool] = {}
         # 角色 tools 是否**显式**含 write_file（researcher 要写交付物；default 仅靠 FORCED 写记忆）
         self._role_explicit_write: Dict[str, set] = {}
 
@@ -219,6 +221,17 @@ class BotRunner:
                             self._held[(scope, name)] = held_task
                             logger.info("[bot:%s] got assignment task=%s output=%s",
                                         name, held_task, held_output_dir)
+                            # 会话系统条目（ADR-0060 §3）：首次派单 = assignment；同 task 已有
+                            # 会话记录（recover 重投递 / 线程复活续写）= redispatched 分隔行——
+                            # 让用户知道 Bot 在这里失忆重来（会话不注入，§3）
+                            sid_seen = self._noticed_tasks.get((scope, name, held_task))
+                            self._noticed_tasks[(scope, name, held_task)] = True
+                            subj = payload.get("subject") or f"task #{held_task}"
+                            if sid_seen:
+                                self._emit_bot_notice(scope, name, "redispatched", f"⟲ 任务重派：{subj}", task_id=held_task)
+                            else:
+                                self._emit_bot_notice(scope, name, "assignment",
+                                                      f"系统派单：{subj}", task_id=held_task)
                             # 给 Bot 的任务说明：指令 + 交付物 + 验收 + 输出目录（程序组装，不靠模型猜）
                             msg = {**msg, "content": (
                                 f"Assignment task_id={held_task}\n"
@@ -241,6 +254,11 @@ class BotRunner:
                                 held_output_dir = payload.get("output_dir") or held_output_dir
                                 self._held[(scope, name)] = held_task
                                 logger.info("[bot:%s] resumed held task #%s from fix_required", name, held_task)
+                            fails = payload.get("failures") or []
+                            fail_txt = "；".join(str(f) for f in fails[:3]) if fails else ""
+                            self._emit_bot_notice(scope, name, "fix_required",
+                                                  f"验收未通过，打回修改：{fail_txt}" if fail_txt else "验收未通过，打回修改",
+                                                  task_id=held_task)
                         elif msg.get("type") == "user_message":
                             # 用户直接消息（ADR-0060 §3）：不是系统通知——用户在观看会话
                             # 并对 Bot 说话，须与 assignment / Bot 间消息区分。
@@ -368,6 +386,10 @@ class BotRunner:
                     # 非崩溃退出（主动停止 / 预算刹车 / idle 超时 / 进程退出）：任务回 ready，
                     # 由调度器重派——idle 超时和进程退出都不是 Bot 的失败
                     self._release_held_task(sc, held_task)
+            # 退出条目（ADR-0060 §3）：用户看到「Bot 已停止」而非会话凭空中断
+            self._emit_bot_notice(scope, name, "shutdown",
+                                  "Bot 线程已退出" + ("（LLM 异常）" if crashed else ""),
+                                  task_id=held_task)
             # jsonl 留痕已下线（ADR-0060 §3）：落库经 sink 逐条 append 到 sessions.db
             with self._lock:
                 self._threads.pop((scope, name), None)
@@ -390,16 +412,18 @@ class BotRunner:
             except Exception:  # noqa: BLE001
                 logger.exception("[bot:%s] session sink failed", name)
 
-    def _emit_bot_notice(self, scope: str, name: str, notice_type: str, text: str) -> None:
+    def _emit_bot_notice(self, scope: str, name: str, notice_type: str, text: str,
+                         task_id: Optional[int] = None) -> None:
         """Bot 会话的系统条目（ADR-0060 §3）——经 sink 落库（无 sink 时只记日志）。
 
         sink 由宿主在 bootstrap_team 时注入（`set_session_sink`）；Bot 侧只发事件，
-        不知道 sessions.db 存在。
+        不知道 sessions.db 存在。task_id 决定会话归属（与 message_ai 同口径）。
         """
         sink = getattr(self, "_session_sink", None)
         if sink is not None:
             try:
-                sink(scope, name, {"type": "bot_notice", "notice_type": notice_type, "text": text})
+                sink(scope, name, {"type": "bot_notice", "notice_type": notice_type,
+                                   "text": text, "task_id": task_id})
             except Exception:  # noqa: BLE001
                 logger.exception("[bot:%s] session sink failed", name)
         else:
