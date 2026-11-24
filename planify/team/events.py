@@ -51,10 +51,22 @@ class TeamEventBus:
     # ------------------------------------------------------------------ 生命周期
 
     def bind(self, loop: asyncio.AbstractEventLoop) -> None:
-        """绑定事件循环并起合并 task（宿主 lifespan startup）。"""
+        """绑定事件循环并起合并 task（宿主 lifespan startup 或首次 subscribe 时惰性）。"""
+        if self._loop is loop:
+            return
         self._loop = loop
         if self._flusher is None or self._flusher.done():
             self._flusher = loop.create_task(self._flush_loop())
+
+    def ensure_bound(self) -> None:
+        """惰性绑定：在 loop 线程上调用（SSE 端点 subscribe 时）。宿主 lifespan
+        阶段 agent 可能尚未装配（后台线程），装配期的 bind 常常拿不到 hub——
+        以首次订阅为准兜底。"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self.bind(loop)
 
     def unbind(self) -> None:
         """清空订阅者并停合并 task（shutdown_team 的最后一步）。"""
@@ -130,6 +142,7 @@ class TeamEventBus:
     # ------------------------------------------------------------------ 订阅（loop 线程）
 
     def subscribe(self, scope: str, bot: str) -> asyncio.Queue:
+        self.ensure_bound()
         q: asyncio.Queue = asyncio.Queue(maxsize=_QUEUE_MAX)
         with self._lock:
             self._subs.setdefault((scope, bot), _Subscription()).clients.add(q)

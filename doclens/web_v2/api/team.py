@@ -73,7 +73,6 @@ def make_session_sink():
         # 否则按该 Bot 在 scope 内的在跑任务）
         task_id = event.get("task_id")
         sid = store.find_or_create_bot_session(bot_name, scope, task_id=task_id)
-        seq = store.next_seq(sid)
         if etype == "message_ai":
             kind, payload = "message_ai", json.dumps({"text": event["text"], "references": []}, ensure_ascii=False)
         elif etype == "tool_step":
@@ -85,7 +84,9 @@ def make_session_sink():
             payload = json.dumps({"notice_type": event["notice_type"], "text": event["text"]}, ensure_ascii=False)
         else:
             return
-        store.append_item(SessionItem(session_id=sid, seq=seq, kind=kind, payload=payload))
+        seq = store.append_item_auto_seq(sid, kind, payload)
+        if seq is None:
+            return  # 父会话已删
         # 通知观看者（先存后发）
         if etype != "bot_notice":
             hub.events.publish(scope, bot_name, {"type": "persisted", "kind": kind, "seq": seq})
@@ -99,6 +100,7 @@ def make_session_sink():
 async def list_bots(session_id: str = Query(...)):
     """全部 Bot 实体（全局），标注租约 / 状态 / 记忆摘要 / 当前任务。"""
     hub = _hub()
+    await _ensure_scope(hub, session_id)
     out = []
     for b in hub.registry.list_all():
         name = b["name"]
@@ -122,7 +124,12 @@ async def list_bots(session_id: str = Query(...)):
 
 
 def _held_task_id(hub, scope: str, name: str) -> Optional[int]:
-    """该 Bot 在 scope 内当前持有（in_progress/verifying）任务的 task_id。"""
+    """会话归属口径（与 runner sink 一致）：线程当前持有的 task；线程不在时退回
+    scope 内该 Bot 在跑步骤的 task（recover 后线程未起、任务已派的窗口）。"""
+    if hub.runner is not None:
+        t = hub.runner.held_task(scope, name)
+        if t is not None:
+            return t
     sc = hub.try_scope(scope)
     if sc is None:
         return None
@@ -134,11 +141,22 @@ def _held_task_id(hub, scope: str, name: str) -> Optional[int]:
     return None
 
 
+async def _ensure_scope(hub, scope_id: str):
+    """首次访问该会话的团队数据时惰性建立 scope（ADR-0059 §11e：reclaim 租约 +
+    recover DAG）。hub.scope() 会同步跑 recover_scope + 可能起调度线程，故 to_thread；
+    已建立后 try_scope 命中、零开销。"""
+    if hub.try_scope(scope_id) is not None:
+        return
+    await asyncio.to_thread(hub.scope, scope_id)
+
+
 # ------------------------------------------------------------------ Bot 会话读
 
 @router.get("/team/bots/{name}/session")
 async def bot_session(name: str, session_id: str = Query(...)):
     """Bot 会话 detail（§3）：含 generating + last_persisted_seq（恢复协议）。"""
+    hub = _hub()
+    await _ensure_scope(hub, session_id)
     hub, bot = require_bot(session_id, name)
     store = _store()
     sid = store.find_bot_session(name, session_id)
@@ -159,6 +177,8 @@ async def bot_session(name: str, session_id: str = Query(...)):
 
 @router.get("/team/bots/{name}/stream")
 async def bot_stream(name: str, session_id: str = Query(...)):
+    hub = _hub()
+    await _ensure_scope(hub, session_id)
     hub, bot = require_bot(session_id, name)
 
     async def event_stream():
@@ -204,13 +224,14 @@ async def bot_send(name: str, req: BotSendRequest):
 
     用户的 message_user 由本端点（API 线程）落库——Bot 线程不落用户消息，避免双写。
     """
+    hub = _hub()
+    await _ensure_scope(hub, req.session_id)
     hub, bot = require_bot(req.session_id, name)
     store = _store()
     # 会话归属：Bot 当前持有任务 → 该 task 的会话；否则纯对话会话（按 bot,parent 复用）
     task_id = _held_task_id(hub, req.session_id, name)
     sid = store.find_or_create_bot_session(name, req.session_id, task_id=task_id)
-    store.append_item(SessionItem(session_id=sid, seq=store.next_seq(sid), kind="message_user",
-                                  payload=json.dumps({"text": req.text}, ensure_ascii=False)))
+    store.append_item_auto_seq(sid, "message_user", json.dumps({"text": req.text}, ensure_ascii=False))
     if hub.runner is not None and hub.runner.is_alive(req.session_id, name):
         sc = hub.scope(req.session_id)
         sc.bus.send("user", name, req.text, msg_type="user_message")
@@ -230,6 +251,8 @@ class BotStopRequest(BaseModel):
 @router.post("/team/bots/{name}/stop")
 async def bot_stop(name: str, req: BotStopRequest):
     """Bot 级「暂停」= 该 Bot 持有任务所属的 DAG 暂停（§4）；无任务只 shutdown 线程。"""
+    hub = _hub()
+    await _ensure_scope(hub, req.session_id)
     hub, bot = require_bot(req.session_id, name)
     sc = hub.try_scope(req.session_id)
     dag_ids = []
@@ -254,6 +277,8 @@ async def bot_stop(name: str, req: BotStopRequest):
 @router.post("/team/bots/{name}/delete")
 async def bot_delete(name: str, session_id: str = Query(...)):
     """删实体：实体 + 记忆 + **本会话**的 bot 会话行；其他会话的历史留痕保留不可读。"""
+    hub = _hub()
+    await _ensure_scope(hub, session_id)
     hub, bot = require_bot(session_id, name)
     if hub.runner is not None:
         hub.runner.shutdown_bot(session_id, name)
@@ -269,6 +294,7 @@ async def bot_delete(name: str, session_id: str = Query(...)):
 async def list_dags(session_id: str = Query(...)):
     """当前 scope 的 DAG + 步骤 + 验收（5s 轮询，不监听文件事件，§11g）。"""
     hub = _hub()
+    await _ensure_scope(hub, session_id)
     sc = hub.try_scope(session_id)
     if sc is None:
         return {"dags": []}

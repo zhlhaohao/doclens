@@ -221,16 +221,26 @@ class BotRegistry:
                     n += 1
             return n
 
-    def reclaim_for_scope(self, scope: str) -> List[Dict[str, Any]]:
-        """重启恢复：把 created_by == scope 的 Bot 重新租给该 scope。
+    def reclaim_for_scope(self, scope: str, active_assignees: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """重启恢复：把本 scope 的 Bot 重新租给该 scope。
 
-        租约是运行态（重启清空），但「Bot 属于哪个 scope」是持久事实（created_by）——
-        靠它恢复，否则调度器派单时找不到可复活的 Bot（§11e）。
+        租约是运行态（重启清空），但「Bot 属于哪个 scope」是持久事实——靠它
+        恢复，否则调度器派单时找不到可复活的 Bot（§11e）。
+
+        **归属口径（ADR-0060 真机验收修订）**：`active_assignees` 给定时（该 scope
+        DAG 里 in_progress/verifying 步骤的 assignee）**优先认领**——Bot 由会话 A
+        创建、会话 B 复活在跑任务，重启后应回到 B（任务还等着它），而非 A。
+        无活跃步骤的 Bot 退回 `created_by`。已被认领的不重复认领。
         """
         with self._lock:
             out = []
             for bot in self.list_all():
-                if bot.get("created_by") == scope and not bot.get("leased_by"):
+                if bot.get("leased_by"):
+                    continue
+                name = bot.get("name")
+                by_active = bool(active_assignees) and name in set(active_assignees or [])
+                by_created = bot.get("created_by") == scope
+                if by_active or by_created:
                     bot["leased_by"] = scope
                     bot["status"] = BOT_SHUTDOWN
                     self._save(bot)

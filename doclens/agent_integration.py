@@ -587,6 +587,11 @@ class CortexAgent:
             try:
                 from doclens.web_v2.api.team import make_session_sink
                 _hub.runner.set_session_sink(make_session_sink())
+                # 事件总线绑 loop：装配在后台线程跑，从 watch_broker 拿主 loop
+                from doclens.web_v2.watch_broker import get_watch_broker
+                _loop = getattr(get_watch_broker(), "_loop", None)
+                if _loop is not None:
+                    _loop.call_soon_threadsafe(_hub.events.bind, _loop)
             except Exception:  # noqa: BLE001
                 logging.getLogger(__name__).exception("[team] session sink wiring failed")
         except Exception:  # noqa: BLE001

@@ -104,6 +104,11 @@ class BotRunner:
             ev = self._alive.get((scope, name))
             return bool(ev) and not ev.is_set()
 
+    def held_task(self, scope: str, name: str) -> Optional[int]:
+        """线程当前持有的 task_id（sink 落库与用户发消息的会话归属用同一口径）。"""
+        with self._lock:
+            return self._held.get((scope, name))
+
     def shutdown_bot(self, scope: str, name: str) -> None:
         with self._lock:
             ev = self._alive.get((scope, name))

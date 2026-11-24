@@ -15,7 +15,7 @@ import {
 import { isOutsideWorkdir } from "../utils/browse-path";
 
 function isMainView(v: string): v is MainView {
-  return v === "search" || v === "chat" || v === "files" || v === "diary";
+  return v === "search" || v === "chat" || v === "files" || v === "diary" || v === "team";
 }
 
 /** 安装集中写入器；返回退订函数（app 挂/卸对称 + 测试用）。

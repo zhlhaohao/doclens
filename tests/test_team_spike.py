@@ -218,6 +218,23 @@ class TestRegistry:
         assert reg.release_all_leases() == 2
         assert all(b["leased_by"] is None and b["status"] == "shutdown" for b in reg.list_all())
 
+    def test_reclaim_prefers_active_assignee(self, tmp_path):
+        """Bot 由 A 创建、B 复活在跑任务：重启后 B 的活跃步骤优先拿回租约（ADR-0060 修订）。"""
+        reg = BotRegistry(tmp_path, ["researcher"])
+        reg.spawn("alice", "researcher", "A")
+        reg.release("alice", "A")
+        reg.spawn("alice", "researcher", "B")  # B 复活（created_by 仍是 A）
+        reg.release_all_leases()  # 重启
+        # B 的 scope 先恢复，带活跃 assignee
+        got = reg.reclaim_for_scope("B", active_assignees=["alice"])
+        assert [b["name"] for b in got] == ["alice"]
+        assert reg.get("alice")["leased_by"] == "B"
+        # A 随后恢复：已被认领，不重复
+        assert reg.reclaim_for_scope("A") == []
+        # 无活跃步骤时退回 created_by
+        reg.release_all_leases()
+        assert [b["name"] for b in reg.reclaim_for_scope("A")] == ["alice"]
+
     def test_delete_only_by_holder(self, tmp_path):
         reg = BotRegistry(tmp_path, ["researcher"])
         reg.spawn("a", "researcher", "S1")
@@ -503,7 +520,8 @@ class TestStopAndRecover:
         hub2.scope("S1")  # 注册 scope（recover_scope 用 try_scope 查注册表）
         n = sched2.recover_scope("S1")
         assert n == 1
-        _wait(lambda: len(hub2.scope("S1").bus.read_inbox("alice")) > 0, msg="assignment redelivered")
+        # 重投递的 assignment 会被复活的线程立刻读走——断言线程被拉起即可
+        _wait(lambda: runner2.is_alive("S1", "alice"), msg="bot revived by redelivery")
 
     def test_pause_one_dag_does_not_stop_other_bots(self, tmp_path):
         """per-DAG 暂停（Bot 会话页「暂停」）：只停目标 DAG 的 Bot，其他 Bot 不收 shutdown。"""

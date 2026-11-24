@@ -1085,6 +1085,28 @@ class SessionsStore(_StorePart):
             )
             return cur.rowcount
 
+    def append_item_auto_seq(self, session_id: str, kind: str, payload: str) -> Optional[int]:
+        """锁内取 max(seq)+1 并插入（原子）——多写者（API 线程 + Bot 线程）同一
+        会话并发 append 时 next_seq/append_item 两步会撞 seq。返回分配的 seq；
+        父会话已删（FK）返回 None。"""
+        now = datetime.now(timezone.utc).isoformat()
+        try:
+            with self._lock, self._conn() as conn:
+                row = conn.execute(
+                    "SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM session_items WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+                seq = int(row["n"])
+                conn.execute(
+                    """INSERT INTO session_items (session_id, seq, kind, payload, created_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (session_id, seq, kind, payload, now),
+                )
+                return seq
+        except sqlite3.IntegrityError:
+            logger.debug("append_item dropped (session gone): %s", session_id)
+            return None
+
     def update_count_and_time(self, session_id: str, message_count: int) -> None:
         with self._lock, self._conn() as conn:
             conn.execute(

@@ -66,6 +66,7 @@ export class TeamView extends LitElement {
     .empty doclens-icon { font-size: 40px; opacity: .4; }
     .empty h3 { margin: .6em 0 .2em; font-weight: 600; }
     .empty p { margin: 0 0 1em; font-size: var(--cortex-fs-sm); }
+    .recent { display: flex; gap: var(--cortex-space-2); flex-wrap: wrap; justify-content: center; }
     .strip { display: flex; gap: var(--cortex-space-2); flex-wrap: wrap; align-items: center; margin-bottom: var(--cortex-space-3); }
     .tab {
       display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
@@ -133,18 +134,34 @@ export class TeamView extends LitElement {
   @state() private _selected: number | null = null;
   @state() private _dialogBot: string | null = null;
   @state() private _error: string | null = null;
+  @state() private _recent: { id: string; title: string }[] = [];
 
   private _timer: number | null = null;
 
   private get _sid(): string { return store.getState().chat.currentSession?.id ?? ""; }
 
+  private _unsub: (() => void) | null = null;
+
   connectedCallback() {
     super.connectedCallback();
+    // 父会话切换 → 关闭覆盖层（Bot 归属随会话变；旧会话的 Bot 对新会话不可见）
+    this._unsub = store.subscribeSelector(
+      (s) => s.chat.currentSession?.id ?? "",
+      (sid) => {
+        if (this._dialogBot !== null) this._dialogBot = null;
+        this._selected = null;
+        void sid;
+        this._start();
+        void this._refresh();
+      },
+    );
     this._start();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this._unsub?.();
+    this._unsub = null;
     this._stop();
   }
 
@@ -164,9 +181,32 @@ export class TeamView extends LitElement {
     if (this._timer !== null) { window.clearInterval(this._timer); this._timer = null; }
   }
 
+  private async _pickSession(id: string) {
+    const { actions } = await import("../state/store");
+    const { fetchSessionDetail } = await import("../api/sessions");
+    try {
+      const d = await fetchSessionDetail(id, { metaOnly: true });
+      actions.setChatState({ currentSession: {
+        id: d.id, type: "chat", title: d.title, preview: d.preview,
+        updated_at: d.updated_at, message_count: d.message_count,
+      } });
+    } catch { /* 会话已删等 */ }
+  }
+
   private async _refresh() {
     const sid = this._sid;
-    if (!sid) { this._dags = []; this._bots = []; return; }
+    if (!sid) {
+      this._dags = []; this._bots = [];
+      // 空态：列最近 chat 会话供选择（不设 currentSession，用户点才设）
+      if (this._recent.length === 0) {
+        try {
+          const { listSessions } = await import("../api/sessions");
+          const r = await listSessions({ type: "chat", limit: 5 });
+          this._recent = r.sessions;
+        } catch { /* ignore */ }
+      }
+      return;
+    }
     try {
       const [dags, bots] = await Promise.all([listDags(sid), listBots(sid)]);
       this._dags = dags;
@@ -218,7 +258,12 @@ export class TeamView extends LitElement {
           <div class="empty">
             <doclens-icon name="users"></doclens-icon>
             <h3>团队</h3>
-            <p>先在「个人助手」里开始一个对话，再让助手派活给 Bot。</p>
+            <p>团队视图展示当前对话的计划与 Bot。先选一个对话，或去「个人助手」让助手派活。</p>
+            ${this._recent.length ? html`
+              <div class="recent">
+                ${this._recent.map((s) => html`
+                  <button class="tab" @click=${() => this._pickSession(s.id)}>${s.title || "（无标题）"}</button>`)}
+              </div>` : nothing}
           </div>
         ` : this._dags.length === 0 ? html`
           <div class="empty">

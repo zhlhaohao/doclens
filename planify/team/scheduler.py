@@ -509,7 +509,13 @@ class Scheduler:
         sc = self.hub.try_scope(scope_id)
         if sc is None:
             return 0
-        self.hub.registry.reclaim_for_scope(scope_id)
+        # 活跃步骤的 assignee 优先认领租约（Bot 可能由别的会话创建、本会话复活在跑）
+        active: List[str] = []
+        for dag in D.read_all_dags(sc.dags_dir):
+            for st in dag["steps"].values():
+                if st["status"] in (D.STEP_IN_PROGRESS, D.STEP_VERIFYING) and st.get("assignee"):
+                    active.append(st["assignee"])
+        self.hub.registry.reclaim_for_scope(scope_id, active_assignees=active)
         n = 0
         for dag in D.read_all_dags(sc.dags_dir):
             if dag["status"] not in (D.DAG_ACTIVE, D.DAG_PAUSED):

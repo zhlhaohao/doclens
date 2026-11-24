@@ -84,3 +84,25 @@ async def test_unbind_clears_subscribers():
     bus.publish("S1", "alice", {"type": "tool_call"})
     await asyncio.sleep(0.05)
     assert q.empty()
+
+
+@pytest.mark.asyncio
+async def test_lazy_bind_on_subscribe():
+    """宿主 lifespan 拿不到 hub 时（agent 后台装配），首次 subscribe 惰性绑定。"""
+    bus = TeamEventBus()
+    q = bus.subscribe("S1", "alice")  # 未 bind
+    bus.publish("S1", "alice", {"type": "tool_call"})
+    ev = await asyncio.wait_for(q.get(), 1)
+    assert ev["type"] == "tool_call"
+    bus.unbind()
+
+
+@pytest.mark.asyncio
+async def test_bind_idempotent_same_loop():
+    bus = TeamEventBus()
+    loop = asyncio.get_running_loop()
+    bus.bind(loop)
+    t1 = bus._flusher
+    bus.bind(loop)
+    assert bus._flusher is t1  # 同 loop 不重复合并 task
+    bus.unbind()
