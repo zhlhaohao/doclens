@@ -124,18 +124,27 @@ class TestReplan:
         assert not out["ok"] and "not stalled" in out.get("issue", {}).get("message", "") or "Error" in str(out)
 
     def test_replan_max_twice(self, env):
+        """纯状态机测试：不依赖调度器——手动 stall，避免与调度器派单竞争写 DAG 文件。"""
         hub, H, MAX = env
-        dag_id = _make_stalled(hub, H, failed="s2", done=("s1",))
+        r = _J(H["group_plan"](PLAN))
+        dag_id = r["dag_id"]
+        _J(H["group_plan_start"](dag_id))
+        sc = hub.scope("S1")
         new = {"steps": [{"step_id": "s2", "subject": "b", "instructions": "y", "role": "researcher", "assignee": "kit"}]}
-        for _ in range(MAX):
-            assert json.loads(H["group_plan_replan"](dag_id, new))["ok"]
-            H["group_plan_start"](dag_id)
-            # 再次 stall
-            sc = hub.scope("S1")
+        for i in range(MAX):
+            # 手动 stall（s1 已 done，s2 failed）
             dag = D.read_dag(sc.dags_dir, dag_id)
             dag["status"] = D.DAG_STALLED
+            dag["steps"]["s1"]["status"] = D.STEP_DONE
             dag["steps"]["s2"]["status"] = D.STEP_FAILED
             D.write_dag(sc.dags_dir, dag)
+            out = _J(H["group_plan_replan"](dag_id, new))
+            assert out["ok"], (i, out)
+            assert _J(H["group_plan_start"](dag_id))["ok"]
+        dag = D.read_dag(sc.dags_dir, dag_id)
+        dag["status"] = D.DAG_STALLED
+        dag["steps"]["s2"]["status"] = D.STEP_FAILED
+        D.write_dag(sc.dags_dir, dag)
         out = H["group_plan_replan"](dag_id, new)
         assert "already replanned" in out
 

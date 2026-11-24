@@ -58,6 +58,9 @@ class Scheduler:
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="dag-verify")
         self._lock = threading.RLock()
         self._pending_verifies: set = set()  # (scope, dag_id, step_id) in flight
+        # 预算（ADR-0059 §12）：per (scope, dag) LLM 调用计数，内存态
+        self._budget_lock = threading.Lock()
+        self._llm_calls: Dict[tuple, int] = {}
 
     # ------------------------------------------------------------ 生命周期
 
@@ -256,6 +259,46 @@ class Scheduler:
             self.spawner(sc.scope_id, bot_name, "You have a new assignment; check your inbox.")
             logger.info("[scheduler] revived bot %s for scope %s", bot_name, sc.scope_id)
 
+    # ------------------------------------------------------------ 预算
+
+    def bump_llm_calls(self, scope_id: str, dag_id: int) -> Optional[int]:
+        """Bot 每次 LLM 调用后递增 DAG 计数。超过 max_llm_calls 时把 DAG 转 stalled 并
+        返回当前计数（调用方据此通知 Bot 停下）；未超返回 None。内存计数，不落盘。"""
+        with self._budget_lock:
+            n = self._llm_calls.get((scope_id, dag_id), 0) + 1
+            self._llm_calls[(scope_id, dag_id)] = n
+        if n > self.max_llm_calls:
+            sc = self.hub.try_scope(scope_id)
+            if sc is not None:
+                dag = D.read_dag(sc.dags_dir, dag_id)
+                if dag and dag["status"] == D.DAG_ACTIVE:
+                    # 预算超限 = 刹车不是失败：转 paused（可直接 group_plan_resume 续跑，
+                    # resume 重置预算），failed_step 留空，在跑步骤回 ready
+                    dag["status"] = D.DAG_PAUSED
+                    dag["stall_reason"] = "llm_budget_exceeded"
+                    dag["failed_step"] = None
+                    for st in dag["steps"].values():
+                        if st["status"] in (D.STEP_IN_PROGRESS, D.STEP_VERIFYING):
+                            st["status"] = D.STEP_READY  # 可 retry/replan 续跑
+                    dag["llm_calls"] = n
+                    D.write_dag(sc.dags_dir, dag)
+                    sc.bus.send("system", "lead", json.dumps({
+                        "type": "dag_stalled", "dag_id": dag_id, "failed_step": None,
+                        "reason": "llm_budget_exceeded",
+                        "detail": f"DAG used {n} LLM calls (limit {self.max_llm_calls}); replan or retry to continue",
+                    }), msg_type="dag_stalled")
+                    # 在跑 Bot 停下
+                    for bot in self.hub.registry.leased_by_scope(scope_id):
+                        if self.thread_alive(scope_id, bot["name"]):
+                            sc.bus.send("system", bot["name"], "", msg_type="shutdown_request")
+            return n
+        return None
+
+    def reset_budget(self, scope_id: str, dag_id: int) -> None:
+        """retry / replan 续跑时重置计数（否则一续跑立刻又超限）。"""
+        with self._budget_lock:
+            self._llm_calls.pop((scope_id, dag_id), None)
+
     # ------------------------------------------------------------ 验收
 
     @staticmethod
@@ -349,7 +392,9 @@ class Scheduler:
         if not dag or dag["status"] != D.DAG_PAUSED:
             return False
         dag["status"] = D.DAG_ACTIVE
+        dag["stall_reason"] = None
         D.write_dag(sc.dags_dir, dag)
+        self.reset_budget(scope_id, dag_id)  # 续跑给新一轮预算
         self.ensure_started()
         self.wake()
         return True

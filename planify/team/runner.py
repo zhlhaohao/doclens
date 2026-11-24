@@ -134,6 +134,7 @@ class BotRunner:
             messages.append({"role": "user", "content": prompt})
         held_task: Optional[int] = None
         held_output_dir: Optional[str] = None
+        budget_stopped = False  # 预算超限退出：按主动停止语义（任务回 ready），不是失败
         try:
             while not stop.is_set():
                 # ---------- WORK（一轮：消费收件箱 → LLM → 工具，直到非 tool_use 或 idle）
@@ -170,6 +171,15 @@ class BotRunner:
                         # LLM 失败 → 线程退出（finally 把持有任务标 failed，§11b）
                         logger.exception("[bot:%s] LLM call failed; thread exits", name)
                         return
+                    # 预算（ADR-0059 §12）：持有任务时给所属 DAG 计数；超限 → 调度器已把 DAG 转
+                    # stalled 并发 shutdown_request，本线程按主动停止路径退出（任务回 ready）
+                    if held_task is not None and self.hub.scheduler is not None:
+                        t = sc.tasks.get_raw(held_task)
+                        dag_id = (t or {}).get("dag_id")
+                        if dag_id is not None and self.hub.scheduler.bump_llm_calls(scope, int(dag_id)) is not None:
+                            logger.warning("[bot:%s] DAG #%s exceeded LLM budget; stopping", name, dag_id)
+                            budget_stopped = True
+                            return
                     blocks = []
                     for b in resp.content:
                         bt = getattr(b, "type", None) if not isinstance(b, dict) else b.get("type")
@@ -223,8 +233,8 @@ class BotRunner:
         finally:
             registry.set_status(name, "shutdown", scope)
             if held_task is not None:
-                if stop.is_set():
-                    # 主动停止（shutdown_bot / 停止=停全部 / 会话删除）：任务释放回 ready，
+                if stop.is_set() or budget_stopped:
+                    # 主动停止（shutdown_bot / 停止=停全部 / 会话删除 / 预算超限）：任务释放回 ready，
                     # 由调度器重派——不是失败
                     self._release_held_task(sc, held_task)
                 else:

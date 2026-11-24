@@ -206,6 +206,8 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             _grant_output_dir(sc_id, Path(dag["output_dir"]))
             _clear_pending(sc, dag_id)
             if hub.scheduler is not None:
+                # start 既可能是新 DAG 也可能是 replan 后的续跑——统一重置预算
+                hub.scheduler.reset_budget(sc_id, dag_id)
                 hub.scheduler.ensure_started()
                 hub.scheduler.wake()
             return json.dumps({"ok": True, "dag_id": dag_id, "status": "active"})
@@ -341,6 +343,7 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             dag["failed_step"] = None
             D.write_dag(sc.dags_dir, dag)
             if hub.scheduler is not None:
+                hub.scheduler.reset_budget(sc_id, dag_id)
                 hub.scheduler.ensure_started()
                 hub.scheduler.wake()
             return json.dumps({"ok": True, "dag_id": dag_id, "step_id": step_id, "status": "active"})
