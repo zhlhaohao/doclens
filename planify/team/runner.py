@@ -43,6 +43,8 @@ _BUILTIN_TOOL_DEFS = [
     {"name": "task_update", "description": "Report your held task completed. The program then runs acceptance.",
      "input_schema": {"type": "object", "properties": {"status": {"type": "string", "enum": ["completed"]}},
                       "required": ["status"]}},
+    {"name": "load_skill", "description": "Load one of your role's skills (listed in your prompt) for its method.",
+     "input_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}},
 ]
 
 
@@ -196,6 +198,9 @@ class BotRunner:
                             out = sc.bus.send(name, b["input"].get("to", "lead"), b["input"].get("content", ""))
                         elif b["name"] == "read_inbox":
                             out = json.dumps(sc.bus.read_inbox(name), ensure_ascii=False)
+                        elif b["name"] == "load_skill":
+                            # 角色技能（planify/roles/<role>/skills/）——不走宿主 doclens 技能目录
+                            out = role.load_skill(b["input"].get("name", ""))
                         else:
                             out = self._run_capability(b, scope, name, held_output_dir)
                         results.append({"type": "tool_result", "tool_use_id": b["id"], "content": str(out)})

@@ -63,11 +63,61 @@ class Role:
         picked |= FORCED_BOT_TOOLS & set(all_tools)
         return [t for t in all_tools if t in picked]
 
+    # ------------------------------------------------------------ 角色技能
+
+    def skills_root(self) -> Path:
+        return ROLES_DIR / self.id / "skills"
+
+    def skill_md(self, name: str) -> Optional[Path]:
+        """角色技能 SKILL.md 路径（按 lang，缺则回退另一语言）。技能须在 role.skills 清单内。"""
+        if name not in self.skills:
+            return None
+        root = self.skills_root() / name
+        for lang in (self.lang, "zh", "en"):
+            p = root / lang / "SKILL.md"
+            if p.exists():
+                return p
+        return None
+
+    @staticmethod
+    def _split_frontmatter(text: str) -> tuple:
+        import re as _re
+        m = _re.match(r"^---\n(.*?)\n---\n?(.*)$", text, _re.S)
+        return (m.group(1), m.group(2)) if m else ("", text)
+
+    def load_skill(self, name: str) -> str:
+        """Bot 的 load_skill：返回角色技能正文（含 Base directory 头）。"""
+        p = self.skill_md(name)
+        if not p:
+            avail = ", ".join(self.skills) or "(none)"
+            return f"Error: role '{self.id}' has no skill '{name}'. Available: {avail}"
+        text = p.read_text(encoding="utf-8")
+        _, body = self._split_frontmatter(text)
+        return f"Base directory for this skill: {p.parent}\n\n<skill name=\"{name}\">\n{body}\n</skill>"
+
+    def skill_contract(self, name: str) -> Optional[Dict[str, Any]]:
+        """角色技能契约（SKILL.md frontmatter metadata.contract）。无则 None。"""
+        p = self.skill_md(name)
+        if not p:
+            return None
+        fm, _ = self._split_frontmatter(p.read_text(encoding="utf-8"))
+        # frontmatter 是 YAML；contract 以 `  contract: {...json...}` 形式内嵌
+        import re as _re
+        m = _re.search(r"^\s+contract:\s*(\{.*\})\s*$", fm, _re.M)
+        if not m:
+            return None
+        try:
+            return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            return None
+
     def system_prompt(self, bot_name: str, workdir: Path) -> str:
+        skills_line = "\n".join(f"- {s}" for s in self.skills) if self.skills else "(none)"
         return (
             f"You are '{bot_name}', role: {self.id} v{self.version}, working at {workdir}.\n\n"
             f"{self.text(self.persona)}\n\n"
             f"Working norms:\n{self.text(self.norms)}\n\n"
+            f"Your role's skills (load with load_skill(name) when the task matches):\n{skills_line}\n\n"
             "Report completion through task_update; the program verifies acceptance, not you. "
             "Use idle when done with current work."
         )

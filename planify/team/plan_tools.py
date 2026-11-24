@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ..skills.access_state import get_current_session_id
 from . import dag as D
-from .dag import PlanIssue, validate_plan
+from .dag import PlanIssue, merge_skill_contracts, validate_plan
 
 logger = logging.getLogger("planify.team.plan_tools")
 
@@ -126,6 +126,17 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             bots = hub.registry.leased_by_scope(sc_id)
             bot_roles = {b["name"]: b["role"] for b in bots}
             norm = validate_plan(plan, role_ids=hub.roles.ids(), bot_names=list(bot_roles), bot_roles=bot_roles)
+            # skill 字段：须存在于 owner 角色 skills（ADR-0059 §5）
+            for s in norm["steps"]:
+                sk = s.get("skill")
+                if sk and sk not in hub.roles.get(s["role"]).skills:
+                    raise PlanIssue("skill_unknown", ["steps", s["step_id"], "skill"],
+                                    f"Step {s['step_id']}: role '{s['role']}' has no skill '{sk}'",
+                                    expected=", ".join(hub.roles.get(s["role"]).skills) or "(none)")
+            # 契约合并（lead 显式写的优先，验收只能收紧）
+            merged = merge_skill_contracts(norm["steps"], hub.roles.get)
+            if merged:
+                norm.setdefault("repairs", []).extend(merged)
             dag_id = D.next_dag_id(sc.dags_dir)
             slug = "".join(c if c.isalnum() or c in "-_" else "-" for c in norm["name"])[:40].strip("-") or "plan"
             out = Path(workdir) / "输出" / f"{dag_id}-{slug}"
@@ -153,6 +164,12 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             bots = hub.registry.leased_by_scope(sc_id)
             bot_roles = {b["name"]: b["role"] for b in bots}
             norm = validate_plan(plan, role_ids=hub.roles.ids(), bot_names=list(bot_roles), bot_roles=bot_roles)
+            for s in norm["steps"]:
+                sk = s.get("skill")
+                if sk and sk not in hub.roles.get(s["role"]).skills:
+                    raise PlanIssue("skill_unknown", ["steps", s["step_id"], "skill"],
+                                    f"Step {s['step_id']}: role '{s['role']}' has no skill '{sk}'")
+            merge_skill_contracts(norm["steps"], hub.roles.get)
             dag["plan"] = norm
             dag["steps"] = {s["step_id"]: {"task_id": None, "status": D.STEP_PENDING, "fix_rounds": 0} for s in norm["steps"]}
             D.write_dag(sc.dags_dir, dag)

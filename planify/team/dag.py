@@ -263,7 +263,7 @@ def validate_plan(
                     expected=f"assignee with role '{s['role']}'",
                 )
 
-    # acceptance check 类型合法
+    # acceptance check 类型合法 + skill 存在于 owner 角色
     for s in steps:
         for a in s.get("acceptance", []) or []:
             if a.get("check") not in VALID_CHECKS:
@@ -272,8 +272,106 @@ def validate_plan(
                     f"Step {s['step_id']}: unknown check '{a.get('check')}'",
                     expected=", ".join(sorted(VALID_CHECKS)),
                 )
+        if s.get("skill") is not None:
+            if not isinstance(s["skill"], str):
+                raise PlanIssue("skill_invalid", ["steps", s["step_id"], "skill"], f"Step {s['step_id']}: skill must be a string")
 
     return {"name": str(plan.get("name") or "plan"), "steps": steps, "repairs": repairs}
+
+
+# ------------------------------------------------------------------ 契约合并
+
+#: Pi Bot contract 的 check 名 → planify 验收 check 名（本期不支持的类型静默丢弃并记 notes）
+_CHECK_MAP = {
+    "exists": "exists",
+    "sections": "sections",
+    "minCitations": "min_citations",
+    "sectionsSourced": None,   # 本期不做
+    "tableColumns": None,
+    "hasChart": None,
+    "fileNaming": None,
+    "gbt7714": None,
+    "verdict": None,
+    "manual": "manual",
+}
+
+
+def merge_skill_contracts(steps: List[Dict[str, Any]], role_lookup) -> List[str]:
+    """把 step.skill 对应的角色技能契约并入 step（就地修改）。返回合并说明。
+
+    规则：lead 显式写的 deliverables/acceptance **优先**；契约补充缺的；验收只能收紧
+    （min 数值取大、names 取并集）。contract 的 check 名映射到 planify 名，不支持的丢弃。
+    role_lookup(role_id) -> Role（有 skill_contract 方法）。
+    """
+    notes: List[str] = []
+    for s in steps:
+        sk = s.get("skill")
+        if not sk:
+            continue
+        role = role_lookup(s["role"])
+        contract = role.skill_contract(sk) if role else None
+        if not contract:
+            notes.append(f"step {s['step_id']}: skill '{sk}' has no contract; nothing merged")
+            continue
+        # deliverables：按 id 补缺；path 由契约定（lead 若写了同名 id 不同 path，以契约为准——
+        # 契约是「产物长什么样」的权威，lead 不能改）
+        by_id = {d["id"]: d for d in s.get("deliverables", []) or []}
+        for d in contract.get("deliverables", []):
+            if d["id"] in by_id:
+                by_id[d["id"]]["path"] = d["path"]
+                if d.get("kind"):
+                    by_id[d["id"]]["kind"] = d["kind"]
+            else:
+                by_id[d["id"]] = {"id": d["id"], "path": d["path"], **({"kind": d["kind"]} if d.get("kind") else {})}
+        s["deliverables"] = list(by_id.values())
+        deliv_ids = {d["id"] for d in s["deliverables"]}
+        path_to_id = {d["path"]: d["id"] for d in s["deliverables"]}
+        # lead 写的验收项若带 path 且等于某 deliverable 路径，补上 deliverable 引用（便于按 (check, deliverable) 合并）
+        for a in s.get("acceptance", []) or []:
+            if not a.get("deliverable") and a.get("path") in path_to_id:
+                a["deliverable"] = path_to_id[a["path"]]
+        # acceptance：契约项按 (check, deliverable) 去重合并；lead 写的 min/names 更严则保留
+        existing = {(a.get("check"), a.get("deliverable")): a for a in s.get("acceptance", []) or []}
+        dropped = []
+        for a in contract.get("acceptance", []):
+            mapped = _CHECK_MAP.get(a.get("check"), None)
+            if mapped is None:
+                dropped.append(a.get("check"))
+                continue
+            key = (mapped, a.get("deliverable"))
+            new = {"check": mapped, "deliverable": a.get("deliverable")}
+            if a.get("deliverable") in deliv_ids:
+                new["path"] = by_id[a["deliverable"]]["path"]
+            if mapped == "min_citations":
+                new["min"] = int(a.get("min", 1))
+            if key in existing:
+                cur = existing[key]
+                if mapped == "min_citations":
+                    cur["min"] = max(int(cur.get("min", 1)), new["min"])
+                # sections 的 names 在契约里是 deliverable.sections——下面统一处理
+            else:
+                existing[key] = new
+                s.setdefault("acceptance", []).append(new)
+        # deliverable.sections → sections 验收项（契约把章节写在 deliverable 上）
+        for d in s["deliverables"]:
+            secs = None
+            for cd in contract.get("deliverables", []):
+                if cd["id"] == d["id"] and cd.get("sections"):
+                    secs = cd["sections"]
+            if secs:
+                key = ("sections", d["id"])
+                if key in existing:
+                    cur = existing[key]
+                    cur["names"] = sorted(set(cur.get("names", [])) | set(secs))
+                else:
+                    existing[key] = {"check": "sections", "deliverable": d["id"], "path": d["path"], "names": list(secs)}
+                    s.setdefault("acceptance", []).append(existing[key])
+        if s.get("max_fix_rounds") is None and contract.get("maxFixRounds") is not None:
+            s["max_fix_rounds"] = int(contract["maxFixRounds"])
+        if dropped:
+            notes.append(f"step {s['step_id']}: unsupported checks dropped: {', '.join(sorted(set(dropped)))}")
+        notes.append(f"step {s['step_id']}: merged contract of skill '{sk}'")
+    return notes
 
 
 def _assert_acyclic(steps: List[Dict[str, Any]]) -> None:
