@@ -87,6 +87,20 @@ export interface ChatMessage {
   /** Bot 会话系统条目标记（ADR-0060 §3）：assignment / fix_required / redispatched /
    *  shutdown / user_reply——以 user 侧气泡渲染但样式区分；仅 bot-session-dialog 使用。 */
   notice?: string;
+  /** 计划卡（ADR-0060 §1）：DAG 计划的结构化摘要；以独立卡片渲染（非气泡），
+   *  按钮「开始」直调 /api/team/dags/{id}/start，「修改」预填输入框。 */
+  plan_card?: PlanCard;
+}
+
+export interface PlanCard {
+  dag_id: number;
+  name: string;
+  status: "draft" | "active" | "paused" | "stalled" | "done" | "cancelled";
+  /** 计划定义（步骤 / 依赖 / 交付物）；`steps`（状态字典）不进卡片类型——
+   *  卡片渲染用 plan.steps，状态经 DAG 列表合并 */
+  plan: { steps: { step_id: string; subject?: string; role?: string; assignee?: string; depends_on?: string[]; deliverables?: { id: string; path: string }[] }[] };
+  output_dir?: string;
+  repairs?: string[];
 }
 
 /** ask_user_question 悬置问题（SSE ask 事件 → store → ask-card 组件） */

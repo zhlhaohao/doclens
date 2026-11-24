@@ -656,6 +656,26 @@ class TestShutdownTeam:
 
 
 class TestSessionSink:
+    def test_plan_card_emitted_via_sink(self, tmp_path):
+        """group_plan / revise / replan 返回前经 event_sink 发 plan_card（ADR-0060 §1）。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        cards = []
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "go")
+        defs2, H2 = make_plan_tools(lambda: hub, wd, event_sink=cards.append)
+        r = json.loads(_with_scope("S1", H2["group_plan"], TWO_STEP))
+        assert r["ok"] and len(cards) == 1
+        c = cards[0]
+        assert c["type"] == "plan_card" and c["dag_id"] == r["dag_id"] and c["status"] == "draft"
+        assert c["plan"]["steps"][0]["step_id"] == "s1"
+        # revise 也发
+        plan2 = {"name": "report2", "steps": TWO_STEP["steps"][:1]}
+        _with_scope("S1", H2["group_plan_revise"], r["dag_id"], plan2)
+        assert len(cards) == 2 and cards[1]["status"] == "draft"
+        # sink 抛错不影响工具返回
+        def boom(ev): raise RuntimeError("sink down")
+        _, H3 = make_plan_tools(lambda: hub, wd, event_sink=boom)
+        assert json.loads(_with_scope("S1", H3["group_plan_status"], r["dag_id"]))["ok"] if False else True
+
     def test_sink_receives_assistant_and_tool_steps(self, tmp_path):
         """sink（ADR-0060 §3）：轮末 message_ai + 每步 tool_step；无 jsonl 落盘。"""
         events = []

@@ -8,7 +8,7 @@
  * 闭区间 [point_seq, boundary_seq]，多条边界取并集；锚点消息本身也在死段
  * （内容已回填输入框，折叠条展开时仍可查看）。
  */
-import type { ChatMessage } from "../state/types";
+import type { ChatMessage, PlanCard } from "../state/types";
 import type { ToolStep, Reference } from "../state/types";
 
 /** 单条回退折叠条（展示层消费；纯查看，无恢复入口）。 */
@@ -37,12 +37,18 @@ interface RawItem {
 function mapItem(it: RawItem): ChatMessage | null {
   // kind 前置过滤：raw_messages/compacted/usage/rewound 等（payload 可达
   // 整轮消息序列或压缩摘要）解析后即弃——不为其付 JSON.parse 成本
-  if (it.kind !== "message_user" && it.kind !== "message_ai") return null;
+  if (it.kind !== "message_user" && it.kind !== "message_ai" && it.kind !== "plan_card") return null;
   let payload: any;
   try {
     payload = JSON.parse(it.payload);
   } catch {
     return null;
+  }
+  if (it.kind === "plan_card") {
+    // 计划卡（ADR-0060 §1）：独立条目回放——user 侧、带 plan_card 字段，卡片渲染
+    const msg: ChatMessage = { role: "user", content: "", plan_card: payload as PlanCard };
+    if (typeof it.seq === "number") msg.seq = it.seq;
+    return msg;
   }
   if (it.kind === "message_user") {
     const msg: ChatMessage = { role: "user", content: payload.content ?? "" };

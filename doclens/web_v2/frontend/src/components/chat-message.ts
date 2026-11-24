@@ -4,11 +4,12 @@ import { sanitizeHtml } from "../utils/sanitize";
 import { createMathMarked } from "../utils/marked-math";
 // shadow DOM 隔离全局样式，KaTeX CSS 必须内联注入组件 styles（同 md-viewer）
 import katexStyles from "katex/dist/katex.min.css?inline";
-import type { ChatMessage, ToolStep } from "../state/types";
+import type { ChatMessage, PlanCard, ToolStep } from "../state/types";
 import { isCoarsePointer } from "../utils/device";
 import { copyText, createCopiedFlash } from "../utils/clipboard";
 import { traceStepsOf } from "./chat-tool-trace";
 import "./ask-card";
+import "./plan-card";
 
 /** 消息时间格式化：今天 HH:MM:SS，非今天 MM-DD HH:MM:SS（精确到秒）。
  *  非法/缺失输入返回 ""（操作行不渲染时间位）。导出供测试。 */
@@ -616,8 +617,14 @@ export class ChatMessageEl extends LitElement {
     return html`<button class="copy" type="button" aria-label=${this._copied ? "已复制" : "复制"} title=${this._copied ? "已复制" : "复制"} @click=${this._onCopy}><doclens-icon name=${this._copied ? "check" : "copy"}></doclens-icon></button>`;
   }
 
+  private _renderPlanCard(card: PlanCard) {
+    return html`<plan-card .card=${card}></plan-card>`;
+  }
+
   render() {
     if (!this.message) return null;
+    // 计划卡（ADR-0060 §1）：独立卡片，不走气泡/操作行
+    if (this.message.plan_card) return this._renderPlanCard(this.message.plan_card);
     const steps = this.message.tool_steps;
     // ask_user_question 的历史 step 渲染为折叠问答卡片（复用 ask-card 摘要态），
     // 不进 tool trace；check_background（后台命令轮询检查）频繁且无信息量，

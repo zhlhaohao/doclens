@@ -42,8 +42,15 @@ def _hub():
     raise NotImplementedError
 
 
-def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
-    """返回 (tool_defs, handlers)。hub_getter 延迟取 TeamHub（避免装配期循环）。"""
+def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path,
+                    event_sink: Optional[Callable[[dict], None]] = None) -> tuple:
+    """返回 (tool_defs, handlers)。hub_getter 延迟取 TeamHub（避免装配期循环）。
+
+    event_sink（ADR-0060 §1）：计划卡事件的发射点——`group_plan` / `group_plan_revise` /
+    `group_plan_replan` 返回前调 `sink({"type": "plan_card", ...})`。handler 是同步函数、
+    在工具循环里跑，拿不到 SSE 队列；sink 由宿主注入且**必须运行期间接寻址**
+    （经 contextvar 取当前请求的 emitter——装配期绑实例会拿到 None）。缺席时跳过。
+    """
 
     def _scope() -> str:
         sid = get_current_session_id()
@@ -56,6 +63,16 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
         if h is None:
             raise PlanToolError("Team features are not enabled")
         return h
+
+    def _emit_card(dag: Dict[str, Any], **extra) -> None:
+        if event_sink is None:
+            return
+        try:
+            event_sink({"type": "plan_card", "dag_id": dag["id"], "name": dag["name"],
+                        "status": dag["status"], "plan": dag["plan"],
+                        "output_dir": dag["output_dir"], **extra})
+        except Exception:  # noqa: BLE001
+            logger.exception("plan_card sink failed")
 
     def _card(dag: Dict[str, Any]) -> str:
         lines = [f"Plan #{dag['id']} '{dag['name']}' [{dag['status']}]  output: {dag['output_dir']}"]
@@ -153,6 +170,7 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             dag = D.new_dag(sc_id, dag_id, norm, out)
             D.write_dag(sc.dags_dir, dag)
             _set_pending(sc, dag_id, "confirm")
+            _emit_card(dag, repairs=norm.get("repairs", []))
             return json.dumps({"ok": True, "dag_id": dag_id, "card": _card(dag),
                                "repairs": norm.get("repairs", []),
                                "next": "Show the card to the user; on approval call group_plan_start."}, ensure_ascii=False)
@@ -183,6 +201,7 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             dag["plan"] = norm
             dag["steps"] = {s["step_id"]: {"task_id": None, "status": D.STEP_PENDING, "fix_rounds": 0} for s in norm["steps"]}
             D.write_dag(sc.dags_dir, dag)
+            _emit_card(dag)
             return json.dumps({"ok": True, "dag_id": dag_id, "card": _card(dag)}, ensure_ascii=False)
         except PlanIssue as e:
             return json.dumps({"ok": False, "issue": e.to_dict()}, ensure_ascii=False)
@@ -309,6 +328,7 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             dag["failed_step"] = None
             D.write_dag(sc.dags_dir, dag)
             _set_pending(sc, dag_id, "confirm")
+            _emit_card(dag, replanned=True)
             return json.dumps({"ok": True, "dag_id": dag_id, "status": "draft", "card": _card(dag),
                                "next": "Show the card; on approval call group_plan_start."}, ensure_ascii=False)
         except PlanIssue as e:

@@ -65,6 +65,12 @@ export function streamOwnedBy(
 
 /** 将一个流式事件不可变地应用到 messages，返回新数组；非 assistant 末条则原样返回。 */
 export function applyStreamEvent(messages: ChatMessage[], ev: ChatStreamEvent): ChatMessage[] {
+  if (ev.type === "plan_card") {
+    // 计划卡（ADR-0060 §1）：追加独立消息（user 侧、plan_card 字段）——
+    // 不依赖末条角色（lead 可能先输出文字再调 group_plan）
+    const card: ChatMessage = { role: "user", content: "", plan_card: ev };
+    return [...messages, card];
+  }
   if (messages.length === 0) return messages;
   const last = messages[messages.length - 1];
   if (last.role !== "assistant") return messages;
@@ -334,6 +340,13 @@ export class ChatView extends LitElement {
     this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
   }
 
+  /** 计划卡「修改」按钮（ADR-0060 §1）：预填草稿修改语句，用户补具体改动后发送。 */
+  private _onPrefill = (e: Event) => {
+    const text = (e as CustomEvent).detail?.text ?? "";
+    this.draft = text;
+    this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
+  };
+
   /** 对话框模板适配器（AP-1 模板域外迁）：把视图状态与回调接到
    *  views/chat-dialogs.ts 的纯模板函数——视图不再持有模板细节。 */
   private _dialogs = {
@@ -475,6 +488,7 @@ export class ChatView extends LitElement {
     // 会话库恢复完成（ADR-0047 SSE sessions_restored）：重拉历史列表；
     // 当前打开的会话若已不存在（比备份旧），清空消息流回到欢迎页。
     window.addEventListener("cortex:sessions-restored", this._onSessionsRestored);
+    window.addEventListener("cortex:chat-prefill", this._onPrefill);
     this._unsubscribe = store.subscribe(() => {
       this.requestUpdate();
       this._consumePendingSkillChat();
@@ -708,6 +722,7 @@ export class ChatView extends LitElement {
     this._mqMobileViewport?.removeEventListener("change", this._onMobileViewportChange);
     this._mqMobileViewport = undefined;
     window.removeEventListener("cortex:sessions-restored", this._onSessionsRestored);
+    window.removeEventListener("cortex:chat-prefill", this._onPrefill);
   }
 
   /** 会话库恢复完成（ADR-0047）：重拉历史；当前会话不复存在时回欢迎页。 */

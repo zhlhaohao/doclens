@@ -122,7 +122,7 @@ ChatQueueEvent = Union[
 #: 消费侧已知的全部事件类型（未知类型应记 warning，不得静默丢弃）
 KNOWN_EVENT_TYPES = frozenset(
     {"token", "tool_call", "tool_result", "ask", "toast", "compact", "error", "usage",
-     "done", "thinking", "interject_ack", "interject_report", "user_seq"}
+     "done", "thinking", "interject_ack", "interject_report", "user_seq", "plan_card"}
 )
 
 

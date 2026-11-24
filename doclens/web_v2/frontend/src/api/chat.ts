@@ -23,6 +23,7 @@ export type ChatStreamEvent =
   | { type: "interject_ack"; question: string; tool_use_id: string }
   | { type: "interject_report"; tool_use_id: string; text: string }
   | { type: "user_seq"; seq: number }
+  | { type: "plan_card" } & import("../state/types").PlanCard
   | { type: "done"; reason?: string }
   | { type: "error"; detail: string };
 

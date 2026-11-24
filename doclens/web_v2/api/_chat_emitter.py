@@ -20,6 +20,7 @@ waiter 侧），emitter 不再维护 pending_asks 影子表。
 到达时记录告警。
 """
 
+import contextvars
 import logging
 import time
 from typing import Any, Dict, List, Optional
@@ -42,6 +43,33 @@ from ._chat_events import (
 logger = logging.getLogger(__name__)
 
 
+import contextvars
+from typing import Optional
+
+_current_emitter: "contextvars.ContextVar[Optional[ChatEventEmitter]]" = contextvars.ContextVar(
+    "current_chat_emitter", default=None
+)
+
+
+def set_current_emitter(emitter: "ChatEventEmitter"):
+    """标记当前请求的 emitter（chat.py 建 emitter 后调；finally 复位）。
+
+    plan_tools 的 event_sink 经 get_current_emitter() 运行期间接寻址——
+    装配期绑实例必错（emitter 每请求新建，agent_integration 是一次性装配）。"""
+    return _current_emitter.set(emitter)
+
+
+def reset_current_emitter(token) -> None:
+    try:
+        _current_emitter.reset(token)
+    except ValueError:
+        pass
+
+
+def get_current_emitter() -> "Optional[ChatEventEmitter]":
+    return _current_emitter.get()
+
+
 class ChatEventEmitter(EventEmitter):
     """收集 + 直推：emit 在事件循环上被 await 调用，put_nowait 安全。
 
@@ -56,6 +84,9 @@ class ChatEventEmitter(EventEmitter):
         self.queue = queue
         # 宿主配置注入：usage 事件/落库条目携带，供前端算占用百分比
         self.context_window = context_window
+        # 自定义事件（plan_card 等）可能从工具线程调——经 loop 线程安全入队
+        self._loop = None
+        self.custom_events: list[dict] = []
         self.text_parts: list[str] = []
         self.tool_calls: list[dict] = []
         self.done: bool = False
@@ -78,6 +109,22 @@ class ChatEventEmitter(EventEmitter):
         """事件直达 SSE 队列（emit 处同步入队，顺序与发生顺序一致）。"""
         if self.queue is not None:
             self.queue.put_nowait(ev)
+
+    def emit_custom(self, event: dict) -> None:
+        """宿主自定义事件直推（ADR-0060 §1 plan_card 等）——同步入队（plan_tools
+        handler 可能跑在工具线程里，不能 await）。经 call_soon_threadsafe 保证
+        线程安全（loop 线程上调同样安全，只延迟一拍）。同时暂存供轮末落库。"""
+        self.custom_events.append(event)
+        if self.queue is None:
+            return
+        loop = self._loop
+        if loop is not None:
+            try:
+                loop.call_soon_threadsafe(self.queue.put_nowait, dict(event))
+                return
+            except RuntimeError:
+                pass
+        self.queue.put_nowait(dict(event))
 
     def get_full_text(self) -> str:
         """获取当前累积的全部文本"""

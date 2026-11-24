@@ -562,6 +562,7 @@ class CortexAgent:
         try:
             from planify.team import bootstrap_team as _bootstrap_team
             from planify.team.plan_tools import make_plan_tools as _make_plan_tools
+            from doclens.web_v2.api._chat_emitter import get_current_emitter as _get_current_emitter
             from planify.team import get_hub as _get_hub
 
             # Bot 能力工具表 = 过滤后的 lead 工具（不含 lead 专属的 plan_*/team 工具）
@@ -575,7 +576,10 @@ class CortexAgent:
                 tool_defs=_bot_defs, tool_handlers=_bot_handlers,
                 idle_timeout=asm.config.get("idle_timeout", 60),
             )
-            _defs, _handlers = _make_plan_tools(_get_hub, self.workdir)
+            _defs, _handlers = _make_plan_tools(
+                _get_hub, self.workdir,
+                event_sink=lambda ev: ((_e := _get_current_emitter()) is not None and _e.emit_custom(ev)),
+            )
             _by_name = {t["name"]: t for t in asm.tools}
             for t in _defs:
                 _by_name[t["name"]] = t

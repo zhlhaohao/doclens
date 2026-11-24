@@ -46,6 +46,8 @@ from doclens.web_v2.models.chat import (
     ChatInterjectRequest,
 )
 from doclens.web_v2.api._chat_events import KNOWN_EVENT_TYPES, user_seq_event
+from doclens.web_v2.api._chat_emitter import set_current_emitter, reset_current_emitter
+from doclens.web_v2.sessions_store import SessionItem
 from doclens.web_v2.api._chat_markers import LOADED_SKILL_MARKER
 from doclens.web_v2.api._chat_slash import (
     SLASH_HINT_RE,
@@ -182,6 +184,10 @@ async def _stream_agent_response(
     emitter = ChatEventEmitter(
         queue, context_window=runtime.config.planify_context_window
     )
+    emitter._loop = asyncio.get_running_loop()
+    # 计划卡发射点（ADR-0060 §1）：plan_tools 的 event_sink 经 contextvar 运行期
+    # 间接近址本 emitter——装配期绑实例必错（emitter 每请求新建）
+    _emitter_token = set_current_emitter(emitter)
     # 锚点 seq 补推（ADR-0027 补口）：ensure_message_user 新写入时先于
     # queue 创建拿到 seq，此处第一时间进队（早于一切 token/thinking）。
     if user_seq is not None:
@@ -547,6 +553,25 @@ async def _stream_agent_response(
                         logger.warning(
                             "persist display ai failed for %s: %s", session_key, e
                         )
+                    # 计划卡落库（ADR-0060 §1）：独立 kind，刷新/断线后卡片仍在；
+                    # 跟在该轮 message_ai 之后（展示顺序自然）
+                    for ev in getattr(emitter, "custom_events", []):
+                        if ev.get("type") != "plan_card":
+                            continue
+                        try:
+                            store.append_item(SessionItem(
+                                session_id=session_key, seq=store.next_seq(session_key),
+                                kind="plan_card",
+                                payload=json.dumps({k: v for k, v in ev.items() if k != "type"},
+                                                   ensure_ascii=False),
+                            ))
+                        except Exception as e:  # noqa: BLE001
+                            logger.warning("persist plan_card failed for %s: %s", session_key, e)
+            # 计划卡 contextvar 复位（emitter 生命周期 = 本请求）
+            try:
+                reset_current_emitter(_emitter_token)
+            except Exception:  # noqa: BLE001
+                pass
             # interrupt 注销随 agent 收尾（ADR-0028 从 SSE 生成器 finally 挪入）
             # ——断开续跑期间 /chat/stop 仍可经 registry 寻址本流。
             if session_key:
