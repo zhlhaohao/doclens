@@ -64,6 +64,7 @@ export const INITIAL_STATE: AppState = {
   },
   detailStack: [],
   pendingSession: null,
+  pendingPrefill: null,
   pendingSkillChat: null,
   /** 设置页待聚焦 tab（ADR-0034 视觉路由）：chat 页「前往设置」写入，设置页首渲染消费后自清 */
   pendingSettingsTab: null as "ai" | "search" | "network" | "mcp" | "skills" | null,
@@ -199,6 +200,10 @@ export const actions = {
 
   setPendingSession(session: Session | null) {
     store.setState({ pendingSession: session });
+  },
+
+  setPendingPrefill(text: string | null) {
+    store.setState({ pendingPrefill: text });
   },
 
   setPendingSkillChat(chat: AppState["pendingSkillChat"]) {

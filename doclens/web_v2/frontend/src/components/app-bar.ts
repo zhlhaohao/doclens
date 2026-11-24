@@ -383,6 +383,37 @@ export class AppBar extends LitElement {
     window.dispatchEvent(new CustomEvent("cortex:sessions-restored"));
   };
 
+  /** DAG 终态（ADR-0060 §2）：可点 toast——点击切到该会话并跳团队 tab。
+   *  非当前会话的也弹（用户在别处时 DAG 完成了正是要知道的场景）。 */
+  private _onDagStatus: (e: Event) => void = async (e: Event) => {
+    const detail = (e as CustomEvent).detail as {
+      scope?: string; dag_id?: number; name?: string; message: string; level: "success" | "error" | "info";
+    };
+    const stack = this.shadowRoot?.querySelector("toast-stack") as
+      (HTMLElement & { pushToast?: (m: string, l?: string, d?: number, onClick?: () => void) => void }) | null;
+    const go = async () => {
+      const sid = detail.scope;
+      if (!sid) { actions.setView("team"); return; }
+      // 切会话（标题查历史列表，查不到用 DAG 名兜底）后跳团队 tab
+      try {
+        const { listSessions, fetchSessionDetail } = await import("../api/sessions");
+        const r = await listSessions({ type: "chat", limit: 200 });
+        const hit = r.sessions.find((s) => s.id === sid);
+        if (hit) {
+          actions.setChatState({ currentSession: hit });
+        } else {
+          const d = await fetchSessionDetail(sid, { metaOnly: true });
+          actions.setChatState({ currentSession: {
+            id: d.id, type: "chat", title: d.title, preview: d.preview,
+            updated_at: d.updated_at, message_count: d.message_count,
+          } });
+        }
+      } catch { /* 会话已删：只跳团队 tab */ }
+      actions.setView("team");
+    };
+    stack?.pushToast?.(detail.message, detail.level, 8000, go);
+  };
+
   /** 菜单「关于」：打开构建版本对话框（测试时确认前后端均为最新构建）。 */
   private _onAboutMenuClick() {
     this._menuOpen = false;
@@ -451,6 +482,7 @@ export class AppBar extends LitElement {
     window.addEventListener("cortex:image-rotated", this._onImageRotated as EventListener);
     window.addEventListener("cortex:sessions-restored", this._onSessionsRestored as EventListener);
     window.addEventListener("cortex:sse-sessions-restored", this._onSessionsRestored as EventListener);
+    window.addEventListener("cortex:dag-status", this._onDagStatus as EventListener);
     this._appTheme = readAppTheme();
     this._offAppThemeChange = onAppThemeChange((t) => { this._appTheme = t; });
     this._mqList = typeof window.matchMedia === "function"
@@ -467,6 +499,7 @@ export class AppBar extends LitElement {
     window.removeEventListener("cortex:watch-reindexed", this._onWatchReindexed as EventListener);
     window.removeEventListener("cortex:image-rotated", this._onImageRotated as EventListener);
     window.removeEventListener("cortex:sessions-restored", this._onSessionsRestored as EventListener);
+    window.removeEventListener("cortex:dag-status", this._onDagStatus as EventListener);
     window.removeEventListener("cortex:sse-sessions-restored", this._onSessionsRestored as EventListener);
     this._mqList?.removeEventListener("change", this._onMqChange);
     this._mqList = undefined;

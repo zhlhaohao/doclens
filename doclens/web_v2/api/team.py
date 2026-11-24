@@ -320,16 +320,19 @@ async def list_dags(session_id: str = Query(...)):
 
 class DagActionRequest(BaseModel):
     session_id: str
+    step_id: Optional[str] = None  # retry 用
 
 
 @router.post("/team/dags/{dag_id}/{action}")
 async def dag_action(dag_id: int, action: str, req: DagActionRequest):
     """计划卡 / DAG 操作栏直调（§1）：复用 plan_tools handler，一律 to_thread 包裹
     （handler 是同步函数，hub.scope() 可能同步跑 recover_scope + ensure_started）。
-    contextvar 经 copy_context 穿透 to_thread。"""
+    contextvar 经 copy_context 穿透 to_thread。replan 不在此——它是自然语言活，
+    前端预填 chat 输入框（lead 调 group_plan_replan）。"""
     if action not in ("start", "pause", "resume", "cancel", "retry"):
         raise CortexAPIError(400, "UNKNOWN_ACTION", f"未知操作 {action}")
     hub = _hub()
+    await _ensure_scope(hub, req.session_id)
     from planify.skills.access_state import set_current_session_id, reset_current_session_id
     from planify.team.plan_tools import make_plan_tools
     from doclens.web_v2 import deps
@@ -349,8 +352,9 @@ async def dag_action(dag_id: int, action: str, req: DagActionRequest):
                 n = hub.scheduler.pause_scope(req.session_id, dag_ids=[dag_id]) if hub.scheduler else 0
                 return {"ok": True, "dags_paused": n}
             if action == "retry":
-                # retry 需要 step_id——经 query/body 扩展
-                raise CortexAPIError(400, "STEP_REQUIRED", "retry 需要 step_id")
+                if not req.step_id:
+                    raise CortexAPIError(400, "STEP_REQUIRED", "retry 需要 step_id")
+                return json.loads(handlers["group_plan_retry"](dag_id, req.step_id))
         finally:
             reset_current_session_id(tok)
         raise CortexAPIError(400, "UNKNOWN_ACTION", action)

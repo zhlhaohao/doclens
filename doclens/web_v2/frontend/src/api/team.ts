@@ -96,8 +96,8 @@ export async function deleteBot(bot: string, sessionId: string): Promise<{ ok: b
   });
 }
 
-export async function dagAction(dagId: number, action: string, sessionId: string): Promise<Record<string, unknown>> {
-  return request(`/api/team/dags/${dagId}/${action}`, { method: "POST", json: { session_id: sessionId } });
+export async function dagAction(dagId: number, action: string, sessionId: string, stepId?: string): Promise<Record<string, unknown>> {
+  return request(`/api/team/dags/${dagId}/${action}`, { method: "POST", json: { session_id: sessionId, step_id: stepId ?? null } });
 }
 
 // ------------------------------------------------------------------ SSE（GET）

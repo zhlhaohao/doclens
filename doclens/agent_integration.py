@@ -596,6 +596,10 @@ class CortexAgent:
                 _loop = getattr(get_watch_broker(), "_loop", None)
                 if _loop is not None:
                     _loop.call_soon_threadsafe(_hub.events.bind, _loop)
+                # dag_status → watch SSE 广播（ADR-0060 §2 toast）：lead 不在跑时用户也要知道 DAG 完成/受阻
+                from doclens.web_v2.watch_broker import get_watch_broker as _get_wb
+                _hub.events.set_scope_listener(
+                    lambda ev: _get_wb().broadcast("dag_status", ev, immediate=True))
             except Exception:  # noqa: BLE001
                 logging.getLogger(__name__).exception("[team] session sink wiring failed")
         except Exception:  # noqa: BLE001

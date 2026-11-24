@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 logger = logging.getLogger("planify.team.events")
 
@@ -47,6 +47,7 @@ class TeamEventBus:
         self._texts: Dict[Key, str] = {}  # 当前轮已累积正文（snapshot 用）
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._flusher: Optional[asyncio.Task] = None
+        self._scope_listener: Optional[Callable[[Dict[str, Any], None]]] = None
 
     # ------------------------------------------------------------------ 生命周期
 
@@ -95,6 +96,42 @@ class TeamEventBus:
             self._broadcast(key, {"type": "text_delta", "text": text})
 
     # ------------------------------------------------------------------ 发布（Bot 线程）
+
+    def set_scope_listener(self, listener: Optional[Callable[[Dict[str, Any], None]]]) -> None:
+        """宿主级 scope 事件监听（ADR-0060 §2 toast 桥接）：宿主注入后，每个
+        publish_scope 都同步调它（在发布线程上）——宿主内部经 call_soon_threadsafe
+        转到 loop。比 scope 级订阅简单：watch 广播本就是全局的。"""
+        self._scope_listener = listener
+
+    def publish_scope(self, scope: str, event: Dict[str, Any]) -> None:
+        """scope 级事件（ADR-0060 §2 dag_status：done / stalled / paused）——
+        先调宿主监听（全局广播），再按 (scope, "*") 分组扇出给 scope 订阅者。"""
+        payload = {"scope": scope, **event}
+        listener = self._scope_listener
+        if listener is not None:
+            try:
+                listener(payload)
+            except Exception:  # noqa: BLE001
+                logger.exception("[events] scope listener failed")
+        key = (scope, "*")
+        with self._lock:
+            self._subs.setdefault(key, _Subscription())
+        self._broadcast(key, payload)
+
+    def subscribe_scope(self, scope: str) -> asyncio.Queue:
+        self.ensure_bound()
+        q: asyncio.Queue = asyncio.Queue(maxsize=_QUEUE_MAX)
+        with self._lock:
+            self._subs.setdefault((scope, "*"), _Subscription()).clients.add(q)
+        return q
+
+    def unsubscribe_scope(self, scope: str, q: asyncio.Queue) -> None:
+        with self._lock:
+            sub = self._subs.get((scope, "*"))
+            if sub is not None:
+                sub.clients.discard(q)
+                if not sub.clients:
+                    self._subs.pop((scope, "*"), None)
 
     def publish(self, scope: str, bot: str, event: Dict[str, Any]) -> None:
         """Bot 线程调用。text_delta 进缓冲由合并 task 发出；其余事件直发。"""

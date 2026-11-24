@@ -340,13 +340,6 @@ export class ChatView extends LitElement {
     this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
   }
 
-  /** 计划卡「修改」按钮（ADR-0060 §1）：预填草稿修改语句，用户补具体改动后发送。 */
-  private _onPrefill = (e: Event) => {
-    const text = (e as CustomEvent).detail?.text ?? "";
-    this.draft = text;
-    this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
-  };
-
   /** 对话框模板适配器（AP-1 模板域外迁）：把视图状态与回调接到
    *  views/chat-dialogs.ts 的纯模板函数——视图不再持有模板细节。 */
   private _dialogs = {
@@ -488,10 +481,10 @@ export class ChatView extends LitElement {
     // 会话库恢复完成（ADR-0047 SSE sessions_restored）：重拉历史列表；
     // 当前打开的会话若已不存在（比备份旧），清空消息流回到欢迎页。
     window.addEventListener("cortex:sessions-restored", this._onSessionsRestored);
-    window.addEventListener("cortex:chat-prefill", this._onPrefill);
     this._unsubscribe = store.subscribe(() => {
       this.requestUpdate();
       this._consumePendingSkillChat();
+      this._consumePendingPrefill();
     });
     this._loadPreviewPaneWidth();
     // 消费跨视图会话加载请求（来自 history-view）
@@ -722,7 +715,6 @@ export class ChatView extends LitElement {
     this._mqMobileViewport?.removeEventListener("change", this._onMobileViewportChange);
     this._mqMobileViewport = undefined;
     window.removeEventListener("cortex:sessions-restored", this._onSessionsRestored);
-    window.removeEventListener("cortex:chat-prefill", this._onPrefill);
   }
 
   /** 会话库恢复完成（ADR-0047）：重拉历史；当前会话不复存在时回欢迎页。 */
@@ -946,6 +938,15 @@ export class ChatView extends LitElement {
       return;
     }
     await this._sendMessage(message, false, images);
+  }
+
+  private async _consumePendingPrefill(): Promise<void> {
+    const text = store.getState().pendingPrefill;
+    if (!text) return;
+    actions.setPendingPrefill(null);
+    this.draft = text;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLInputElement>("input-box.text-input")?.focus();
   }
 
   /** 消费跨视图技能对话请求（files 工具箱）：initial 态新建技能会话后自动发送。

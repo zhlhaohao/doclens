@@ -349,6 +349,9 @@ export interface AppState {
   pendingSkillChat: PendingSkillChat | null;
   /** 设置页待聚焦 tab（ADR-0034 视觉路由）：chat 页「前往设置」写入 */
   pendingSettingsTab: "ai" | "search" | "network" | "mcp" | "skills" | null;
+  /** 跨视图预填 chat 输入框（ADR-0060 计划卡「修改」/ DAG 重规划）：team-view 写入，
+   *  chat-view 挂载/更新时消费并清空——chat-view 可能尚未挂载，走事件会丢 */
+  pendingPrefill: string | null;
   status: SystemStatus | null;
   watcher: WatcherStatus | null;   // 来自 SSE /api/watch/events 的 status 快照
   /** Git 同步状态（SSE status 快照 / /api/status 携带；null = 未注册） */

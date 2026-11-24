@@ -106,3 +106,22 @@ async def test_bind_idempotent_same_loop():
     bus.bind(loop)
     assert bus._flusher is t1  # 同 loop 不重复合并 task
     bus.unbind()
+
+
+@pytest.mark.asyncio
+async def test_scope_listener_and_subscribers():
+    """dag_status（ADR-0060 §2）：宿主级监听每次 publish_scope 同步调；scope 订阅者也收到。"""
+    bus = TeamEventBus()
+    bus.bind(asyncio.get_running_loop())
+    got = []
+    bus.set_scope_listener(lambda ev: got.append(ev))
+    q = bus.subscribe_scope("S1")
+    bus.publish_scope("S1", {"type": "dag_status", "dag_id": 1, "status": "done"})
+    assert len(got) == 1 and got[0]["scope"] == "S1" and got[0]["status"] == "done"
+    ev = await asyncio.wait_for(q.get(), 1)
+    assert ev["type"] == "dag_status" and ev["scope"] == "S1"
+    # 监听抛错不影响扇出
+    bus.set_scope_listener(lambda ev: (_ for _ in ()).throw(RuntimeError("x")))
+    bus.publish_scope("S1", {"type": "dag_status", "status": "stalled"})
+    assert (await asyncio.wait_for(q.get(), 1))["status"] == "stalled"
+    bus.unbind()

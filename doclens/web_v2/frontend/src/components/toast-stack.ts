@@ -9,6 +9,8 @@ export interface ToastItem {
   level: ToastLevel;
   /** 0 = 不自动消失（需手动 dismiss） */
   duration: number;
+  /** 点击回调（可选，ADR-0060 dag_status 跳转）：有回调时 toast 可点、带「查看」样式提示 */
+  onClick?: () => void;
 }
 
 @customElement("toast-stack")
@@ -28,6 +30,12 @@ export class ToastStack extends LitElement {
       pointer-events: auto;
       min-width: 200px;
       max-width: 360px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .toast.clickable { cursor: pointer; }
+    .toast .go { font-size: var(--cortex-fs-xs); color: var(--cortex-text-secondary); white-space: nowrap; }
       padding: 10px 14px;
       background: var(--cortex-surface);
       color: var(--cortex-text);
@@ -51,9 +59,9 @@ export class ToastStack extends LitElement {
   private _nextId = 1;
   private _timers = new Map<number, number>();
 
-  pushToast(message: string, level: ToastLevel = "info", duration = 2500) {
+  pushToast(message: string, level: ToastLevel = "info", duration = 2500, onClick?: () => void) {
     const id = this._nextId++;
-    this._toasts = [...this._toasts, { id, message, level, duration }];
+    this._toasts = [...this._toasts, { id, message, level, duration, onClick }];
     if (duration > 0) {
       const handle = window.setTimeout(() => this.dismiss(id), duration);
       this._timers.set(id, handle);
@@ -79,8 +87,8 @@ export class ToastStack extends LitElement {
     return html`
       ${this._toasts.map(
         (t) => html`
-          <div class="toast ${t.level}" @click=${() => this.dismiss(t.id)}>
-            <span class="msg">${t.message}</span>
+          <div class="toast ${t.level} ${t.onClick ? "clickable" : ""}" @click=${() => { t.onClick?.(); this.dismiss(t.id); }}>
+            <span class="msg">${t.message}</span>${t.onClick ? html`<span class="go">查看</span>` : null}
           </div>
         `,
       )}

@@ -10,7 +10,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
-import { store } from "../state/store";
+import { store, actions } from "../state/store";
 import type { DagInfo, DagStep, PlanStep, BotInfo, BotStatus, DagStatus } from "../api/team";
 import { listBots, listDags, dagAction, ApiError } from "../api/team";
 import "../components/icon";
@@ -293,6 +293,24 @@ export class TeamView extends LitElement {
     `;
   }
 
+  private async _retry(dag: DagInfo, s: DagStep) {
+    try {
+      await dagAction(dag.id, "retry", this._sid, s.step_id);
+      this._toast(`已重试步骤 ${s.step_id}`, "success");
+      await this._refresh();
+    } catch (e) {
+      this._toast(e instanceof ApiError ? e.message : String(e), "error");
+    }
+  }
+
+  private _replan(dag: DagInfo) {
+    // 重规划是自然语言活：跳 chat 预填，lead 调 group_plan_replan。
+    // 预填经 store.pendingPrefill（chat-view 可能尚未挂载，事件会丢）
+    const draft = `对计划 #${dag.id}「${dag.name}」重规划：失败的步骤是 ${dag.failed_step ?? "?"}（${dag.stall_reason ?? ""}）。保留已完成步骤，只重提未完成的。`;
+    actions.setPendingPrefill(draft);
+    actions.setView("chat");
+  }
+
   private _dagActions(dag: DagInfo) {
     const a = (act: "start" | "pause" | "resume" | "cancel", label: string, icon: string, cls = "") => html`
       <button class="btn ${cls}" @click=${() => this._act(dag, act)}><doclens-icon name=${icon}></doclens-icon>${label}</button>`;
@@ -300,7 +318,7 @@ export class TeamView extends LitElement {
       case "draft": return a("start", "开始", "play", "primary");
       case "active": return html`${a("pause", "暂停", "pause")}${a("cancel", "取消", "x", "danger")}`;
       case "paused": return html`${a("resume", "继续", "play", "primary")}${a("cancel", "取消", "x", "danger")}`;
-      case "stalled": return html`<span class="badge stalled">需在个人助手里重规划 / 重试</span>${a("cancel", "取消", "x", "danger")}`;
+      case "stalled": return html`<button class="btn primary" @click=${() => this._replan(dag)}><doclens-icon name="git-fork"></doclens-icon>重规划</button>${a("cancel", "取消", "x", "danger")}`;
       default: return nothing;
     }
   }
@@ -328,6 +346,8 @@ export class TeamView extends LitElement {
           <span class="step-id">${s.step_id}</span>
           <span class="step-subject" title=${ps?.instructions ?? ""}>${s.subject ?? ps?.subject ?? ""}</span>
           <span class="badge ${s.status}">${STEP_LABEL[s.status] ?? s.status}${s.interrupted ? "（中断）" : ""}</span>
+          ${s.status === "failed" && dag.status === "stalled" ? html`
+            <button class="btn" @click=${() => this._retry(dag, s)} title="重试此步骤"><doclens-icon name="list-restart"></doclens-icon>重试</button>` : nothing}
         </div>
         ${owner ? html`
           <button class="owner" @click=${openBot} title="打开 ${owner} 的会话">

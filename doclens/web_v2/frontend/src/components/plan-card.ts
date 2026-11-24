@@ -11,7 +11,7 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import type { PlanCard } from "../state/types";
 import { dagAction, ApiError } from "../api/team";
-import { store } from "../state/store";
+import { store, actions } from "../state/store";
 import "../components/icon";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -85,9 +85,9 @@ export class PlanCardEl extends LitElement {
   }
 
   private _edit() {
-    // 预填输入框（lead 的 group_plan_revise 仍是草稿修改的执行者）
-    const draft = `修改计划 #${this.card.dag_id}「${this.card.name}」：`;
-    window.dispatchEvent(new CustomEvent("cortex:chat-prefill", { detail: { text: draft } }));
+    // 预填经 store（ADR-0060 §1）：chat-view 可能尚未挂载，走事件会丢；
+    // 草稿修改仍是 lead 的 group_plan_revise——用户补具体改动后发送
+    actions.setPendingPrefill(`修改计划 #${this.card.dag_id}「${this.card.name}」：`);
   }
 
   render() {

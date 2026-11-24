@@ -190,6 +190,7 @@ class Scheduler:
             if steps and all(st["status"] == D.STEP_DONE for st in steps.values()):
                 dag["status"] = D.DAG_DONE
                 sc.bus.send("system", "lead", json.dumps({"type": "dag_done", "dag_id": dag_id, "name": dag["name"]}), msg_type="dag_done")
+                self.hub.events.publish_scope(sc.scope_id, {"type": "dag_status", "dag_id": dag_id, "name": dag["name"], "status": "done"})
             return dag
 
         updated = D.update_dag(sc.dags_dir, dag_id, _mut)
@@ -311,6 +312,8 @@ class Scheduler:
                         "reason": "llm_budget_exceeded",
                         "detail": f"DAG used {n} LLM calls (limit {self.max_llm_calls}); replan or retry to continue",
                     }), msg_type="dag_stalled")
+                    self.hub.events.publish_scope(scope_id, {"type": "dag_status", "dag_id": dag_id, "name": dag["name"],
+                                                             "status": "paused", "reason": "llm_budget_exceeded"})
                     # 在跑 Bot 停下
                     for bot in self.hub.registry.leased_by_scope(scope_id):
                         if self.thread_alive(scope_id, bot["name"]):
@@ -425,6 +428,8 @@ class Scheduler:
             "type": "dag_stalled", "dag_id": dag["id"], "failed_step": step_id,
             "reason": reason, "detail": detail,
         }, ensure_ascii=False), msg_type="dag_stalled")
+        self.hub.events.publish_scope(sc.scope_id, {"type": "dag_status", "dag_id": dag["id"], "name": dag["name"],
+                                                    "status": "stalled", "reason": reason, "failed_step": step_id})
 
     def pause_scope(self, scope_id: str, dag_ids: Optional[list] = None) -> int:
         """停止 = 停全部：`dag_ids=None` 时 scope 内全部 active DAG → paused、在跑

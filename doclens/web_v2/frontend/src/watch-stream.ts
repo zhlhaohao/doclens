@@ -82,6 +82,25 @@ function dispatchDiaryUpdated(d: { date?: string }): void {
   }));
 }
 
+interface DagStatusPayload {
+  scope?: string;
+  dag_id?: number;
+  name?: string;
+  status?: "done" | "stalled" | "paused";
+  reason?: string;
+}
+
+/** DAG 终态（ADR-0060 §2）：toast（done 绿 / stalled 红 / 预算 paused 黄），
+ *  点击切到该会话并跳团队 tab。会话标题查 store 的历史列表；查不到只显示 DAG 名。 */
+function dispatchDagStatus(d: DagStatusPayload): void {
+  const level = d.status === "done" ? "success" : d.status === "stalled" ? "error" : "info";
+  const verb = d.status === "done" ? "已完成" : d.status === "stalled" ? "受阻" : "已达调用上限，已暂停";
+  const reason = d.reason && d.status !== "done" ? `（${d.reason}）` : "";
+  window.dispatchEvent(new CustomEvent("cortex:dag-status", {
+    detail: { ...d, message: `计划「${d.name ?? "#" + d.dag_id}」${verb}${reason}`, level },
+  }));
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     reconnectTimer = window.setTimeout(() => {
@@ -129,6 +148,9 @@ async function run(): Promise<void> {
           window.dispatchEvent(new CustomEvent("cortex:sse-sessions-restored", {
             detail: safeParse<{ backup_created_at?: string; auto?: boolean }>(ev.data) ?? {},
           }));
+        } else if (ev.event === "dag_status") {
+          // DAG 终态通知（ADR-0060 §2）：lead 不在跑时用户也要知道；点击切会话跳团队 tab
+          dispatchDagStatus(safeParse<DagStatusPayload>(ev.data) ?? {});
         }
       }
       // 流正常结束（服务端关闭）→ 若未主动停止则重连
