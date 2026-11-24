@@ -449,6 +449,9 @@ class Scheduler:
         进程重启后 Bot 线程全灭，这些任务无人持有；回 ready 由调度器重派（派单时
         目标 Bot 为 shutdown 态会自动复活）。**先重新上租约**——重启清了租约，
         不恢复的话调度器找不到可复活的 Bot（§11e）。
+
+        **paused DAG 只归位状态、不重投递**（ADR-0060 §4）：用户已停止的 DAG 重启后
+        不得自己续跑——旧版本对 paused 也 dispatch，等于「停止」在重启后失效。
         返回恢复的 active DAG 数。
         """
         sc = self.hub.try_scope(scope_id)
@@ -468,8 +471,8 @@ class Scheduler:
                 # **重投递 assignment**：旧 Bot 线程退出时已把 assignment 读走
                 # （read_inbox 是读清空），新 Bot 复活后不知道任务是什么——任务信息
                 # 在 DAG/task 里，不在收件箱。凡「已派单但未完成」的步骤都重发一条，
-                # 等复活后的 Bot 读（否则它起来不知道干什么）。
-                if st["status"] in (D.STEP_READY, D.STEP_IN_PROGRESS) and st.get("task_id"):
+                # 等复活后的 Bot 读（否则它起来不知道干什么）。**仅 active DAG**。
+                if dag["status"] == D.DAG_ACTIVE and st["status"] in (D.STEP_READY, D.STEP_IN_PROGRESS) and st.get("task_id"):
                     task = self._task_of_step(sc, dag, sid)
                     if task and task.get("status") not in ("completed", "failed"):
                         self._dispatch(sc, task.get("assignee") or "", task)

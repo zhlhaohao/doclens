@@ -382,6 +382,68 @@ class TestStopAndRecover:
         assert sched.resume_dag("S1", r["dag_id"])
         assert D.read_dag(sc.dags_dir, r["dag_id"])["status"] == D.DAG_ACTIVE
 
+    def test_recover_paused_not_redispatched(self, tmp_path):
+        """paused DAG 重启后不得复活（ADR-0060 §4）：状态归位但不重投递 assignment、
+        不复活 Bot。active DAG 的重投递保持。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        prov.set("alice", [_text("thinking...")] * 50)
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "go")
+        r = json.loads(_with_scope("S1", H["group_plan"], TWO_STEP))
+        _with_scope("S1", H["group_plan_start"], r["dag_id"])
+        sc = hub.scope("S1")
+        _wait(lambda: any(s["status"] == D.STEP_IN_PROGRESS for s in D.read_dag(sc.dags_dir, r["dag_id"])["steps"].values()))
+        sched.pause_scope("S1")
+        # 模拟进程重启
+        sched.stop()
+        runner.shutdown_bot("S1", "alice")
+        _wait(lambda: not runner.is_alive("S1", "alice"), msg="bot gone")
+        hub.registry.release_all_leases()
+        sc.bus.clear_inbox("alice")  # 清掉旧 shutdown_request，避免干扰断言
+
+        dispatched = []
+        hub2 = TeamHub(tmp_path / "kb" / ".planify" / "team", RoleLibrary())
+        from planify.team.runner import BotRunner
+        runner2 = BotRunner(hub2, FakeProvider(), wd, runner.all_tool_defs, runner.all_tool_handlers, poll_interval=0.01, idle_timeout=30)
+        hub2.attach_runner(runner2)
+        sched2 = Scheduler(hub2, spawner=lambda s, n, p: dispatched.append(n) or runner2.start(s, n, p),
+                           thread_alive=runner2.is_alive, poll_interval=0.05)
+        hub2.attach_scheduler(sched2)
+        n = sched2.recover_scope("S1")
+        d = D.read_dag(hub2.scope("S1").dags_dir, r["dag_id"])
+        # paused：归位 ready，但 0 派单、0 线程、返回 0
+        assert d["status"] == D.DAG_PAUSED
+        assert all(s["status"] in (D.STEP_READY, D.STEP_PENDING) for s in d["steps"].values())
+        assert n == 0 and dispatched == [], dispatched
+        assert not runner2.is_alive("S1", "alice")
+        assert hub2.scope("S1").bus.read_inbox("alice") == []
+
+    def test_recover_active_redispatches(self, tmp_path):
+        """active DAG 的重投递不受 paused 修复影响：恢复后 ready 步骤重新派单。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        prov.set("alice", [_text("thinking...")] * 50)
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "go")
+        r = json.loads(_with_scope("S1", H["group_plan"], TWO_STEP))
+        _with_scope("S1", H["group_plan_start"], r["dag_id"])
+        sc = hub.scope("S1")
+        _wait(lambda: any(s["status"] == D.STEP_IN_PROGRESS for s in D.read_dag(sc.dags_dir, r["dag_id"])["steps"].values()))
+        sched.stop()
+        runner.shutdown_bot("S1", "alice")
+        _wait(lambda: not runner.is_alive("S1", "alice"), msg="bot gone")
+        hub.registry.release_all_leases()
+        sc.bus.clear_inbox("alice")
+
+        hub2 = TeamHub(tmp_path / "kb" / ".planify" / "team", RoleLibrary())
+        from planify.team.runner import BotRunner
+        runner2 = BotRunner(hub2, FakeProvider(), wd, runner.all_tool_defs, runner.all_tool_handlers, poll_interval=0.01, idle_timeout=30)
+        hub2.attach_runner(runner2)
+        sched2 = Scheduler(hub2, spawner=lambda s, n, p: runner2.start(s, n, p),
+                           thread_alive=runner2.is_alive, poll_interval=0.05)
+        hub2.attach_scheduler(sched2)
+        hub2.scope("S1")  # 注册 scope（recover_scope 用 try_scope 查注册表）
+        n = sched2.recover_scope("S1")
+        assert n == 1
+        _wait(lambda: len(hub2.scope("S1").bus.read_inbox("alice")) > 0, msg="assignment redelivered")
+
     @pytest.mark.xfail(reason=(
         "重启后 Bot 拿不到任务上下文：旧 Bot 退出时已把 assignment 读走（read_inbox 读清空），"
         "复活的新 Bot 读不到任何 assignment——需在恢复时把 assignment 持久化到 task 记录并在"
