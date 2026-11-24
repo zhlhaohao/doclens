@@ -710,6 +710,18 @@ async def chat_stop(req: ChatStopRequest):
     让前端可以 fire-and-forget 而无需关心时序。``stopped`` 仅作诊断用。
     """
     stopped = request_stop(req.session_id)
+    # 停止 = 停全部（ADR-0059 §11d）：lead 回合之外，该会话作用域内执行态 DAG 一并
+    # 转暂停、在跑 Bot 收 shutdown。请求级 hook 在 lead 不在跑时已注销，故此处直接
+    # 查 TeamHub——常驻停止入口，不依赖活跃流。
+    paused = 0
+    try:
+        from doclens.web_v2 import deps as _deps
+        _ag = _deps.get_agent_if_ready()
+        _hub = getattr(_ag, "team_hub", None) if _ag else None
+        if _hub is not None and _hub.scheduler is not None:
+            paused = _hub.scheduler.pause_scope(req.session_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("pause DAGs on stop failed", exc_info=True)
     from doclens.web_v2 import chat_runner
 
     task = chat_runner.get_task(req.session_id)
@@ -722,7 +734,7 @@ async def chat_stop(req: ChatStopRequest):
             # 收尾超时/异常不阻断 stop 返回——落库在 _run_and_finalize 的
             # finally，task 终将收尾；TimeoutError 时 shield 内层仍在收尾
             pass
-    return {"ok": True, "stopped": stopped}
+    return {"ok": True, "stopped": stopped, "dags_paused": paused}
 
 
 @router.get("/chat/trace")

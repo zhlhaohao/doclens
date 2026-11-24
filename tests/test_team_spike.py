@@ -1,0 +1,430 @@
+"""ADR-0058/0059 spike：团队作用域 + DAG 派活端到端最小闭环。
+
+假 LLM provider 驱动 Bot 线程：按脚本依次返回 write_file / task_update / idle
+工具调用，不触网。覆盖三轮评审指出的机制：
+  - 租约：跨 scope 拒绝、同 scope 复用、idle 不起新线程
+  - 校验器首错 + 示例；cycle / 角色不匹配 / inputs 非依赖
+  - 验收：exists/sections/min_citations/manual；不过打回、超限 failed→stalled
+  - 端到端：派单 → 执行 → 验收 → 下游推进 → dag_done 通知 lead
+  - 停止 = 停全部：DAG 转暂停 + Bot 收 shutdown；resume 续跑
+  - scope 隔离：两 scope 的 lead 收件箱互不可见
+  - 重启恢复：in_progress → ready，派单时 shutdown 态 Bot 自动复活
+  - contextvar 穿透：Bot 线程内 get_current_session_id() == scope
+"""
+
+from __future__ import annotations
+
+import json
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List
+
+import pytest
+
+from planify.team import acceptance, dag as D
+from planify.team.bot_registry import BotRegistry, BotRegistryError
+from planify.team.hub import TeamHub
+from planify.team.plan_tools import make_plan_tools
+from planify.team.roles import RoleLibrary
+from planify.team.scheduler import Scheduler
+
+
+# ----------------------------------------------------------------- 假 LLM
+
+@dataclass
+class _Block:
+    type: str
+    text: str = ""
+    id: str = ""
+    name: str = ""
+    input: Dict[str, Any] = None
+
+
+@dataclass
+class _Resp:
+    content: List[_Block]
+    stop_reason: str = "end_turn"
+
+
+class FakeProvider:
+    """按 bot_name 脚本化响应。脚本项：可调用 (messages) -> _Resp，或 _Resp。"""
+
+    def __init__(self):
+        self.scripts: Dict[str, List] = {}
+        self.calls: Dict[str, int] = {}
+
+    def set(self, bot: str, turns: List):
+        self.scripts[bot] = list(turns)
+
+    def chat(self, messages, system=None, tools=None, **kw):
+        # 从 messages 里无法直接知道 bot 名；runner 在 system prompt 首行写了 "You are '<name>'"
+        name = system.split("'")[1] if system and system.startswith("You are '") else "?"
+        self.calls[name] = self.calls.get(name, 0) + 1
+        turns = self.scripts.get(name)
+        if not turns:
+            return _Resp([_Block("text", "nothing scripted")])
+        t = turns.pop(0)
+        return t(messages) if callable(t) else t
+
+
+def _tool(id_, name, **inp):
+    return _Resp([_Block("tool_use", id=id_, name=name, input=inp)], "tool_use")
+
+
+def _text(t):
+    return _Resp([_Block("text", t)])
+
+
+def _write(rel, content, id_="w1"):
+    return _tool(id_, "write_file", path=rel, content=content)
+
+
+def _complete(id_="t1"):
+    return _tool(id_, "task_update", task_id=None, status="completed")
+
+
+def _idle(id_="i1"):
+    return _tool(id_, "idle")
+
+
+# ----------------------------------------------------------------- 装配
+
+def _write_file(path, content, workdir, resolve=None):
+    p = Path(path)
+    if not p.is_absolute():
+        p = Path(workdir) / p
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(content, encoding="utf-8")
+    return f"Wrote {p}"
+
+
+def _read_file(path, workdir, offset=None, limit=None):
+    p = Path(path)
+    if not p.is_absolute():
+        p = Path(workdir) / p
+    return p.read_text(encoding="utf-8") if p.exists() else "Error: not found"
+
+
+def _build(tmp_path: Path, provider=None):
+    provider = provider or FakeProvider()
+    workdir = tmp_path / "kb"
+    workdir.mkdir()
+    tool_defs = [{"name": n, "description": n, "input_schema": {"type": "object"}} for n in ("read_file", "write_file")]
+    handlers = {"read_file": lambda **kw: _read_file(kw["path"], workdir),
+                "write_file": lambda **kw: _write_file(kw["path"], kw["content"], workdir)}
+    hub = TeamHub(tmp_path / "kb" / ".planify" / "team", RoleLibrary())
+    from planify.team.runner import BotRunner
+    runner = BotRunner(hub, provider, workdir, tool_defs, handlers, poll_interval=0, idle_timeout=1)
+    hub.attach_runner(runner)
+    sched = Scheduler(hub, spawner=lambda s, n, p: runner.start(s, n, p), thread_alive=runner.is_alive, poll_interval=0.05)
+    hub.attach_scheduler(sched)
+    defs, H = make_plan_tools(lambda: hub, workdir)
+    return hub, runner, sched, H, provider, workdir
+
+
+def _wait(pred, timeout=5.0, msg="condition"):
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        if pred():
+            return
+        time.sleep(0.02)
+    raise AssertionError(f"timeout waiting for {msg}")
+
+
+def _with_scope(sid, fn, *a, **kw):
+    from planify.skills.access_state import set_current_session_id, reset_current_session_id
+    tok = set_current_session_id(sid)
+    try:
+        return fn(*a, **kw)
+    finally:
+        reset_current_session_id(tok)
+
+
+# ====================================================================== 注册表
+
+class TestRegistry:
+    def test_create_and_revive(self, tmp_path):
+        reg = BotRegistry(tmp_path, ["researcher"])
+        b = reg.spawn("alice", "researcher", "S1")
+        assert b["_spawned"] is True and b["leased_by"] == "S1" and b["status"] == "working"
+        reg.set_status("alice", "shutdown", "S1")
+        reg.release("alice", "S1")
+        b2 = reg.spawn("alice", "researcher", "S1")
+        assert b2["_spawned"] is True  # shutdown → 复活
+
+    def test_role_bound(self, tmp_path):
+        reg = BotRegistry(tmp_path, ["researcher", "default"])
+        reg.spawn("alice", "researcher", "S1")
+        with pytest.raises(BotRegistryError, match="bound to role"):
+            reg.spawn("alice", "default", "S1")
+
+    def test_lease_exclusive(self, tmp_path):
+        reg = BotRegistry(tmp_path, ["researcher"])
+        reg.spawn("alice", "researcher", "S1")
+        with pytest.raises(BotRegistryError, match="another session"):
+            reg.spawn("alice", "researcher", "S2")
+        # 释放后另一 scope 可租
+        reg.release("alice", "S1")
+        assert reg.spawn("alice", "researcher", "S2")["leased_by"] == "S2"
+
+    def test_unknown_role(self, tmp_path):
+        reg = BotRegistry(tmp_path, ["researcher"])
+        with pytest.raises(BotRegistryError, match="Unknown role"):
+            reg.spawn("x", "nope", "S1")
+
+    def test_release_all_on_restart(self, tmp_path):
+        reg = BotRegistry(tmp_path, ["researcher"])
+        reg.spawn("a", "researcher", "S1")
+        reg.spawn("b", "researcher", "S1")
+        assert reg.release_all_leases() == 2
+        assert all(b["leased_by"] is None and b["status"] == "shutdown" for b in reg.list_all())
+
+    def test_delete_only_by_holder(self, tmp_path):
+        reg = BotRegistry(tmp_path, ["researcher"])
+        reg.spawn("a", "researcher", "S1")
+        assert reg.delete("a", "S2") is False
+        assert reg.delete("a", "S1") is True
+        assert not reg.exists("a")
+
+
+# ====================================================================== 校验器
+
+class TestValidate:
+    R = ["researcher", "default"]
+    BOTS = {"alice": "researcher"}
+
+    def _v(self, plan):
+        return D.validate_plan(plan, role_ids=self.R, bot_names=list(self.BOTS), bot_roles=self.BOTS)
+
+    def test_ok(self):
+        p = {"steps": [
+            {"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher", "assignee": "alice",
+             "deliverables": [{"id": "d1", "path": "r.md"}]},
+            {"step_id": "s2", "subject": "b", "instructions": "y", "role": "researcher",
+             "depends_on": ["s1"], "inputs": [{"step": "s1", "deliverable_id": "d1"}]},
+        ]}
+        assert len(self._v(p)["steps"]) == 2
+
+    def test_first_error_only_with_example(self):
+        p = {"steps": [{"step_id": "s1", "subject": "a", "instructions": "x", "role": "nope"}]}
+        with pytest.raises(D.PlanIssue) as ei:
+            self._v(p)
+        assert ei.value.code == "role_unknown" and "researcher" in ei.value.expected
+
+    def test_cycle(self):
+        p = {"steps": [
+            {"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher", "depends_on": ["s2"]},
+            {"step_id": "s2", "subject": "b", "instructions": "y", "role": "researcher", "depends_on": ["s1"]},
+        ]}
+        with pytest.raises(D.PlanIssue) as ei:
+            self._v(p)
+        assert ei.value.code == "cycle"
+
+    def test_input_must_be_dependency(self):
+        p = {"steps": [
+            {"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher", "deliverables": [{"id": "d1", "path": "r.md"}]},
+            {"step_id": "s2", "subject": "b", "instructions": "y", "role": "researcher",
+             "inputs": [{"step": "s1", "deliverable_id": "d1"}]},
+        ]}
+        with pytest.raises(D.PlanIssue) as ei:
+            self._v(p)
+        assert ei.value.code == "input_not_a_dependency"
+
+    def test_assignee_role_mismatch(self):
+        self.BOTS = {"alice": "default"}
+        try:
+            p = {"steps": [{"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher", "assignee": "alice"}]}
+            with pytest.raises(D.PlanIssue) as ei:
+                self._v(p)
+            assert ei.value.code == "assignee_role_mismatch"
+        finally:
+            self.BOTS = {"alice": "researcher"}
+
+
+# ====================================================================== 验收
+
+class TestAcceptance:
+    def test_exists_sections_citations(self, tmp_path):
+        (tmp_path / "r.md").write_text("# 报告\n\n## 摘要\nxx [1]\n\n## 来源\n[1] a.md:3\n", encoding="utf-8")
+        ok, fails, manual = acceptance.run_acceptance(tmp_path, [
+            {"check": "exists", "path": "r.md"},
+            {"check": "sections", "path": "r.md", "names": ["摘要", "来源"]},
+            {"check": "min_citations", "path": "r.md", "min": 2},
+            {"check": "manual", "note": "user review"},
+        ])
+        assert ok and not fails and len(manual) == 1
+
+    def test_failures(self, tmp_path):
+        ok, fails, _ = acceptance.run_acceptance(tmp_path, [{"check": "exists", "path": "nope.md"}])
+        assert not ok and "not found" in fails[0]
+
+
+# ====================================================================== 端到端
+
+TWO_STEP = {
+    "name": "report",
+    "steps": [
+        {"step_id": "s1", "subject": "research", "instructions": "Write r.md with 摘要 and 来源",
+         "role": "researcher", "assignee": "alice",
+         "deliverables": [{"id": "d1", "path": "r.md"}],
+         "acceptance": [{"check": "exists", "path": "r.md"}, {"check": "sections", "path": "r.md", "names": ["摘要", "来源"]}]},
+        {"step_id": "s2", "subject": "summary", "instructions": "Read r.md and write s.md",
+         "role": "researcher", "assignee": "alice", "depends_on": ["s1"],
+         "inputs": [{"step": "s1", "deliverable_id": "d1"}],
+         "deliverables": [{"id": "d2", "path": "s.md"}],
+         "acceptance": [{"check": "exists", "path": "s.md"}]},
+    ],
+}
+
+
+class TestEndToEnd:
+    def test_full_chain(self, tmp_path):
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        prov.set("alice", [
+            _idle(),  # 起线程的 prompt：先 idle 等任务
+            # s1：读 assignment 后写 r.md，报完成，idle
+            _write("r.md", "# r\n## 摘要\nx [1]\n## 来源\n[1] a\n"),
+            _complete(), _idle(),
+            # s2：收 assignment 后写 s.md 报完成
+            _write("s.md", "# s\n"), _complete(), _idle(),
+        ])
+        out = _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "start")
+        assert '"ok": true' in out, out
+        _wait(lambda: runner.is_alive("S1", "alice"), msg="bot thread alive")
+        r = json.loads(_with_scope("S1", H["group_plan"], TWO_STEP))
+        assert r["ok"], r
+        dag_id = r["dag_id"]
+        # 草稿态：无任务、无租约外的副作用；start 后才 active
+        sc = hub.scope("S1")
+        assert D.read_dag(sc.dags_dir, dag_id)["status"] == D.DAG_DRAFT
+        assert json.loads(_with_scope("S1", H["group_plan_start"], dag_id))["ok"]
+        _wait(lambda: D.read_dag(sc.dags_dir, dag_id)["status"] == D.DAG_DONE, timeout=8, msg="dag done")
+        dag = D.read_dag(sc.dags_dir, dag_id)
+        out_dir = Path(dag["output_dir"])
+        assert (out_dir / "r.md").exists() and (out_dir / "s.md").exists()
+        msgs = sc.bus.read_inbox("lead")
+        assert any(m["type"] == "dag_done" for m in msgs), msgs
+        # 验收真实跑过：s1 的 task 记录为 completed
+        assert all(s["status"] == D.STEP_DONE for s in dag["steps"].values())
+
+    def test_fix_rounds_then_stalled(self, tmp_path):
+        """Bot 交付不达标 → 打回一次 → 再不达标 → failed → DAG stalled，lead 收通知。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        prov.set("alice", [
+            _idle(),
+            _write("r.md", "# r\n"),  # 缺 摘要/来源 → 打回
+            _complete(), _idle(),
+            _write("r.md", "# still bad\n"),  # 再缺 → 超限
+            _complete(), _idle(),
+            _text("done"), _text("done"),
+        ])
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "")
+        plan = {"name": "x", "steps": [{"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher",
+                                         "assignee": "alice", "deliverables": [{"id": "d1", "path": "r.md"}],
+                                         "acceptance": [{"check": "sections", "path": "r.md", "names": ["摘要"]}],
+                                         "max_fix_rounds": 1}]}
+        r = json.loads(_with_scope("S1", H["group_plan"], plan))
+        _with_scope("S1", H["group_plan_start"], r["dag_id"])
+        sc = hub.scope("S1")
+        _wait(lambda: D.read_dag(sc.dags_dir, r["dag_id"])["status"] == D.DAG_STALLED, timeout=8, msg="stalled")
+        d = D.read_dag(sc.dags_dir, r["dag_id"])
+        assert d["steps"]["s1"]["status"] == D.STEP_FAILED and d["failed_step"] == "s1"
+        msgs = [json.loads(m["content"]) for m in sc.bus.read_inbox("lead") if m["type"] == "dag_stalled"]
+        assert any(m["failed_step"] == "s1" for m in msgs), msgs
+
+    def test_thread_death_marks_failed(self, tmp_path):
+        """Bot 线程异常退出（LLM 抛错）持有任务 → task failed + step failed（§11b）。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        class Boom(FakeProvider):
+            def chat(self, messages, system=None, tools=None, **kw):
+                raise RuntimeError("llm down")
+        boom = Boom()
+        (tmp_path / "b").mkdir()
+        hub2, runner2, sched2, H2, _, wd2 = _build(tmp_path / "b", boom)
+        _with_scope("S1", H2["spawn_teammate"], "alice", "researcher", "")
+        plan = {"name": "x", "steps": [{"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher",
+                                         "assignee": "alice", "acceptance": [{"check": "exists", "path": "r.md"}]}]}
+        r = json.loads(_with_scope("S1", H2["group_plan"], plan))
+        _with_scope("S1", H2["group_plan_start"], r["dag_id"])
+        sc = hub2.scope("S1")
+        _wait(lambda: D.read_dag(sc.dags_dir, r["dag_id"])["status"] == D.DAG_STALLED, timeout=8, msg="stalled after thread death")
+
+    def test_scope_isolation(self, tmp_path):
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "")
+        # S2 看不到 alice（被 S1 租），且 S2 的 inbox 独立
+        out = _with_scope("S2", H["list_teammates"])
+        assert "leased by another session" in out
+        hub.scope("S1").bus.send("system", "lead", json.dumps({"type": "x"}))
+        assert _with_scope("S2", H["read_inbox"]) == "[]"
+        assert "x" in _with_scope("S1", H["read_inbox"])
+
+
+# ====================================================================== 停止 / 重启
+
+class TestStopAndRecover:
+    def test_stop_pauses_and_resume(self, tmp_path):
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        # Bot 永远沉默（不写文件不完成）——任务卡 in_progress
+        prov.set("alice", [_text("thinking...")] * 50)
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "")
+        r = json.loads(_with_scope("S1", H["group_plan"], TWO_STEP))
+        _with_scope("S1", H["group_plan_start"], r["dag_id"])
+        sc = hub.scope("S1")
+        _wait(lambda: any(s["status"] == D.STEP_IN_PROGRESS for s in D.read_dag(sc.dags_dir, r["dag_id"])["steps"].values()))
+        n = sched.pause_scope("S1")
+        assert n == 1
+        d = D.read_dag(sc.dags_dir, r["dag_id"])
+        assert d["status"] == D.DAG_PAUSED
+        assert all(s["status"] in (D.STEP_PENDING, D.STEP_READY) for s in d["steps"].values())
+        assert sched.resume_dag("S1", r["dag_id"])
+        assert D.read_dag(sc.dags_dir, r["dag_id"])["status"] == D.DAG_ACTIVE
+
+    def test_restart_recovery_revives_bot(self, tmp_path):
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        prov.set("alice", [_text("working...")] * 100)
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "")
+        r = json.loads(_with_scope("S1", H["group_plan"], TWO_STEP))
+        _with_scope("S1", H["group_plan_start"], r["dag_id"])
+        sc = hub.scope("S1")
+        _wait(lambda: any(s["status"] == D.STEP_IN_PROGRESS for s in D.read_dag(sc.dags_dir, r["dag_id"])["steps"].values()))
+        # 模拟进程重启：停调度器、等 Bot 线程真正退出、清租约、丢弃 hub 内存态（磁盘保留）
+        sched.stop()
+        runner.shutdown_bot("S1", "alice")
+        _wait(lambda: not runner.is_alive("S1", "alice"), msg="old bot thread gone")
+        hub.registry.release_all_leases()
+        # 新进程：新 hub 读同一目录；首个 scope 建立时恢复
+        hub2 = TeamHub(tmp_path / "kb" / ".planify" / "team", RoleLibrary())
+        from planify.team.runner import BotRunner
+        prov2 = FakeProvider()
+        prov2.set("alice", [_write("r.md", "# r\n## 摘要\nx\n## 来源\ny\n"), _complete(), _idle(),
+                            _write("s.md", "# s\n"), _complete(), _idle()])
+        runner2 = BotRunner(hub2, prov2, wd, runner.all_tool_defs, runner.all_tool_handlers, poll_interval=0, idle_timeout=1)
+        hub2.attach_runner(runner2)
+        sched2 = Scheduler(hub2, spawner=lambda s, n, p: runner2.start(s, n, p), thread_alive=runner2.is_alive, poll_interval=0.05)
+        hub2.attach_scheduler(sched2)
+        hub2.scope("S1")  # 触发 recover_scope
+        d = D.read_dag(hub2.scope("S1").dags_dir, r["dag_id"])
+        assert all(s["status"] in (D.STEP_READY, D.STEP_PENDING) for s in d["steps"].values())
+        # 重新租 alice（重启后租约已清，需 lead 或恢复逻辑重新 spawn——spike 由派单复活；但复活前须有租约）
+        hub2.registry.spawn("alice", "researcher", "S1")
+        _wait(lambda: D.read_dag(hub2.scope("S1").dags_dir, r["dag_id"])["status"] == D.DAG_DONE, timeout=8, msg="recovered dag done")
+
+
+# ====================================================================== contextvar 穿透
+
+class TestContextvar:
+    def test_bot_thread_sees_scope(self, tmp_path):
+        from planify.skills.access_state import get_current_session_id
+        seen = {}
+        prov = FakeProvider()
+        def _capture(messages):
+            seen["sid"] = get_current_session_id()
+            return _idle()
+        prov.set("alice", [_capture])
+        hub, runner, sched, H, prov2, wd = _build(tmp_path, prov)
+        _with_scope("S7", H["spawn_teammate"], "alice", "researcher", "hello")
+        _wait(lambda: "sid" in seen, msg="bot captured scope")
+        assert seen["sid"] == "S7"

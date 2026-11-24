@@ -113,6 +113,7 @@ class AgentRuntime:
     team: Optional[Any] = None
     skills: Optional[Any] = None
     logger: Optional[Any] = None
+    team_hub: Optional[Any] = None  # planify.team.TeamHub（ADR-0058/0059 spike）；宿主装配，None = 未启用
 
     # 工具
     tools: List[Dict] = field(default_factory=list)

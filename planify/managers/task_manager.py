@@ -22,6 +22,7 @@
 
 import json
 from pathlib import Path
+from typing import Optional
 
 
 class TaskManager:
@@ -176,3 +177,30 @@ class TaskManager:
         task["status"] = "in_progress"
         self._save(task)
         return f"Claimed task #{tid} for {owner}"
+
+    # ---------------------------------------------------------------- DAG 扩展（ADR-0059）
+    # 下列方法供 team/scheduler 使用：返回原始 dict 而非 JSON 字串。
+
+    def list_all_raw(self) -> list:
+        """全部任务的原始 dict 列表（含 DAG 步骤字段）。"""
+        out = []
+        for f in sorted(self.tasks_dir.glob("task_*.json")):
+            try:
+                out.append(json.loads(f.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                continue
+        return out
+
+    def get_raw(self, tid: int) -> Optional[dict]:
+        """按 id 读原始 dict；不存在返回 None。"""
+        p = self.tasks_dir / f"task_{tid}.json"
+        if not p.exists():
+            return None
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def save_raw(self, task: dict) -> None:
+        """整写回（scheduler 更新 DAG 步骤字段用）。"""
+        self._save(task)

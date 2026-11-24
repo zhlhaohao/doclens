@@ -54,17 +54,17 @@ from planify.skills.skill_loader import SkillLoader
 # 中断事件
 _interrupt_event = threading.Event()
 
-#: GUI 工具表显式降级清单（2026-11-17 决策 B）：
+#: GUI 工具表显式降级清单（2026-11-17 决策 B，2026-11-23 调整）：
 #: - legacy ask：ask_user/user_confirm 在 GUI 无 emitter 通道（悬置 300s 假死）
-#: - 团队协作 5 工具 + 协议 3 工具：回合制宿主容不下常驻队友——收件箱只在
-#:   下一回合循环顶 drain、进程退出全灭、与 task 子代理功能重叠。模型因
-#:   提示词零引导从未成功使用（23 天日志仅 1 次调用且队友 55 秒内死亡），
-#:   保留只会白占工具描述 token + 偶发误用面。planify 层保持注册不动
-#:   （未来 Router/Worker 分层时按需重新启用）；doclens 装配侧统一过滤。
+#: - 协议 3 工具：Bot 内部协议，lead 不该直接调
+#: - broadcast：旧 team_tools 的装配期绑定版，plan_tools 不提供（DAG 下 lead 广播
+#:   无意义——派活走 group_plan）；留着会绑旧 bus 串 scope，一并过滤。
+#: 团队协作工具（spawn_teammate/list_teammates/send_message/read_inbox/shutdown_teammate）
+#: 与 DAG 工具（group_plan*）于 2026-11-23 ADR-0058/0059 spike 起启用——由
+#: planify.team.plan_tools 提供（运行期按 scope 查 TeamHub，不再装配期绑定）。
 GUI_FILTERED_TOOLS = frozenset({
     "ask_user", "user_confirm",
-    "spawn_teammate", "list_teammates", "send_message",
-    "read_inbox", "broadcast",
+    "broadcast",
     "shutdown_request", "plan_approval", "idle",
 })
 
@@ -145,6 +145,7 @@ class _Assembly:
     max_tokens: int = 0
     kb_tools: List[Dict[str, Any]] = field(default_factory=list)
     kb_handlers: Dict[str, Any] = field(default_factory=dict)
+    team_hub: Any = None  # planify.team.TeamHub（ADR-0058/0059 spike）；装配失败为 None
     run_subagent: Any = None
     tools: List[Dict[str, Any]] = field(default_factory=list)
     tool_handlers: Dict[str, Any] = field(default_factory=dict)
@@ -231,6 +232,7 @@ class CortexAgent:
         self.workdir = workdir
         self.loop = None
         self.runtime = None
+        self.team_hub = None  # planify.team.TeamHub；initialize 后填充
         # 注入宿主已有的 IndexManager（GUI=deps 单例 / CLI/TUI=各自实例），
         # 避免自建第二实例重复跑启动审计（双轮审计 bug，2026-09-11）。
         self.idx = idx_manager
@@ -554,6 +556,37 @@ class CortexAgent:
             k: v for k, v in tool_handlers.items() if k not in GUI_FILTERED_TOOLS
         }
 
+        # 团队协作层（ADR-0058/0059 spike）：装配 TeamHub，并用 planify.team 的
+        # lead 工具面**覆盖**旧 team_tools 的同名 handler（旧版装配期绑死一个 bus，
+        # 跨 scope 串线；新版运行期按 get_current_session_id 查 hub）。
+        try:
+            from planify.team import bootstrap_team as _bootstrap_team
+            from planify.team.plan_tools import make_plan_tools as _make_plan_tools
+            from planify.team import get_hub as _get_hub
+
+            # Bot 能力工具表 = 过滤后的 lead 工具（不含 lead 专属的 plan_*/team 工具）
+            _lead_only = {"spawn_teammate", "list_teammates", "send_message", "read_inbox",
+                          "broadcast", "shutdown_teammate"}
+            _bot_defs = [t for t in asm.tools if not t["name"].startswith("group_plan") and t["name"] not in _lead_only]
+            _bot_handlers = {k: v for k, v in asm.tool_handlers.items()
+                             if not k.startswith("group_plan") and k not in _lead_only}
+            _hub = _bootstrap_team(
+                workdir=self.workdir, provider=asm.client,
+                tool_defs=_bot_defs, tool_handlers=_bot_handlers,
+                idle_timeout=asm.config.get("idle_timeout", 60),
+            )
+            _defs, _handlers = _make_plan_tools(_get_hub, self.workdir)
+            _by_name = {t["name"]: t for t in asm.tools}
+            for t in _defs:
+                _by_name[t["name"]] = t
+            asm.tools = list(_by_name.values())
+            asm.tool_handlers.update(_handlers)
+            asm.team_hub = _hub
+            self.team_hub = _hub  # 同步挂到 agent，供 request_stop 等不经过 runtime 的路径访问
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).exception("[team] bootstrap failed; team tools stay disabled")
+            asm.team_hub = None
+
     def _stage_assemble(self, asm: "_Assembly") -> None:
         """阶段 7：组装 AgentRuntime 并挂到 self。"""
         # AgentRuntime（进程级组件容器；runtime_id 仅作兜底标识，
@@ -607,8 +640,10 @@ class CortexAgent:
         runtime.tool_handlers = asm.tool_handlers
         runtime.logger = asm.logger
         runtime.skill_access_state = asm.skill_state
+        runtime.team_hub = asm.team_hub  # ADR-0058/0059 spike；None = 团队功能不可用
 
         self.runtime = runtime
+        self.team_hub = asm.team_hub
 
     # ---- 事件循环（AP-51：每轮新建但必须回收，否则每问泄漏一个 selector/fd）----
 
