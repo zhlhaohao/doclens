@@ -23,6 +23,7 @@ from ..core.llm.types import ToolUseBlock  # noqa: F401  (Tool 转换收敛到 t
 from ..core.logging_config import data_dirname
 from ..tools.basic import to_tool_defs
 from .emitter import EventEmitter, SSEEmitter
+from .aggregate import StreamAggregator
 from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
 from .waiter import GlobalResponseWaiter, get_global_waiter
 from .interjection import interjection_ack_message, interjection_message
@@ -1197,8 +1198,38 @@ class StreamingAgent:
         Returns:
             (stop_reason, current_text)：本次调用的停止原因与累计正文。
         """
+        # 同步聚合器不 await——emitter 的 coroutine 入队，每个事件后统一 drain
+        _pending_awaits: List[Any] = []
+
+        def _enqueue_await(coro):
+            _pending_awaits.append(coro)
+
+        async def _drain_awaits():
+            for coro in _pending_awaits:
+                await coro
+            _pending_awaits.clear()
+
         cur_stop_reason = "end_turn"
         cur_text = ""
+        agg = StreamAggregator(
+            assistant_content=assistant_content,
+            block_text_parts=block_text_parts,
+            block_tool_states=block_tool_states,
+            call_usage=call_usage,
+        )
+        # `_tool_call_states` 与聚合器共用同一 dict（外部在循环里 clear / 查询）
+        self._tool_call_states = agg.block_tool_states
+        # 保留 lead 的 emitter 调用语义与顺序（单一聚合真相源在 aggregate.py，
+        # 这里只负责把回调接到 async emitter 上）
+        agg.on_text = lambda t: _enqueue_await(self.emitter.emit_text(t, is_end=False))
+        _emit_thinking = getattr(self.emitter, "emit_thinking", None)
+        if _emit_thinking is not None:
+            agg.on_thinking = lambda t: _enqueue_await(_emit_thinking(t))
+        agg.on_tool_start = lambda tid, name: _enqueue_await(self.emitter.emit_tool_call(
+            tool_use_id=tid, name=name, input_data={}, is_complete=False))
+        agg.on_tool_complete = lambda tid, name, inp: _enqueue_await(self.emitter.emit_tool_call(
+            tool_use_id=tid, name=name, input_data=inp, is_complete=True))
+
         async with aclosing(
             self.provider.astream(
                 messages=messages,
@@ -1213,98 +1244,11 @@ class StreamingAgent:
                 if self._interrupt_event and self._interrupt_event.is_set():
                     self.logger.info("[StreamingAgent] 流式调用被中断")
                     break
-
-                event_type = event.type
-
-                if event.usage:
-                    for k, v in event.usage.items():
-                        if v and v > call_usage.get(k, 0):
-                            call_usage[k] = v
-
-                if event_type == "content_block_start":
-                    index = event.block_index
-                    if index is None:
-                        continue
-                    block_type = event.block_type
-                    if block_type == "text":
-                        block_text_parts.setdefault(index, [])
-                    elif block_type == "tool_use":
-                        # 工具调用开始
-                        self._tool_call_states[index] = ToolCallState(
-                            tool_use_id=event.tool_use_id or "",
-                            name=event.tool_name or "",
-                        )
-                        block_tool_states[index] = self._tool_call_states[index]
-                        # 发射工具调用开始事件（直接 await：emit 是轻操作且天然保序）
-                        await self.emitter.emit_tool_call(
-                            tool_use_id=event.tool_use_id or "",
-                            name=event.tool_name or "",
-                            input_data={},
-                            is_complete=False,
-                        )
-
-                elif event_type == "content_block_delta":
-                    index = event.block_index
-                    if index is None:
-                        continue
-                    if event.text_delta:
-                        text = event.text_delta
-                        cur_text += text
-                        block_text_parts.setdefault(index, []).append(text)
-                        # 发射文本事件
-                        await self.emitter.emit_text(text, is_end=False)
-                    elif event.thinking_delta:
-                        # 思考流增量（2026-10-05）：getattr 防御鸭子类型 emitter
-                        # （旧宿主未实现 emit_thinking 时静默跳过，协议默认
-                        # 实现只惠及显式继承 EventEmitter 的实现类）
-                        emit_thinking = getattr(self.emitter, "emit_thinking", None)
-                        if emit_thinking is not None:
-                            await emit_thinking(event.thinking_delta)
-                    elif event.input_json_delta:
-                        # 工具参数增量
-                        if index in self._tool_call_states:
-                            state = self._tool_call_states[index]
-                            state.append_chunk(event.input_json_delta)
-
-                elif event_type == "content_block_stop":
-                    index = event.block_index
-                    if index is None:
-                        continue
-                    if index in block_tool_states:
-                        # 工具调用完成
-                        state = block_tool_states[index]
-                        complete_input = state.get_complete_input()
-
-                        # 发射工具调用完成事件
-                        await self.emitter.emit_tool_call(
-                            tool_use_id=state.tool_use_id,
-                            name=state.name,
-                            input_data=complete_input,
-                            is_complete=True,
-                        )
-                        assistant_content.append({
-                            "type": "tool_use",
-                            "id": state.tool_use_id,
-                            "name": state.name,
-                            "input": complete_input,
-                        })
-                    elif index in block_text_parts:
-                        # 文本块完成
-                        text = "".join(block_text_parts[index])
-                        if text:
-                            assistant_content.append({
-                                "type": "text",
-                                "text": text,
-                            })
-
-                elif event_type == "message_delta":
-                    # 消息级别更新
-                    if event.stop_reason:
-                        cur_stop_reason = event.stop_reason
-
-                elif event_type == "message_stop":
-                    # 消息结束
+                if not agg.feed(event):
                     break
+                # 同步聚合产出的 emitter await 按事件顺序消费（emit 是轻操作）
+                await _drain_awaits()
+        cur_stop_reason, _, _, cur_text = agg.finish()
         return cur_stop_reason, cur_text
 
     async def _stream_llm_call(
