@@ -60,6 +60,24 @@ export class PlanCardEl extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._status = this.card?.status ?? "draft";
+    // 状态随 DAG 失效（ADR-0060 §1）：落库的是提交时快照，挂载时查当前状态——
+    // 已 active/done 的卡按钮消失
+    void this._syncStatus();
+  }
+
+  protected updated(changed: Map<string, unknown>) {
+    if (changed.has("card")) this._status = this.card?.status ?? "draft";
+  }
+
+  private async _syncStatus() {
+    const sid = store.getState().chat.currentSession?.id ?? "";
+    if (!sid) return;
+    try {
+      const { listDags } = await import("../api/team");
+      const dags = await listDags(sid);
+      const cur = dags.find((d) => d.id === this.card.dag_id);
+      if (cur) this._status = cur.status;
+    } catch { /* 查不到保持快照 */ }
   }
 
   private _toast(msg: string, level: "success" | "error" | "info" = "info") {
@@ -118,8 +136,8 @@ export class PlanCardEl extends LitElement {
         <div class="foot">
           <span class="out" title=${c.output_dir ?? ""}>产物：${c.output_dir ?? ""}</span>
           ${draft ? html`
-            <button class="btn" @click=${this._edit} ?disabled=${this._busy}>修改</button>
-            <button class="btn primary" @click=${this._start} ?disabled=${this._busy}>
+            <button class="btn" @click=${this._edit} ?disabled=${this._busy} aria-label="修改计划">修改</button>
+            <button class="btn primary" @click=${this._start} ?disabled=${this._busy} aria-label="开始执行计划">
               <doclens-icon name="play"></doclens-icon>开始
             </button>` : nothing}
         </div>

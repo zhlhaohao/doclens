@@ -90,6 +90,10 @@ export async function* chatStream(
     } else if (ev.event === "references") {
       const d = parseData("references", ev.data);
       if (d) yield { type: "references", items: (d.items ?? []) as { path: string }[] };
+    } else if (ev.event === "plan_card") {
+      // 计划卡（ADR-0060 §1）：plan_tools 的 event_sink 经 emitter 直推，字段整体透传
+      const d = parseData("plan_card", ev.data);
+      if (d) yield { type: "plan_card", ...(d as unknown as Omit<import("../state/types").PlanCard, never>) } as ChatStreamEvent;
     } else if (ev.event === "toast") {
       const d = parseData("toast", ev.data);
       if (d) {
