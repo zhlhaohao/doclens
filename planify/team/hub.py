@@ -60,6 +60,8 @@ class TeamHub:
         self._lock = threading.RLock()
         self._scheduler = None  # 延迟注入（scheduler 模块 import hub 会循环）
         self._runner = None     # BotRunner，由 bootstrap_team 注入
+        from .events import TeamEventBus
+        self.events = TeamEventBus()  # Bot → SSE 事件总线（ADR-0060 §3）
 
     @property
     def runner(self):
