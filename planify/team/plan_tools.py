@@ -133,6 +133,7 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             D.write_dag(sc.dags_dir, dag)
             _set_pending(sc, dag_id, "confirm")
             return json.dumps({"ok": True, "dag_id": dag_id, "card": _card(dag),
+                               "repairs": norm.get("repairs", []),
                                "next": "Show the card to the user; on approval call group_plan_start."}, ensure_ascii=False)
         except PlanIssue as e:
             return json.dumps({"ok": False, "issue": e.to_dict()}, ensure_ascii=False)
@@ -266,10 +267,16 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
          "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "delete": {"type": "boolean"}},
                           "required": ["name"]}},
         {"name": "group_plan",
-         "description": ("Submit a DAG of steps for user confirmation. Each step: step_id, subject, instructions, role "
-                         "(built-in id), optional assignee (existing Bot with that role), depends_on (step_ids), inputs "
-                         "([{step, deliverable_id}]), deliverables ([{id, path}]), acceptance ([{check, path, ...}]). "
-                         "Validation reports the first issue only with an example. Returns a plan card to show the user."),
+         "description": (
+             "Submit a DAG of steps for user confirmation. "
+             "plan = {name, steps:[{step_id, subject, instructions, role, assignee?, depends_on?, inputs?, "
+             "deliverables?, acceptance?, skill?}]}. Example step: "
+             '{"step_id":"s1","subject":"Research","instructions":"Write notes.md with 摘要 and 来源",'
+             '"role":"researcher","assignee":"remy","deliverables":[{"id":"d1","path":"notes.md"}],'
+             '"acceptance":[{"check":"exists","path":"notes.md"},{"check":"sections","path":"notes.md","names":["摘要","来源"]}]}; '
+             'a dependent step adds "depends_on":["s1"],"inputs":[{"step":"s1","deliverable_id":"d1"}]. '
+             "Validation reports the first issue only with an example; field aliases (id/task/dependsOn) are auto-repaired and listed in 'repairs'. "
+             "Returns a plan card to show the user."),
          "input_schema": {"type": "object", "properties": {"plan": {"type": "object"}}, "required": ["plan"]}},
         {"name": "group_plan_revise", "description": "Replace a draft DAG's plan (full replacement, not patch).",
          "input_schema": {"type": "object", "properties": {"dag_id": {"type": "integer"}, "plan": {"type": "object"}},

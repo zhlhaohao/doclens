@@ -101,6 +101,70 @@ def _check_step_shape(step: Any, i: int) -> None:
             )
 
 
+# 模型常犯的字段名漂移（评测集实测）：确定性修复，不报错——报错会让模型反复猜
+_FIELD_ALIASES = {
+    "id": "step_id",            # 步骤 id 写成 id
+    "task": "instructions",     # Pi Bot 的 task 字段名
+    "dependsOn": "depends_on",  # camelCase
+    "title": "subject",
+}
+
+
+def _repair_plan(plan: Any) -> tuple:
+    """确定性修复字段名漂移与 step_id 非法字符。返回 (修复后 plan, 修复说明列表)。
+
+    只改别名与字符归一化，不改语义。depends_on / inputs.step 里对被改名
+    step_id 的引用同步替换。缺 subject 时从 instructions 首行派生（纯展示字段）。
+    """
+    notes: List[str] = []
+    if not isinstance(plan, dict) or not isinstance(plan.get("steps"), list):
+        return plan, notes
+
+    # 1. 字段别名
+    for s in plan["steps"]:
+        if not isinstance(s, dict):
+            continue
+        for alias, canonical in _FIELD_ALIASES.items():
+            if alias in s and canonical not in s:
+                s[canonical] = s.pop(alias)
+                notes.append(f"step {s.get('step_id', '?')}: '{alias}' → '{canonical}'")
+
+    # 1b. subject 缺失 → 从 instructions 首行派生（截 60 字）
+    for s in plan["steps"]:
+        if not isinstance(s, dict):
+            continue
+        if not s.get("subject") and isinstance(s.get("instructions"), str):
+            first = s["instructions"].strip().splitlines()[0][:60]
+            s["subject"] = first or s.get("step_id", "step")
+            notes.append(f"step {s.get('step_id', '?')}: subject derived from instructions")
+
+    # 2. step_id 非法字符归一化（记录旧→新，稍后替换引用）
+    idmap: Dict[str, str] = {}
+    for s in plan["steps"]:
+        if not isinstance(s, dict):
+            continue
+        sid = s.get("step_id")
+        if isinstance(sid, str) and not _ID_RE.match(sid):
+            fixed = re.sub(r"[^A-Za-z0-9_-]", "-", sid)
+            fixed = re.sub(r"-+", "-", fixed).strip("-")[:41]
+            if not fixed or not re.match(r"[A-Za-z]", fixed[0]):
+                fixed = "s-" + fixed
+            notes.append(f"step_id '{sid}' → '{fixed}'")
+            s["step_id"] = fixed
+            idmap[sid] = fixed
+
+    # 3. 引用同步
+    if idmap:
+        for s in plan["steps"]:
+            if not isinstance(s, dict):
+                continue
+            s["depends_on"] = [idmap.get(d, d) for d in s.get("depends_on", []) or []]
+            for inp in s.get("inputs", []) or []:
+                if isinstance(inp, dict) and inp.get("step") in idmap:
+                    inp["step"] = idmap[inp["step"]]
+    return plan, notes
+
+
 def validate_plan(
     plan: Any,
     *,
@@ -114,6 +178,7 @@ def validate_plan(
     """
     if not isinstance(plan, dict):
         raise PlanIssue("plan_not_object", [], "Plan must be an object")
+    plan, repairs = _repair_plan(plan)
     steps = plan.get("steps")
     if not isinstance(steps, list) or not steps:
         raise PlanIssue("steps_empty", ["steps"], "Plan needs at least one step", expected="[{...}]")
@@ -208,7 +273,7 @@ def validate_plan(
                     expected=", ".join(sorted(VALID_CHECKS)),
                 )
 
-    return {"name": str(plan.get("name") or "plan"), "steps": steps}
+    return {"name": str(plan.get("name") or "plan"), "steps": steps, "repairs": repairs}
 
 
 def _assert_acyclic(steps: List[Dict[str, Any]]) -> None:
@@ -283,6 +348,7 @@ def new_dag(scope_id: str, dag_id: int, plan: Dict[str, Any], output_dir: Path) 
         "id": dag_id,
         "scope": scope_id,
         "name": plan["name"],
+        "repairs": plan.get("repairs", []),
         "status": DAG_DRAFT,
         "output_dir": str(output_dir),
         "plan": plan,

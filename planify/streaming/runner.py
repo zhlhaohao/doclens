@@ -363,6 +363,20 @@ class StreamingAgent:
                 "</system-reminder>"
             )
 
+        # 4. 团队角色清单（ADR-0059 §9）：从内置角色表派生，不手写——角色新增自动更新。
+        #    仅 TeamHub 已装配（GUI 链路）时注入；lead 据此填 group_plan 的 role / assignee。
+        team_hub = getattr(self.runtime, "team_hub", None) if self.runtime else None
+        if team_hub is not None:
+            catalog = team_hub.roles.catalog_line()
+            if catalog:
+                context_parts.append(
+                    "<system-reminder>\n"
+                    "# 团队角色（Team Roles）\n\n"
+                    "可派活的内置角色（role id: 能力一句话）。多 Bot 派活前先 load_skill(\"team-dispatch\")。\n\n"
+                    f"{catalog}\n"
+                    "</system-reminder>"
+                )
+
         if context_parts:
             combined = "\n\n".join(context_parts)
             if CONTEXT_MARKER not in combined:
