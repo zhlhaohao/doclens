@@ -583,7 +583,9 @@ class CortexAgent:
             _by_name = {t["name"]: t for t in asm.tools}
             for t in _defs:
                 _by_name[t["name"]] = t
-            asm.tools = list(_by_name.values())
+            # 原位更新（保持 list 对象同一性）：BotRunner 持 asm.tools 本体引用——
+            # 重新赋值会让 Bot 持有被丢弃的旧 list，MCP 工具永远同步不进去
+            asm.tools[:] = list(_by_name.values())
             asm.tool_handlers.update(_handlers)
             asm.team_hub = _hub
             self.team_hub = _hub  # 同步挂到 agent，供 request_stop 等不经过 runtime 的路径访问
