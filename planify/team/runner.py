@@ -81,7 +81,11 @@ class BotRunner:
         self.hub = hub
         self.provider = provider
         self.workdir = Path(workdir)
-        self.all_tool_defs = _bot_tool_defs(tool_defs)
+        # 持宿主工具表的**引用**而非拷贝：MCP 工具在装配后异步 reconcile 进
+        # runtime.tools（_sync_runtime_tools 原位 [:] 更新）——拷贝会让 Bot 永远
+        # 拿不到后加入的 MCP 工具（真机：researcher 授权了 anysearch 却看不见）。
+        # 每次线程起跑时现算（_loop 读 self.bot_tool_defs()）。
+        self._host_tool_defs = tool_defs
         self.all_tool_handlers = tool_handlers
         self.poll_interval = poll_interval
         self.idle_timeout = idle_timeout
@@ -94,6 +98,15 @@ class BotRunner:
         self._noticed_tasks: Dict[Tuple[str, str, Optional[int]], bool] = {}
         # 角色 tools 是否**显式**含 write_file（researcher 要写交付物；default 仅靠 FORCED 写记忆）
         self._role_explicit_write: Dict[str, set] = {}
+
+    def bot_tool_defs(self) -> list:
+        """当前可用的 Bot 工具表（宿主表现算 + 内置通信/任务工具，内置优先）。"""
+        return _bot_tool_defs(self._host_tool_defs)
+
+    @property
+    def all_tool_defs(self) -> list:
+        """兼容别名（测试用）= bot_tool_defs()。"""
+        return self.bot_tool_defs()
 
     # ------------------------------------------------------------ 查询
 
@@ -175,7 +188,8 @@ class BotRunner:
         role = self.hub.roles.get(bot["role"])
         sys_prompt = role.system_prompt(name, self.workdir) + "\n\nMemory:\n" + registry.read_memory(name)
 
-        tool_defs = [t for t in self.all_tool_defs if t["name"] in role.allowed_tools([x["name"] for x in self.all_tool_defs])]
+        all_defs = self.bot_tool_defs()
+        tool_defs = [t for t in all_defs if t["name"] in role.allowed_tools([x["name"] for x in all_defs])]
         allowed = {t["name"] for t in tool_defs}
         if "write_file" in role.tools:
             self._role_explicit_write[name] = {"write_file"}

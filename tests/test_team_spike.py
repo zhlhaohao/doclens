@@ -483,7 +483,7 @@ class TestStopAndRecover:
         dispatched = []
         hub2 = TeamHub(tmp_path / "kb" / ".planify" / "team", RoleLibrary())
         from planify.team.runner import BotRunner
-        runner2 = BotRunner(hub2, FakeProvider(), wd, runner.all_tool_defs, runner.all_tool_handlers, poll_interval=0.01, idle_timeout=30)
+        runner2 = BotRunner(hub2, FakeProvider(), wd, runner._host_tool_defs, runner.all_tool_handlers, poll_interval=0.01, idle_timeout=30)
         hub2.attach_runner(runner2)
         sched2 = Scheduler(hub2, spawner=lambda s, n, p: dispatched.append(n) or runner2.start(s, n, p),
                            thread_alive=runner2.is_alive, poll_interval=0.05)
@@ -514,7 +514,7 @@ class TestStopAndRecover:
 
         hub2 = TeamHub(tmp_path / "kb" / ".planify" / "team", RoleLibrary())
         from planify.team.runner import BotRunner
-        runner2 = BotRunner(hub2, FakeProvider(), wd, runner.all_tool_defs, runner.all_tool_handlers, poll_interval=0.01, idle_timeout=30)
+        runner2 = BotRunner(hub2, FakeProvider(), wd, runner._host_tool_defs, runner.all_tool_handlers, poll_interval=0.01, idle_timeout=30)
         hub2.attach_runner(runner2)
         sched2 = Scheduler(hub2, spawner=lambda s, n, p: runner2.start(s, n, p),
                            thread_alive=runner2.is_alive, poll_interval=0.05)
@@ -613,7 +613,7 @@ class TestStopAndRecover:
         prov2 = FakeProvider()
         prov2.set("alice", [_write("r.md", "# r\n## 摘要\nx\n## 来源\ny\n"), _complete(), _idle(),
                             _write("s.md", "# s\n"), _complete(), _idle()])
-        runner2 = BotRunner(hub2, prov2, wd, runner.all_tool_defs, runner.all_tool_handlers, poll_interval=0.01, idle_timeout=30)
+        runner2 = BotRunner(hub2, prov2, wd, runner._host_tool_defs, runner.all_tool_handlers, poll_interval=0.01, idle_timeout=30)
         hub2.attach_runner(runner2)
         sched2 = Scheduler(hub2, spawner=lambda s, n, p: runner2.start(s, n, p), thread_alive=runner2.is_alive, poll_interval=0.05)
         hub2.attach_scheduler(sched2)
@@ -689,6 +689,21 @@ class TestSessionSink:
         types = [e["notice_type"] for e in events if e.get("type") == "bot_notice"]
         assert types[0] == "assignment" and types.index("redispatched") > types.index("fix_required")
         assert all(e.get("task_id") == tid for e in events if e.get("type") == "bot_notice")
+
+    def test_late_mcp_tools_visible_to_bot(self, tmp_path):
+        """MCP 工具在装配后异步 reconcile 进宿主表——Bot 持引用不拷贝，线程起跑时现算。
+        （真机：researcher 授权了 anysearch 却「核对本会话工具清单」说没有）"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        host_defs = runner._host_tool_defs  # 宿主表（list 引用）
+        assert not any(t["name"].startswith("mcp__") for t in runner.bot_tool_defs())
+        host_defs.append({"name": "mcp__anysearch__search", "description": "x", "input_schema": {"type": "object"}})
+        names = {t["name"] for t in runner.bot_tool_defs()}
+        assert "mcp__anysearch__search" in names
+        # 但角色白名单仍管用：默认角色没授权 → 线程 tool_defs 不含它
+        from planify.team.roles import RoleLibrary
+        r = RoleLibrary().get("default")
+        assert "mcp__anysearch__search" not in r.allowed_tools(list(names))
+        assert "mcp__anysearch__search" in RoleLibrary().get("researcher").allowed_tools(list(names))
 
     def test_plan_card_emitted_via_sink(self, tmp_path):
         """group_plan / revise / replan 返回前经 event_sink 发 plan_card（ADR-0060 §1）。"""
