@@ -49,7 +49,12 @@ class _Resp:
 
 
 class FakeProvider:
-    """按 bot_name 脚本化响应。脚本项：可调用 (messages) -> _Resp，或 _Resp。"""
+    """按 bot_name 脚本化响应。脚本项：可调用 (messages) -> _Resp，或 _Resp。
+
+    Bot runner 已改恒定流式（ADR-0060 §3）——`stream()` 把脚本的 _Resp 转成
+    StreamEvent 序列（与真实 provider 归一化输出同构），走同一聚合核。
+    `chat()` 保留给少数直接调它的用例。
+    """
 
     def __init__(self):
         self.scripts: Dict[str, List] = {}
@@ -58,15 +63,36 @@ class FakeProvider:
     def set(self, bot: str, turns: List):
         self.scripts[bot] = list(turns)
 
-    def chat(self, messages, system=None, tools=None, **kw):
-        # 从 messages 里无法直接知道 bot 名；runner 在 system prompt 首行写了 "You are '<name>'"
+    def _next(self, system):
         name = system.split("'")[1] if system and system.startswith("You are '") else "?"
         self.calls[name] = self.calls.get(name, 0) + 1
         turns = self.scripts.get(name)
         if not turns:
             return _Resp([_Block("text", "nothing scripted")])
         t = turns.pop(0)
-        return t(messages) if callable(t) else t
+        return t(self._messages) if callable(t) else t
+
+    def chat(self, messages, system=None, tools=None, **kw):
+        self._messages = messages
+        return self._next(system)
+
+    def stream(self, messages, system=None, tools=None, **kw):
+        self._messages = messages
+        r = self._next(system)
+        from planify.core.llm.types import StreamEvent
+        for i, b in enumerate(r.content):
+            if b.type == "text":
+                yield StreamEvent(type="content_block_start", block_index=i, block_type="text")
+                yield StreamEvent(type="content_block_delta", block_index=i, text_delta=b.text)
+                yield StreamEvent(type="content_block_stop", block_index=i)
+            elif b.type == "tool_use":
+                yield StreamEvent(type="content_block_start", block_index=i, block_type="tool_use",
+                                  tool_use_id=b.id, tool_name=b.name)
+                yield StreamEvent(type="content_block_delta", block_index=i,
+                                  input_json_delta=json.dumps(b.input or {}, ensure_ascii=False))
+                yield StreamEvent(type="content_block_stop", block_index=i)
+        yield StreamEvent(type="message_delta", stop_reason=r.stop_reason)
+        yield StreamEvent(type="message_stop")
 
 
 def _tool(id_, name, **inp):
@@ -173,6 +199,17 @@ class TestRegistry:
         reg = BotRegistry(tmp_path, ["researcher"])
         with pytest.raises(BotRegistryError, match="Unknown role"):
             reg.spawn("x", "nope", "S1")
+
+    def test_reserved_and_invalid_names(self, tmp_path):
+        reg = BotRegistry(tmp_path, ["researcher"])
+        for bad in ("user", "lead", "system"):
+            with pytest.raises(BotRegistryError, match="reserved"):
+                reg.spawn(bad, "researcher", "S1")
+        for bad in ("a/b", "a\\b", "a:b", "a*b", "a?" * 1, "x" * 33, ""):
+            with pytest.raises(BotRegistryError, match="Invalid bot name"):
+                reg.spawn(bad, "researcher", "S1")
+        # 中文名与连字符合法
+        assert reg.spawn("小王-1", "researcher", "S1")["name"] == "小王-1"
 
     def test_release_all_on_restart(self, tmp_path):
         reg = BotRegistry(tmp_path, ["researcher"])
@@ -338,7 +375,7 @@ class TestEndToEnd:
         """Bot 线程异常退出（LLM 抛错）持有任务 → task failed + step failed（§11b）。"""
         hub, runner, sched, H, prov, wd = _build(tmp_path)
         class Boom(FakeProvider):
-            def chat(self, messages, system=None, tools=None, **kw):
+            def stream(self, messages, system=None, tools=None, **kw):
                 raise RuntimeError("llm down")
         boom = Boom()
         (tmp_path / "b").mkdir()
@@ -598,6 +635,42 @@ class TestShutdownTeam:
         _wait(lambda: sched1._thread is None or not sched1._thread.is_alive(), msg="old scheduler stopped on re-bootstrap")
         from planify.team import shutdown_team
         shutdown_team()
+
+
+class TestSessionSink:
+    def test_sink_receives_assistant_and_tool_steps(self, tmp_path):
+        """sink（ADR-0060 §3）：轮末 message_ai + 每步 tool_step；无 jsonl 落盘。"""
+        events = []
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        runner.set_session_sink(lambda scope, name, ev: events.append((scope, name, ev)))
+        prov.set("alice", [
+            _idle(),
+            _write("r.md", "# r\n## 摘要\nx [1]\n## 来源\n[1] a\n"),
+            _text("r.md 已写好，准备报完成"),
+            _complete(), _idle(),
+            _write("s.md", "# s\n"), _complete(), _idle(),
+        ])
+        _with_scope("S1", H["spawn_teammate"], "alice", "researcher", "start")
+        r = json.loads(_with_scope("S1", H["group_plan"], TWO_STEP))
+        _with_scope("S1", H["group_plan_start"], r["dag_id"])
+        sc = hub.scope("S1")
+        _wait(lambda: D.read_dag(sc.dags_dir, r["dag_id"])["status"] == D.DAG_DONE, timeout=8, msg="dag done")
+        types = [e[2]["type"] for e in events]
+        assert "message_ai" in types and "tool_step" in types
+        assert all(e[0] == "S1" and e[1] == "alice" for e in events)
+        steps = [e[2] for e in events if e[2]["type"] == "tool_step"]
+        assert any(s["name"] == "write_file" and s["output"] for s in steps)
+        # jsonl 下线：不再写 bots/alice/sessions/*.jsonl
+        assert not list((tmp_path / "kb" / ".planify" / "team" / "bots" / "alice" / "sessions").glob("*.jsonl"))
+
+    def test_events_bus_attached(self, tmp_path):
+        """hub.events 已挂到 TeamHub（runner 的 publish 通道）。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        assert hub.events is not None
+        q = hub.events.subscribe("S1", "alice")
+        assert hub.events.snapshot("S1", "alice")["text_so_far"] == ""
+        hub.events.unsubscribe("S1", "alice", q)
+        hub.events.unbind()
 
 
 # ====================================================================== contextvar 穿透

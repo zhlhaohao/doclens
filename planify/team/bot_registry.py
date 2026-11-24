@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -29,6 +30,21 @@ BOT_IDLE = "idle"
 BOT_SHUTDOWN = "shutdown"
 
 _VALID_STATUS = {BOT_WORKING, BOT_IDLE, BOT_SHUTDOWN}
+
+#: Bot 名保留字（ADR-0060 §5）：`user` 是用户对 Bot 直接说话时的 sender 身份，
+#: `lead` / `system` 是收件箱路由身份——同名会串消息。
+_RESERVED_NAMES = {"user", "lead", "system"}
+_NAME_RE = re.compile(r"^[\w\-]{1,32}$")  # \w 含中文；排除路径危险字符
+
+
+def _validate_bot_name(name: str) -> None:
+    if name in _RESERVED_NAMES:
+        raise BotRegistryError(f"Bot name '{name}' is reserved (choose another name)")
+    if not _NAME_RE.match(name or ""):
+        raise BotRegistryError(
+            f"Invalid bot name '{name}': 1-32 chars, letters/digits/CJK/_/- only "
+            "(the name is used as a file and directory name)"
+        )
 
 
 class BotRegistryError(Exception):
@@ -110,6 +126,7 @@ class BotRegistry:
             raise BotRegistryError(
                 f"Unknown role '{role}'. Valid: {', '.join(sorted(self.valid_roles))}"
             )
+        _validate_bot_name(name)
         with self._lock:
             bot = self._load(name)
             if bot is None:
@@ -228,8 +245,3 @@ class BotRegistry:
     def read_memory(self, name: str) -> str:
         p = self.memory_path(name)
         return p.read_text(encoding="utf-8") if p.exists() else ""
-
-    def sessions_dir(self, name: str) -> Path:
-        d = self.bots_dir / name / "sessions"
-        d.mkdir(parents=True, exist_ok=True)
-        return d

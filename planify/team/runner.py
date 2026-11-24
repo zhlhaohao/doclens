@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from ..core.llm.provider import LLMProvider
 from ..core.llm.types import ToolUseBlock
 from ..skills.access_state import set_current_session_id
+from ..streaming.aggregate import StreamAggregator
 from ..tools.basic import to_tool_defs
 
 logger = logging.getLogger("planify.team.runner")
@@ -245,7 +246,22 @@ class BotRunner:
                     if not inbox and (not messages or messages[-1]["role"] == "assistant"):
                         break
                     try:
-                        resp = self.provider.chat(messages=messages, system=sys_prompt, tools=to_tool_defs(tool_defs))
+                        # 恒定流式（ADR-0060 §3）：有无人观看都走 provider.stream，
+                        # 单一代码路径。聚合核与 lead 共用（streaming.aggregate）。
+                        agg = StreamAggregator(
+                            on_text=lambda t: self.hub.events.publish(scope, name, {"type": "text_delta", "text": t}),
+                            on_tool_start=lambda tid, nm: self.hub.events.publish(
+                                scope, name, {"type": "tool_call", "tool_use_id": tid, "name": nm, "input": {}, "complete": False}),
+                            on_tool_complete=lambda tid, nm, inp: self.hub.events.publish(
+                                scope, name, {"type": "tool_call", "tool_use_id": tid, "name": nm, "input": inp, "complete": True}),
+                        )
+                        for event in self.provider.stream(messages=messages, system=sys_prompt, tools=to_tool_defs(tool_defs)):
+                            if stop.is_set():
+                                break
+                            if not agg.feed(event):
+                                break
+                        stop_reason, blocks, _usage, _cur_text = agg.finish()
+                        self.hub.events.publish(scope, name, {"type": "round_end"})
                     except Exception:  # noqa: BLE001
                         # LLM 失败 = 崩溃：持有任务标 failed（§11b）。其余退出路径（idle 超时、
                         # 进程退出、主动停止）都不是崩溃——任务回 ready 由调度器重派。
@@ -261,18 +277,11 @@ class BotRunner:
                             logger.warning("[bot:%s] DAG #%s exceeded LLM budget; stopping", name, dag_id)
                             budget_stopped = True
                             return
-                    blocks = []
-                    for b in resp.content:
-                        bt = getattr(b, "type", None) if not isinstance(b, dict) else b.get("type")
-                        if bt == "text":
-                            blocks.append({"type": "text", "text": getattr(b, "text", "") if not isinstance(b, dict) else b.get("text", "")})
-                        elif bt == "tool_use":
-                            if isinstance(b, dict):
-                                blocks.append({"type": "tool_use", "id": b.get("id"), "name": b.get("name"), "input": dict(b.get("input") or {})})
-                            else:
-                                blocks.append({"type": "tool_use", "id": b.id, "name": b.name, "input": dict(b.input or {})})
+                    # 聚合器已产出 dict blocks（与 Anthropic content blocks 同构）——
+                    # 原对象→dict 归一不再需要，但 sink 在轮末落库
+                    self._persist_assistant(scope, name, blocks)
                     messages.append({"role": "assistant", "content": blocks})
-                    if resp.stop_reason != "tool_use":
+                    if stop_reason != "tool_use":
                         # 模型说完就结束了。若它持有未报完成的任务 → 程序兜底提醒它报完成
                         # （模型常忘记走「报完成」协议；Pi Bot 靠 coordinator 催，我们靠程序催）。
                         if held_task is not None and self._task_pending(sc, held_task) and not idle_req:
@@ -318,6 +327,11 @@ class BotRunner:
                         else:
                             out = self._run_capability(b, scope, name, held_output_dir)
                         results.append({"type": "tool_result", "tool_use_id": b["id"], "content": str(out)})
+                        # 工具步骤落库（每步一条，先存后发——sink 内部 publish）
+                        self._emit_to_sink(scope, name, {
+                            "type": "tool_step", "tool_use_id": b["id"],
+                            "name": b["name"], "input": b.get("input") or {}, "output": str(out)[:4000],
+                        })
                     messages.append({"role": "user", "content": results})
                     if idle_req:
                         break
@@ -344,12 +358,26 @@ class BotRunner:
                     # 非崩溃退出（主动停止 / 预算刹车 / idle 超时 / 进程退出）：任务回 ready，
                     # 由调度器重派——idle 超时和进程退出都不是 Bot 的失败
                     self._release_held_task(sc, held_task)
-            self._persist_session(name, messages)
+            # jsonl 留痕已下线（ADR-0060 §3）：落库经 sink 逐条 append 到 sessions.db
             with self._lock:
                 self._threads.pop((scope, name), None)
                 self._alive.pop((scope, name), None)
 
     # ------------------------------------------------------------ 工具
+
+    def _persist_assistant(self, scope: str, name: str, blocks: list) -> None:
+        """轮末 assistant 消息落库（ADR-0060 §3：流式增量不落库，终态才落）。"""
+        text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+        if text:
+            self._emit_to_sink(scope, name, {"type": "message_ai", "text": text})
+
+    def _emit_to_sink(self, scope: str, name: str, event: dict) -> None:
+        sink = getattr(self, "_session_sink", None)
+        if sink is not None:
+            try:
+                sink(scope, name, event)
+            except Exception:  # noqa: BLE001
+                logger.exception("[bot:%s] session sink failed", name)
 
     def _emit_bot_notice(self, scope: str, name: str, notice_type: str, text: str) -> None:
         """Bot 会话的系统条目（ADR-0060 §3）——经 sink 落库（无 sink 时只记日志）。
@@ -473,11 +501,3 @@ class BotRunner:
             return None
         from . import dag as D
         return D.read_dag(sc.dags_dir, int(dag_id))
-
-    def _persist_session(self, name: str, messages: list) -> None:
-        try:
-            d = self.hub.registry.sessions_dir(name)
-            (d / f"{int(time.time())}.jsonl").write_text(
-                "\n".join(json.dumps(m, ensure_ascii=False) for m in messages), encoding="utf-8")
-        except OSError:
-            logger.exception("[bot:%s] session persist failed", name)
