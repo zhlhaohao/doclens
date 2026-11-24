@@ -144,14 +144,15 @@ export class TeamView extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    // 父会话切换 → 关闭覆盖层（Bot 归属随会话变；旧会话的 Bot 对新会话不可见）
+    // 父会话切换 → 关闭覆盖层（Bot 归属随会话变；旧会话的 Bot 对新会话不可见）。
+    // 初次恢复（空 → 非空）不关：chat-view 异步恢复会话晚于用户点开 Bot
+    let lastSid = this._sid;
     this._unsub = store.subscribeSelector(
       (s) => s.chat.currentSession?.id ?? "",
       (sid) => {
-        if (this._dialogBot !== null) this._dialogBot = null;
-        this._selected = null;
-        void sid;
-        this._start();
+        if (this._dialogBot !== null && lastSid && sid !== lastSid) this._dialogBot = null;
+        if (sid !== lastSid) this._selected = null;
+        lastSid = sid;
         void this._refresh();
       },
     );

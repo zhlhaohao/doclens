@@ -227,6 +227,11 @@ export class BotSessionDialog extends LitElement {
       this._nodes = d.generating
         ? [...nodes, { type: "message", message: { role: "assistant", content: "" } }]
         : nodes;
+      this._live = d.generating;
+      if (d.generating && !this._controller) {
+        this._controller = new AbortController();
+        void this._pump(this._controller.signal);
+      }
     } catch { /* 保留下一次 */ }
   }
 
@@ -236,16 +241,11 @@ export class BotSessionDialog extends LitElement {
     this._sending = true;
     try {
       await sendToBot(this.bot, this.sessionId, text);
-      this._nodes = [...this._nodes, { type: "message", message: { role: "user", content: text } }];
+      // 消息可能落在另一个会话（Bot 无任务时落纯对话会话，而覆盖层打开的是
+      // task 会话）——重拉 detail 让显示切到消息实际所在的会话；_reload 内
+      // 按 generating 决定是否补 live 气泡与起 SSE pump
+      await this._reload();
       this._generating = true;
-      if (!this._controller) {
-        this._live = true;
-        this._nodes = [...this._nodes, { type: "message", message: { role: "assistant", content: "" } }];
-        this._controller = new AbortController();
-        void this._pump(this._controller.signal);
-      } else if (!this._nodes.some((n) => n.type === "message" && n.message.role === "assistant" && n.message.seq === undefined)) {
-        this._nodes = [...this._nodes, { type: "message", message: { role: "assistant", content: "" } }];
-      }
     } catch (err) {
       this._error = err instanceof ApiError ? err.message : String(err);
     } finally {

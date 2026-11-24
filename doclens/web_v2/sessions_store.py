@@ -1040,8 +1040,22 @@ class SessionsStore(_StorePart):
                     "task_id": row["task_id"], "last_persisted_seq": row["last_seq"] or 0}
 
     def find_bot_session(self, bot_name: str, parent_session_id: str) -> Optional[str]:
-        """该 Bot 在当前父会话下最近的 bot 会话 id（覆盖层打开时用）。"""
+        """该 Bot 在当前父会话下**最近有活动**的会话 id（覆盖层打开时用）。
+
+        按最后一条 item 的 created_at 选——task 会话创建晚于纯对话会话，但任务
+        完成后的对话落在纯对话会话；按创建时间选会打开一个已沉寂的 task 会话。
+        无任何 item 的会话不参与（空会话不该被选中）。"""
         with self._lock, self._conn() as conn:
+            row = conn.execute(
+                """SELECT s.id FROM sessions s
+                   JOIN session_items i ON i.session_id = s.id
+                   WHERE s.type = 'bot' AND s.bot_name = ? AND s.parent_session_id = ?
+                   GROUP BY s.id ORDER BY MAX(i.created_at) DESC LIMIT 1""",
+                (bot_name, parent_session_id),
+            ).fetchone()
+            if row:
+                return row["id"]
+            # 无 item：退回最新创建的（刚 find_or_create 出来还没写入的空会话）
             row = conn.execute(
                 """SELECT id FROM sessions
                    WHERE type = 'bot' AND bot_name = ? AND parent_session_id = ?
