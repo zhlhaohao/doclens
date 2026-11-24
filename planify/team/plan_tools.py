@@ -27,6 +27,16 @@ class PlanToolError(Exception):
     pass
 
 
+MAX_REPLANS = 2  # ADR-0059 §5c：一个 DAG 全程最多重规划次数
+
+
+def _deliverables_of(dag: dict, step_id: str) -> list:
+    for s in dag["plan"]["steps"]:
+        if s["step_id"] == step_id:
+            return s.get("deliverables", [])
+    return []
+
+
 def _hub():
     from .hub import TeamHub  # noqa: F401
     raise NotImplementedError
@@ -195,8 +205,9 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             # DAG 级写授权：用户确认计划卡即视为对 output_dir 的写授权（§11a）
             _grant_output_dir(sc_id, Path(dag["output_dir"]))
             _clear_pending(sc, dag_id)
-            hub.scheduler.ensure_started()
-            hub.scheduler.wake()
+            if hub.scheduler is not None:
+                hub.scheduler.ensure_started()
+                hub.scheduler.wake()
             return json.dumps({"ok": True, "dag_id": dag_id, "status": "active"})
         except Exception as e:  # noqa: BLE001
             return f"Error: {e}"
@@ -232,6 +243,107 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
             hub = _hub_()
             ok = hub.scheduler.resume_dag(_scope(), dag_id)
             return json.dumps({"ok": ok, "dag_id": dag_id, "status": "active" if ok else "not-paused"})
+        except Exception as e:  # noqa: BLE001
+            return f"Error: {e}"
+
+    def group_plan_replan(dag_id: int, plan: dict) -> str:
+        """stalled DAG 的重规划：新计划只含新增与未完成步骤；保留已 done 步骤；需用户再确认。
+
+        规则（ADR-0059 §5c）：
+        - 只对 stalled DAG
+        - 新计划不得含已 done 的 step_id（发现了就拒绝）
+        - 可依赖已 done 步骤（它们的 deliverables 还在 output_dir）
+        - 被替换的 failed/pending/ready 步骤标 superseded
+        - 结果为草稿态——用户确认后 group_plan_start
+        - 全程最多 MAX_REPLANS 次
+        """
+        try:
+            sc_id = _scope()
+            hub = _hub_()
+            sc = hub.scope(sc_id)
+            dag = D.read_dag(sc.dags_dir, dag_id)
+            if not dag:
+                return f"Error: dag #{dag_id} not found"
+            if dag["status"] != D.DAG_STALLED:
+                return f"Error: dag #{dag_id} is {dag['status']}, not stalled; replan applies to stalled DAGs"
+            if int(dag.get("replans", 0)) >= MAX_REPLANS:
+                return f"Error: dag #{dag_id} already replanned {MAX_REPLANS} times; cancel and start a new DAG"
+            done = {sid for sid, st in dag["steps"].items() if st["status"] == D.STEP_DONE}
+            # 新计划步骤集
+            new_steps = plan.get("steps") if isinstance(plan, dict) else None
+            if not isinstance(new_steps, list) or not new_steps:
+                raise PlanIssue("steps_empty", ["steps"], "Replan needs at least one step")
+            new_ids = [s.get("step_id") or s.get("id") for s in new_steps if isinstance(s, dict)]
+            dup_done = [i for i in new_ids if i in done]
+            if dup_done:
+                raise PlanIssue("replan_resubmits_done", ["steps"],
+                                f"Completed steps cannot be resubmitted: {', '.join(map(str, dup_done))}; "
+                                "keep only new or unfinished steps (they may depend on completed ones)")
+            # 校验：把已 done 步骤当作「虚拟存在」的依赖目标注入校验上下文
+            bots = hub.registry.leased_by_scope(sc_id)
+            bot_roles = {b["name"]: b["role"] for b in bots}
+            plan_ctx = {"name": plan.get("name") or dag["name"], "steps": list(new_steps)}
+            for sid in done:
+                plan_ctx["steps"].append({"step_id": sid, "subject": sid, "instructions": "(done)", "role": "default",
+                                          "deliverables": _deliverables_of(dag, sid)})
+            norm = validate_plan(plan_ctx, role_ids=hub.roles.ids(), bot_names=list(bot_roles), bot_roles=bot_roles)
+            new_only = [s for s in norm["steps"] if s["step_id"] not in done]
+            for s in new_only:
+                sk = s.get("skill")
+                if sk and sk not in hub.roles.get(s["role"]).skills:
+                    raise PlanIssue("skill_unknown", ["steps", s["step_id"], "skill"],
+                                    f"Step {s['step_id']}: role '{s['role']}' has no skill '{sk}'")
+            merge_skill_contracts(new_only, hub.roles.get)
+            # 应用替换
+            for sid, st in dag["steps"].items():
+                if st["status"] in (D.STEP_PENDING, D.STEP_READY, D.STEP_IN_PROGRESS, D.STEP_VERIFYING, D.STEP_FAILED, D.STEP_BLOCKED):
+                    st["status"] = D.STEP_SUPERSEDED
+            dag["plan"]["steps"] = [s for s in dag["plan"]["steps"] if dag["steps"].get(s["step_id"], {}).get("status") == D.STEP_DONE] + new_only
+            for s in new_only:
+                dag["steps"][s["step_id"]] = {"task_id": None, "status": D.STEP_PENDING, "fix_rounds": 0}
+            dag["status"] = D.DAG_DRAFT
+            dag["replans"] = int(dag.get("replans", 0)) + 1
+            dag["stall_reason"] = None
+            dag["failed_step"] = None
+            D.write_dag(sc.dags_dir, dag)
+            _set_pending(sc, dag_id, "confirm")
+            return json.dumps({"ok": True, "dag_id": dag_id, "status": "draft", "card": _card(dag),
+                               "next": "Show the card; on approval call group_plan_start."}, ensure_ascii=False)
+        except PlanIssue as e:
+            return json.dumps({"ok": False, "issue": e.to_dict()}, ensure_ascii=False)
+        except Exception as e:  # noqa: BLE001
+            return f"Error: {e}"
+
+    def group_plan_retry(dag_id: int, step_id: str, reset_fix_rounds: bool = True) -> str:
+        """failed 步骤原样重试（偶发失败）。DAG 回 active，步骤回 ready，fix_rounds 清零。"""
+        try:
+            sc_id = _scope()
+            hub = _hub_()
+            sc = hub.scope(sc_id)
+            dag = D.read_dag(sc.dags_dir, dag_id)
+            if not dag:
+                return f"Error: dag #{dag_id} not found"
+            if dag["status"] != D.DAG_STALLED:
+                return f"Error: dag #{dag_id} is {dag['status']}, not stalled"
+            st = dag["steps"].get(step_id)
+            if not st or st["status"] != D.STEP_FAILED:
+                return f"Error: step '{step_id}' is {st['status'] if st else 'unknown'}, not failed"
+            if st.get("task_id") is not None:
+                t = sc.tasks.get_raw(st["task_id"])
+                if t:
+                    if reset_fix_rounds:
+                        t["fix_rounds"] = 0
+                    t["status"] = "pending"
+                    sc.tasks.save_raw(t)
+            st["status"] = D.STEP_READY
+            dag["status"] = D.DAG_ACTIVE
+            dag["stall_reason"] = None
+            dag["failed_step"] = None
+            D.write_dag(sc.dags_dir, dag)
+            if hub.scheduler is not None:
+                hub.scheduler.ensure_started()
+                hub.scheduler.wake()
+            return json.dumps({"ok": True, "dag_id": dag_id, "step_id": step_id, "status": "active"})
         except Exception as e:  # noqa: BLE001
             return f"Error: {e}"
 
@@ -304,6 +416,16 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
          "input_schema": {"type": "object", "properties": {"dag_id": {"type": "integer"}}}},
         {"name": "group_plan_cancel", "description": "Cancel a DAG; unfinished steps become superseded.",
          "input_schema": {"type": "object", "properties": {"dag_id": {"type": "integer"}}, "required": ["dag_id"]}},
+        {"name": "group_plan_replan",
+         "description": ("Replace the unfinished part of a STALLED DAG. Submit only new or unfinished steps; completed "
+                         "steps cannot be resubmitted but may be depended on. Returns a draft card—call group_plan_start "
+                         "after the user approves. Max 2 replans per DAG."),
+         "input_schema": {"type": "object", "properties": {"dag_id": {"type": "integer"}, "plan": {"type": "object"}},
+                          "required": ["dag_id", "plan"]}},
+        {"name": "group_plan_retry",
+         "description": "Retry a FAILED step of a stalled DAG as-is (for transient failures). Resets fix_rounds.",
+         "input_schema": {"type": "object", "properties": {"dag_id": {"type": "integer"}, "step_id": {"type": "string"}},
+                          "required": ["dag_id", "step_id"]}},
         {"name": "group_plan_resume", "description": "Resume a paused DAG (after user pressed Stop).",
          "input_schema": {"type": "object", "properties": {"dag_id": {"type": "integer"}}, "required": ["dag_id"]}},
     ]
@@ -312,5 +434,6 @@ def make_plan_tools(hub_getter: Callable[[], Any], workdir: Path) -> tuple:
         "send_message": send_message, "read_inbox": read_inbox, "shutdown_teammate": shutdown_teammate,
         "group_plan": group_plan, "group_plan_revise": group_plan_revise, "group_plan_start": group_plan_start,
         "group_plan_status": group_plan_status, "group_plan_cancel": group_plan_cancel, "group_plan_resume": group_plan_resume,
+        "group_plan_replan": group_plan_replan, "group_plan_retry": group_plan_retry,
     }
     return defs, handlers
