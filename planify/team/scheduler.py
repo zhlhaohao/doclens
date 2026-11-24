@@ -514,9 +514,16 @@ class Scheduler:
         sc = self.hub.try_scope(scope_id)
         if sc is None:
             return 0
-        # 活跃步骤的 assignee 优先认领租约（Bot 可能由别的会话创建、本会话复活在跑）
+        # 活跃步骤的 assignee 优先认领租约（Bot 可能由别的会话创建、本会话复活在跑）。
+        # 范围含 draft/paused：草稿里显式指定的 assignee 也是「本会话要用它」——否则
+        # 重启后 start 草稿 DAG 时 Bot 无租约、_pick_assignee 找不到人、调度器空转退出
         active: List[str] = []
         for dag in D.read_all_dags(sc.dags_dir):
+            if dag["status"] in (D.DAG_DONE, D.DAG_CANCELLED):
+                continue
+            for ps in dag["plan"].get("steps", []):
+                if ps.get("assignee"):
+                    active.append(ps["assignee"])
             for st in dag["steps"].values():
                 if st["status"] in (D.STEP_IN_PROGRESS, D.STEP_VERIFYING) and st.get("assignee"):
                     active.append(st["assignee"])
