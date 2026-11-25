@@ -920,6 +920,89 @@ class SessionsStore(_StorePart):
             )
             return seq
 
+    def append_event(self, session_id: str, kind: str, payload: dict) -> int:
+        """追加一条**自定义 kind** 的事实条目（公共入口；返回新条目 seq）。
+
+        供宿主的流程性留档使用（如数字员工的派活开始 / 评审 / 派活结束，
+        ADR-0062）：kind 不在回放层的已知集合内 → ``get_chat_history`` 回放
+        天然忽略，展示层按 kind 自行渲染。payload 为 dict，序列化约定与
+        其他 ``append_*`` 相同。
+        """
+        return self._append_item(session_id, kind, payload)
+
+    def get_events(self, session_id: str, kind: str) -> list[SessionItem]:
+        """按 kind 取某会话的全部条目（seq 升序）。未知/无条目返回空表。"""
+        with self._lock, self._conn() as conn:
+            rows = conn.execute(
+                """SELECT seq, kind, payload, created_at FROM session_items
+                   WHERE session_id = ? AND kind = ? ORDER BY seq ASC""",
+                (session_id, kind),
+            ).fetchall()
+        out: list[SessionItem] = []
+        for r in rows:
+            out.append(SessionItem(
+                session_id=session_id, seq=r["seq"], kind=r["kind"], payload=r["payload"],
+                created_at=_parse_db_ts(r["created_at"]),
+            ))
+        return out
+
+    @staticmethod
+    def new_session_id() -> str:
+        """生成新的会话 id（ULID；与 find_or_create 同源）。"""
+        return str(_ulid.new())
+
+    def sessions_with_open_event(self, start_kind: str, end_kind: str) -> list[str]:
+        """有 ``start_kind`` 条目但**没有** ``end_kind`` 条目的会话 id 列表。
+
+        供「流程性留档」的开局恢复使用（如数字员工派活：进程重启后把
+        「有开始无结束」的派活补记中断结局，ADR-0062）。
+        """
+        with self._lock, self._conn() as conn:
+            rows = conn.execute(
+                """SELECT DISTINCT s.session_id FROM session_items s
+                   WHERE s.kind = ?
+                     AND NOT EXISTS (
+                         SELECT 1 FROM session_items e
+                         WHERE e.session_id = s.session_id AND e.kind = ?
+                     )""",
+                (start_kind, end_kind),
+            ).fetchall()
+        return [r["session_id"] for r in rows]
+
+    def assignment_status_for(self, session_ids: list[str], start_kind: str,
+                              end_kind: str) -> dict[str, dict]:
+        """一批会话的流程结局（数字员工派活列表标记用）：一次聚合查询。
+
+        Returns:
+            {session_id: {"outcome": str|None, "score": int|None, "iterations": int}}
+            —— 只含有 ``start_kind`` 条目的会话；有结束条目时 outcome 取其
+            payload，否则 outcome=None（进行中 / 已中断未补记）。
+        """
+        ids = [s for s in dict.fromkeys(session_ids) if s]
+        if not ids:
+            return {}
+        out: dict[str, dict] = {}
+        with self._lock, self._conn() as conn:
+            q = ",".join("?" * len(ids))
+            rows = conn.execute(
+                f"""SELECT session_id, seq, kind, payload FROM session_items
+                    WHERE session_id IN ({q}) AND kind IN (?, ?)
+                    ORDER BY session_id, seq ASC""",
+                (*ids, start_kind, end_kind),
+            ).fetchall()
+        for r in rows:
+            sid = r["session_id"]
+            st = out.setdefault(sid, {"outcome": None, "score": None, "iterations": 0})
+            if r["kind"] == end_kind:
+                try:
+                    p = json.loads(r["payload"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if isinstance(p, dict):
+                    st["outcome"] = p.get("outcome")
+                    st["score"] = p.get("score")
+                    st["iterations"] = p.get("iterations", st["iterations"])
+        return out
     def create(self, s: SessionSummary) -> None:
         with self._lock, self._conn() as conn:
             conn.execute(

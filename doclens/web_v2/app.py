@@ -3,6 +3,7 @@
 `create_app()` 构造 FastAPI 实例；`launch_app()` 用 uvicorn 启动并同时
 服务前端 SPA 静态文件（详见 Task 29）。
 """
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from doclens import __version__ as CORTEX_VERSION
 from doclens.web_v2.api.errors import register_error_handlers
 from doclens.web_v2 import runtime_vitals
+
+logger = logging.getLogger(__name__)
 
 # 错误计数器随 app 模块导入安装（ADR-0037）：全局记录工厂计数
 # ERROR/CRITICAL，早于 setup_logging 也能生效（basicConfig 不覆盖工厂）
@@ -123,6 +126,15 @@ async def lifespan(app: FastAPI):
             from doclens.web_v2.app import logger
             logger.warning("start_mcp_server failed: %s", e)
         deps.start_mcp_client()
+        # 数字员工（ADR-0062）：把上次进程退出时仍在进行中的派活补记为「已中断」
+        try:
+            from doclens.web_v2 import employee_runner
+
+            n = employee_runner.mark_interrupted_on_startup()
+            if n:
+                logger.info("marked %d interrupted employee assignment(s) on startup", n)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("mark interrupted assignments failed: %s", e)
 
     threading.Thread(target=_start_components, daemon=True).start()
     try:
@@ -229,6 +241,8 @@ def create_app() -> FastAPI:
     app.include_router(git.router, prefix="/api")
     from doclens.web_v2.api import translate
     app.include_router(translate.router, prefix="/api")
+    from doclens.web_v2.api import employees
+    app.include_router(employees.router, prefix="/api")
 
     @app.get("/api/health")
     async def health():

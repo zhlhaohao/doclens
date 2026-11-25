@@ -94,10 +94,21 @@ async def list_sessions(
         items = items[offset:offset + limit]
     else:
         items = store.list(type, limit, offset)
-    return SessionListResponse(
-        sessions=[s.model_dump(mode="json") for s in items],
-        returned=len(items),
+    # 数字员工派活会话（ADR-0062）：一次聚合查询补结局摘要（列表项标记用）
+    from doclens.web_v2 import employee_runner
+
+    status = store.assignment_status_for(
+        [s.id for s in items if s.mode == employee_runner.SESSION_MODE],
+        employee_runner.KIND_START, employee_runner.KIND_END,
     )
+    out = []
+    for s in items:
+        d = s.model_dump(mode="json")
+        st = status.get(s.id)
+        if st is not None:
+            d["assignment"] = st
+        out.append(d)
+    return SessionListResponse(sessions=out, returned=len(items))
 
 
 # ---- 会话库备份/恢复（ADR-0047）----

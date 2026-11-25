@@ -49,6 +49,14 @@ class SessionCreatedResponse(BaseModel):
     mode: Optional[str] = None
 
 
+class AssignmentStatus(BaseModel):
+    """数字员工派活的结局摘要（列表项标记用，ADR-0062）。
+    outcome=None 表示进行中（或已中断未补记）。"""
+    outcome: Optional[str] = None
+    score: Optional[int] = None
+    iterations: int = 0
+
+
 class SessionListItem(BaseModel):
     id: str
     type: SessionType
@@ -59,6 +67,8 @@ class SessionListItem(BaseModel):
     updated_at: datetime
     message_count: int
     starred: bool = False
+    # 派活会话（mode=employee）附带的结局摘要；非派活会话无此字段
+    assignment: Optional[AssignmentStatus] = None
 
 
 class SessionListResponse(BaseModel):

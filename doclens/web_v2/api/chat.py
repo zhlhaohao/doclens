@@ -23,7 +23,6 @@
 import asyncio
 import json
 import logging
-import re
 import threading
 from pathlib import Path
 from typing import AsyncIterator, Optional
@@ -47,8 +46,11 @@ from doclens.web_v2.models.chat import (
 )
 from doclens.web_v2.api._chat_events import KNOWN_EVENT_TYPES, user_seq_event
 from doclens.web_v2.api._chat_markers import LOADED_SKILL_MARKER
+from doclens.web_v2.round_finalizer import (
+    extract_injected_skill_contexts,
+    persist_round,
+)
 from doclens.web_v2.api._chat_slash import (
-    SLASH_HINT_RE,
     hint_already_injected,
     legal_slash_skill,
     slash_hint_content,
@@ -61,14 +63,11 @@ from doclens.web_v2.skill_refs import curate_skill_references, is_skill_message
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# 由标记常量派生（_chat_markers 是注入标记的单一真相源）
-_LOADED_SKILL_RE = re.compile(re.escape(LOADED_SKILL_MARKER) + r'([^"]+)">')
-
-
 def _extract_injected_skill_contexts(history: list[dict]) -> list[tuple[str, str]]:
     """从 run_stream 原地修改后的 history 提取注入的技能上下文（按出现顺序去重）。
 
-    覆盖两类注入消息对（回放均经 upsert_skill_contexts 原样重建）：
+    委托 ``round_finalizer.extract_injected_skill_contexts``（SSE 与后台派活
+    两条路径共用同一实现）。覆盖两类注入消息对：
     - skill body（<loaded-skill>，runner 重注入）→ 去重键 = 技能名；
     - 斜杠调用 hint（<slash-skill-hint>，chat.py 发送前注入）→ 去重键 =
       ``slash:<技能名>``，与 body 条目隔离（同技能两种条目并存不互斥）。
@@ -76,23 +75,7 @@ def _extract_injected_skill_contexts(history: list[dict]) -> list[tuple[str, str
     Returns:
         [(去重键, 完整消息内容), ...]，与注入顺序一致。
     """
-    seen: set[str] = set()
-    out: list[tuple[str, str]] = []
-    for m in history:
-        content = m.get("content")
-        if m.get("role") != "user" or not isinstance(content, str):
-            continue
-        hint = SLASH_HINT_RE.search(content)
-        loaded = _LOADED_SKILL_RE.search(content)
-        key: Optional[str] = None
-        if hint:
-            key = f"slash:{hint.group(1)}"
-        elif loaded:
-            key = loaded.group(1)
-        if key and key not in seen:
-            seen.add(key)
-            out.append((key, content))
-    return out
+    return extract_injected_skill_contexts(history, LOADED_SKILL_MARKER)
 
 
 async def _stream_agent_response(
@@ -412,164 +395,27 @@ async def _stream_agent_response(
             if curated_fallback:
                 queue.put_nowait(toast_event("error", FALLBACK_TOAST))
         finally:
-            # 持久化 run_stream 注入的 skill body（按 name 幂等）：
-            # 回放时出现在首次注入位置，跨轮请求保持纯尾部追加
-            # （prompt 前缀缓存友好）。必须在 append_chat_turn_raw 之前——
-            # 新条目要插到本轮 message_user 之前，复现内存中的注入位置。
+            # 落库段委托 round_finalizer.persist_round（SSE 与后台派活共用；
+            # 段内顺序 load-bearing，见该模块 docstring）。策展文本优先，
+            # 中断半截退回原文；错误文本并入。
             if session_key:
                 try:
                     from doclens.web_v2.deps import get_sessions_store
 
-                    injected = _extract_injected_skill_contexts(history)
-                    if injected:
-                        get_sessions_store().upsert_skill_contexts(
-                            session_key, injected
-                        )
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(
-                        "persist skill contexts failed for %s: %s", session_key, e
-                    )
-            # 持久化压缩事件（ADR-0026 压缩即事实）：runner 打标 → 轮末落库。
-            # 落库顺序 load-bearing——必须在 append_raw_messages 之前（回放
-            # 顺序 compacted → 本轮 raw_messages），且必须在
-            # upsert_skill_contexts 之后（upsert 的插入位置是当前 MAX(seq)
-            # 条目之前，compacted 先落库会把新 skill 条目插进已被截断投影
-            # 丢弃的死前缀）。getattr 防御 PyPI 旧版 planify（无打标属性时
-            # 静默跳过，退化为旧行为：下轮重新压缩一次）。
-            if session_key:
-                try:
-                    from doclens.web_v2.deps import get_sessions_store
-
-                    compaction = getattr(sa, "last_compaction", None)
-                    if compaction:
-                        get_sessions_store().append_compacted(
-                            session_key,
-                            compaction["messages"],
-                            compaction.get("pre_tokens", 0),
-                        )
-                    cleared_ids = getattr(sa, "round_cleared_tool_use_ids", None)
-                    if cleared_ids:
-                        get_sessions_store().append_microcompact(
-                            session_key, cleared_ids
-                        )
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(
-                        "persist compaction failed for %s: %s", session_key, e
-                    )
-            # 持久化本轮原始消息序列（assistant/tool_result 按 runner 真实累积
-            # 结构）：tool_trace 拆对回放与真实结构不等价，多工具/文本交错轮
-            # 前缀会从该轮首条 assistant 起分叉；raw_messages 回放逐字节一致。
-            if session_key:
-                try:
-                    from doclens.web_v2.api._chat_raw import (
-                        extract_round_raw_messages,
-                    )
-                    from doclens.web_v2.deps import get_sessions_store
-
-                    # 轮起点必须用 runner 注入完成后的真实下标：run_stream 头部
-                    # 注入 context 消息对会把历史整体后移 2 条，用事前捕获的
-                    # len(history) 切片会把上一轮末尾消息（孤儿 tool_result）
-                    # 漏进 raw_messages，下轮回放触发 400（tool_calls 配对校验）
-                    raw_start = (
-                        sa.round_start_index
-                        if sa.round_start_index is not None
-                        else round_start
-                    )
-
-                    raw_msgs = extract_round_raw_messages(
-                        history, raw_start, message
-                    )
-                    if raw_msgs:
-                        get_sessions_store().append_raw_messages(
-                            session_key, raw_msgs
-                        )
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(
-                        "persist raw messages failed for %s: %s", session_key, e
-                    )
-            # 持久化原始轮次（tool 链 + 模型原始输出），供下一轮 LLM 上下文回放。
-            # 与展示层分离：前端另写 message_user/message_ai（策展文本），
-            # get_chat_history 回放时优先 message_ai_raw。
-            if session_key:
-                try:
-                    from doclens.web_v2.deps import get_sessions_store
-
-                    traces = [
-                        {
-                            "tool_use_id": tc.get("tool_use_id", ""),
-                            "name": tc.get("name", ""),
-                            "input": tc.get("input", {}),
-                            "output": tc.get("output", ""),
-                            "is_error": tc.get("is_error", False),
-                        }
-                        for tc in emitter.tool_calls
-                        if "output"
-                        in tc  # 只落库已完成的调用对（中断残留不配对的丢弃）
-                    ]
-                    get_sessions_store().append_chat_turn_raw(
-                        session_key, traces, emitter.get_full_text()
+                    persist_round(
+                        get_sessions_store(),
+                        session_key,
+                        history=history,
+                        message=message,
+                        agent=sa,
+                        emitter=emitter,
+                        round_start=round_start,
+                        loaded_skill_marker=LOADED_SKILL_MARKER,
+                        display_text=curated_text,
+                        interrupt_event=interrupt,
                     )
                 except Exception as e:  # noqa: BLE001
-                    logger.warning(
-                        "persist raw chat turn failed for %s: %s", session_key, e
-                    )
-            # 落库本轮 token 用量（kind="usage"，2026-09-17）：每次 LLM 调用
-            # 一条全量落库——弹窗累计命中率与 trace 文件 / 实时 SSE 同口径
-            # （工具循环的中间调用也进累计）；末条即该轮上下文峰值占用。
-            # 批量单事务落库（工具循环一轮可达 10+ 条，逐条独立连接+fsync
-            # 的收尾开销可观）。
-            if session_key and emitter.usages:
-                try:
-                    from doclens.web_v2.deps import get_sessions_store
-
-                    get_sessions_store().append_usages(
-                        session_key, emitter.usages
-                    )
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(
-                        "persist usage failed for %s: %s", session_key, e
-                    )
-            # 展示层 message_ai 统一后端落库（ADR-0028，取代前端写入与断开
-            # 补写双通道）：正常完成 / 断开续跑 / **在线主动停止**都落——
-            # 2026-09-22 语义变更：停止时已生成的部分对用户有价值，保留
-            # 落库（原「主动停止不落、UI 当场丢弃」的语义废弃，前端同步
-            # 保留半截）。策展文本优先，中断半截退回原文；错误文本并入
-            # （对齐前端 ⚠️ 展示格式）。
-            if session_key:
-                text = (
-                    curated_text
-                    if curated_text is not None
-                    else emitter.get_full_text()
-                )
-                if emitter.error:
-                    text = f"{text}\n\n⚠️ {emitter.error}" if text else f"⚠️ {emitter.error}"
-                if text:
-                    try:
-                        from doclens.web_v2.deps import get_sessions_store
-
-                        store = get_sessions_store()
-                        # 未完成调用对（无 output）过滤：与 tool_trace 落库
-                        # 同口径，不进展示层
-                        display_calls = [
-                            {
-                                "tool_use_id": tc.get("tool_use_id", ""),
-                                "name": tc.get("name", ""),
-                                "input": tc.get("input", {}),
-                                "output": tc.get("output", ""),
-                                "is_error": tc.get("is_error", False),
-                                "duration_ms": tc.get("duration_ms"),
-                            }
-                            for tc in emitter.tool_calls
-                            if "output" in tc
-                        ]
-                        store.append_message_ai(session_key, text, display_calls)
-                        store.update_count_and_time(
-                            session_key, store.count_live_messages(session_key)
-                        )
-                    except Exception as e:  # noqa: BLE001
-                        logger.warning(
-                            "persist display ai failed for %s: %s", session_key, e
-                        )
+                    logger.warning("persist round failed for %s: %s", session_key, e)
             # interrupt 注销随 agent 收尾（ADR-0028 从 SSE 生成器 finally 挪入）
             # ——断开续跑期间 /chat/stop 仍可经 registry 寻址本流。
             if session_key:
