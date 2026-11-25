@@ -315,6 +315,139 @@ class TestAcceptance:
         assert not ok and "not found" in fails[0]
 
 
+# ---------------------------------------------------------- Office 文件的 sections 检查（标准库解 OOXML）
+
+import zipfile as _zipfile
+
+
+def _make_docx(path, headings, body=("正文一段",), numbered=False):
+    """最小 DOCX：标题用 Heading 1-9 样式（piBot/WordCraft 写法），正文 Normal。"""
+    def p(text, style):
+        ppr = f"<w:pPr><w:pStyle w:val=\"{style}\"/></w:pPr>" if style else ""
+        return f"<w:p>{ppr}<w:r><w:t xml:space=\"preserve\">{text}</w:t></w:r></w:p>"
+    parts = [p(t, f"Heading{n}") for t, n in headings] + [p(t, None) for t in body]
+    doc = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+           "<w:body>" + "".join(parts) + "</w:body></w:document>")
+    with _zipfile.ZipFile(path, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("word/document.xml", doc)
+
+
+def _make_xlsx(path, sheets):
+    """最小 XLSX：共享字符串 + 每表若干行（A1 起）。sheets = [(name, [[c, c], ...]), ...]"""
+    strings, rows_by_sheet = [], []
+    for name, rows in sheets:
+        out_rows = []
+        for r, row in enumerate(rows, start=1):
+            cells = []
+            for c, val in enumerate(row):
+                col = chr(ord("A") + c)
+                if isinstance(val, (int, float)):
+                    cells.append(f'<c r="{col}{r}"><v>{val}</v></c>')
+                else:
+                    strings.append(val)
+                    cells.append(f'<c r="{col}{r}" t="s"><v>{len(strings) - 1}</v></c>')
+            out_rows.append(f'<row r="{r}">{"".join(cells)}</row>')
+        rows_by_sheet.append((name, "".join(out_rows)))
+    sst = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="%d" uniqueCount="%d">'
+           % (len(strings), len(strings))
+           + "".join(f"<si><t>{s}</t></si>" for s in strings) + "</sst>")
+    S = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    sheets_xml = "".join(
+        f'<sheet name="{name}" sheetId="{i}" r:id="rId{i}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
+        for i, (name, _) in enumerate(rows_by_sheet, start=1))
+    wb = f'<?xml version="1.0"?><workbook xmlns="{S}"><sheets>{sheets_xml}</sheets></workbook>'
+    rels = ('<?xml version="1.0"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            + "".join(
+                f'<Relationship Id="rId{i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i}.xml"/>'
+                for i in range(1, len(rows_by_sheet) + 1)) + "</Relationships>")
+    with _zipfile.ZipFile(path, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("xl/workbook.xml", wb)
+        z.writestr("xl/_rels/workbook.xml.rels", rels)
+        z.writestr("xl/sharedStrings.xml", sst)
+        for i, (_, rows) in enumerate(rows_by_sheet, start=1):
+            z.writestr(f"xl/worksheets/sheet{i}.xml",
+                       f'<?xml version="1.0"?><worksheet xmlns="{S}"><sheetData>{rows}</sheetData></worksheet>')
+
+
+def _make_pptx(path, slides):
+    """最小 PPTX：每页一个标题占位符。slides = [title, ...]"""
+    P = "http://schemas.openxmlformats.org/presentationml/2006/main"
+    A = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    sld_ids = "".join(f'<p:sldId id="{256 + i}" r:id="rId{i + 2}"/>' for i in range(len(slides)))  # rId1 = slideMaster
+    pres = (f'<?xml version="1.0"?><p:presentation xmlns:p="{P}" xmlns:r="{R}"><p:sldIdLst>{sld_ids}</p:sldIdLst></p:presentation>')
+    rels = ('<?xml version="1.0"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="x/slideMaster" Target="slideMasters/slideMaster1.xml"/>'
+            + "".join(
+                f'<Relationship Id="rId{i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{i}.xml"/>'
+                for i in range(1, len(slides) + 1)) + "</Relationships>")
+    with _zipfile.ZipFile(path, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("ppt/presentation.xml", pres)
+        z.writestr("ppt/_rels/presentation.xml.rels", rels)
+        z.writestr("ppt/slideMasters/slideMaster1.xml", f'<?xml version="1.0"?><p:sldMaster xmlns:p="{P}" xmlns:a="{A}"/>')
+        for i, title in enumerate(slides, start=1):
+            sp = (f'<p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr/><p:nvPr><a:ph type="title"/></p:nvPr></p:nvSpPr>'
+                  f'<p:spPr/><p:txBody><a:bodyPr/><a:p><a:r><a:rPr lang="zh-CN"/><a:t>{title}</a:t></a:r></a:p></p:txBody></p:sp>')
+            z.writestr(f"ppt/slides/slide{i}.xml",
+                       f'<?xml version="1.0"?><p:sld xmlns:p="{P}" xmlns:a="{A}"><p:cSld><p:spTree>{sp}</p:spTree></p:cSld></p:sld>')
+
+
+class TestOfficeSections:
+    """sections 检查对 docx/xlsx/pptx 走 OOXML 结构抽取（2026-11-25）；之前对二进制跑 Markdown 正则恒失败。"""
+
+    def test_docx_headings_pass_and_numbered_title_matches(self, tmp_path):
+        _make_docx(tmp_path / "报告.docx", [("三月转化率回升到 4.2%", 1), ("一、关键发现", 1), ("数据与方法", 2)])
+        assert acceptance.sections_of_file(tmp_path / "报告.docx") == (["三月转化率回升到 4.2%", "一、关键发现", "数据与方法"], None)
+        ok, fails, _ = acceptance.run_acceptance(tmp_path, [{"check": "sections", "path": "报告.docx", "names": ["关键发现", "数据与方法"]}])
+        assert ok and not fails, fails  # 「关键发现」匹配带编号的「一、关键发现」
+        ok, fails, _ = acceptance.run_acceptance(tmp_path, [{"check": "sections", "path": "报告.docx", "names": ["建议"]}])
+        assert not ok and "missing sections ['建议']" in fails[0] and "found [" in fails[0]  # 失败消息列出实际章节
+
+    def test_xlsx_sheet_name_and_header_cells(self, tmp_path):
+        _make_xlsx(tmp_path / "维度表.xlsx", [("维度表", [["维度", "产品 A", "产品 B"], ["定价", "免费", "¥99/月"], [1, 2, 3]])])
+        assert acceptance.sections_of_file(tmp_path / "维度表.xlsx") == (["维度表", "维度", "产品 A", "产品 B", "定价", "1"], None)  # 首列含数值 1
+        ok, fails, _ = acceptance.run_acceptance(tmp_path, [{"check": "sections", "path": "维度表.xlsx", "names": ["维度"]}])
+        assert ok and not fails, fails
+
+    def test_pptx_slide_titles(self, tmp_path):
+        _make_pptx(tmp_path / "演示.pptx", ["封面", "关键发现", "数据与方法"])
+        assert acceptance.sections_of_file(tmp_path / "演示.pptx") == (["封面", "关键发现", "数据与方法"], None)
+        ok, fails, _ = acceptance.run_acceptance(tmp_path, [{"check": "sections", "path": "演示.pptx", "names": ["关键发现", "数据与方法"]}])
+        assert ok and not fails, fails
+
+    def test_short_name_requires_exact_match(self, tmp_path):
+        """单字/单字符名不走包含匹配：'源' 不应命中 '数据来源'。"""
+        _make_docx(tmp_path / "r.docx", [("数据来源", 1)])
+        ok, fails, _ = acceptance.run_acceptance(tmp_path, [{"check": "sections", "path": "r.docx", "names": ["源"]}])
+        assert not ok
+        ok, _, _ = acceptance.run_acceptance(tmp_path, [{"check": "sections", "path": "r.docx", "names": ["数据来源"]}])
+        assert ok
+
+    def test_corrupt_and_masqueraded_office_files_fail_clearly(self, tmp_path):
+        (tmp_path / "bad.docx").write_bytes(b"not a zip")
+        (tmp_path / "fake.docx").write_text("# 其实是 Markdown\n## 摘要\n", encoding="utf-8")
+        ok, fails, _ = acceptance.run_acceptance(tmp_path, [
+            {"check": "sections", "path": "bad.docx", "names": ["x"]},
+            {"check": "sections", "path": "fake.docx", "names": ["摘要"]},
+        ])
+        assert not ok and len(fails) == 2
+        assert "not a valid docx file" in fails[0] and "not a valid docx file" in fails[1]
+
+    def test_markdown_path_unchanged(self, tmp_path):
+        (tmp_path / "r.md").write_text("# 报告\n\n## 摘要\n\n## 来源\n", encoding="utf-8")
+        ok, fails, _ = acceptance.run_acceptance(tmp_path, [{"check": "sections", "path": "r.md", "names": ["摘要", "来源"]}])
+        assert ok and not fails
+        ok, fails, _ = acceptance.run_acceptance(tmp_path, [{"check": "sections", "path": "r.md", "names": ["建议"]}])
+        assert not ok
+
+
 # ====================================================================== 端到端
 
 TWO_STEP = {
@@ -389,7 +522,7 @@ class TestEndToEnd:
         assert any(m["failed_step"] == "s1" for m in msgs), msgs
 
     def test_thread_death_marks_failed(self, tmp_path):
-        """Bot 线程异常退出（LLM 抛错）持有任务 → task failed + step failed（§11b）。"""
+        """Bot 线程恒异常（LLM 抛错）：额度 1 内自动重试一次，第二次崩溃后 failed → stalled（§11b + P0）。"""
         hub, runner, sched, H, prov, wd = _build(tmp_path)
         class Boom(FakeProvider):
             def stream(self, messages, system=None, tools=None, **kw):
@@ -403,7 +536,37 @@ class TestEndToEnd:
         r = json.loads(_with_scope("S1", H2["group_plan"], plan))
         _with_scope("S1", H2["group_plan_start"], r["dag_id"])
         sc = hub2.scope("S1")
-        _wait(lambda: D.read_dag(sc.dags_dir, r["dag_id"])["status"] == D.DAG_STALLED, timeout=8, msg="stalled after thread death")
+        _wait(lambda: D.read_dag(sc.dags_dir, r["dag_id"])["status"] == D.DAG_STALLED, timeout=12, msg="stalled after retries exhausted")
+        # 恒崩时：额度 1 重试一次后第二次崩溃才 failed
+        tid = D.read_dag(sc.dags_dir, r["dag_id"])["steps"]["s1"]["task_id"]
+        assert sc.tasks.get_raw(tid)["fix_rounds"] == 2
+
+    def test_crash_once_then_recover(self, tmp_path):
+        """瞬时 LLM 异常（只崩一次）→ 自动重试成功，DAG done，不 stalled。"""
+        hub, runner, sched, H, prov, wd = _build(tmp_path)
+        class Flaky(FakeProvider):
+            def __init__(self):
+                super().__init__()
+                self.failed = 0
+            def stream(self, messages, system=None, tools=None, **kw):
+                # 只有第一次 LLM 调用抛错（瞬时 500），之后正常走脚本
+                if self.failed == 0:
+                    self.failed += 1
+                    raise RuntimeError("Internal server error")
+                return super().stream(messages, system=system, tools=tools, **kw)
+        flaky = Flaky()
+        flaky.set("alice", [_write("r.md", "# r\n## 摘要\nx [1]\n## 来源\n[1] a\n"), _complete(), _idle()])
+        (tmp_path / "b").mkdir()
+        hub2, runner2, sched2, H2, _, wd2 = _build(tmp_path / "b", flaky)
+        _with_scope("S1", H2["spawn_teammate"], "alice", "researcher", "go")
+        plan = {"name": "x", "steps": [{"step_id": "s1", "subject": "a", "instructions": "x", "role": "researcher",
+                                         "assignee": "alice", "deliverables": [{"id": "d1", "path": "r.md"}],
+                                         "acceptance": [{"check": "exists", "path": "r.md"}]}]}
+        r = json.loads(_with_scope("S1", H2["group_plan"], plan))
+        _with_scope("S1", H2["group_plan_start"], r["dag_id"])
+        sc = hub2.scope("S1")
+        _wait(lambda: D.read_dag(sc.dags_dir, r["dag_id"])["status"] == D.DAG_DONE, timeout=12, msg="done after one retry")
+        assert (Path(d := D.read_dag(sc.dags_dir, r["dag_id"])["output_dir"]) / "r.md").exists()
 
     def test_scope_isolation(self, tmp_path):
         hub, runner, sched, H, prov, wd = _build(tmp_path)

@@ -539,9 +539,29 @@ class BotRunner:
         # 只对 in_progress 动手：verifying 的归属已是调度器（线程池验收中），
         # Bot idle 退出是正常的——不是「线程死亡持有任务」
         if t and t.get("status") == "in_progress":
-            sc.tasks.update_raw(task_id, status="failed", fail_reason="bot_thread_died")
+            # P0（2026-11-25）：LLM 异常崩溃在额度内**自动重试**——瞬时 500/超时
+            # 不应直接 stalled。与验收打回共用 fix_rounds 额度（max_fix_rounds 默认 1）：
+            # 额度内 task 回 pending + step 回 ready，调度器重派；超额度才 failed。
+            cur_rounds = int(t.get("fix_rounds", 0)) + 1
+            limit = int(t.get("max_fix_rounds", 1))
             dag_id = t.get("dag_id")
             step_id = t.get("step_id")
+            if cur_rounds <= limit:
+                sc.tasks.update_raw(task_id, expect_status="in_progress", status="pending", fix_rounds=cur_rounds)
+                if dag_id is not None:
+                    def _mut(dag):
+                        st = dag["steps"].get(step_id)
+                        if st and st["status"] == "in_progress":
+                            st["status"] = "ready"
+                    D_update(sc, dag_id, _mut)
+                # 重派时 Bot 收到同 task 的 assignment 会发 redispatched 分隔行
+                # （带「LLM 异常」语义由 sink 的 redispatched 文案体现），这里不重复发
+                if self.hub.scheduler:
+                    self.hub.scheduler.wake()
+                logger.warning("[bot:%s] thread died holding task #%s → retry (%d/%d)",
+                               name, task_id, cur_rounds, limit)
+                return
+            sc.tasks.update_raw(task_id, expect_status="in_progress", status="failed", fail_reason="bot_thread_died", fix_rounds=cur_rounds)
             if dag_id is not None:
                 def _mut(dag):
                     st = dag["steps"].get(step_id)
@@ -550,7 +570,8 @@ class BotRunner:
                 D_update(sc, dag_id, _mut)
             if self.hub.scheduler:
                 self.hub.scheduler.wake()
-            logger.warning("[bot:%s] thread died holding task #%s → failed", name, task_id)
+            logger.warning("[bot:%s] thread died holding task #%s → failed (rounds=%d>%d)",
+                           name, task_id, cur_rounds, limit)
         elif t and t.get("status") == "verifying":
             # 持有任务已交验收，Bot 退出不影响；清掉 held 以免 finally 误判
             self.hub.registry.set_status(name, "idle", sc.scope_id)

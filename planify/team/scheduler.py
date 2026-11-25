@@ -162,6 +162,10 @@ class Scheduler:
                     existing = sc.tasks.get_raw(st["task_id"])
                     if existing is not None:
                         st["status"] = D.STEP_IN_PROGRESS
+                        # task 同步回 in_progress：崩溃重试把 task 置 pending 后重派，
+                        # 不回这里则第二次崩溃时 _fail_held_task 因 task 非 in_progress
+                        # 跳过，step 永远 ready → 无限重派循环（P0 修复时暴露）
+                        sc.tasks.update_raw(existing["id"], expect_status="pending", status="in_progress")
                         self._dispatch(sc, existing.get("assignee") or "", existing)
                         continue
                 step = plan_steps[sid]
