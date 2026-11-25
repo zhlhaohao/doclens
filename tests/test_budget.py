@@ -23,13 +23,28 @@ class _Resp:
 
 
 class _IdleForever:
-    """每次都调 read_inbox（不 idle、不完成）——WORK 循环持续跑，每轮消耗一次 LLM 调用。"""
+    """每次都调 read_inbox（不 idle、不完成）——WORK 循环持续跑，每轮消耗一次 LLM 调用。
+
+    兼容 provider 的 chat / stream 两种接口（runner 走 stream，StreamEvent 序列）。
+    """
     def __init__(self):
         self.calls = 0
 
     def chat(self, **kw):
         self.calls += 1
         return _Resp([ToolUseBlock(id=f"r{self.calls}", name="read_inbox", input={})], "tool_use")
+
+    def stream(self, **kw):
+        from planify.core.llm.types import StreamEvent
+        self.calls += 1
+        n = self.calls
+        yield StreamEvent(type="message_start", usage={"input_tokens": 1})
+        yield StreamEvent(type="content_block_start", block_index=0, block_type="tool_use",
+                          tool_use_id=f"r{n}", tool_name="read_inbox")
+        yield StreamEvent(type="content_block_delta", block_index=0, input_json_delta="{}")
+        yield StreamEvent(type="content_block_stop", block_index=0)
+        yield StreamEvent(type="message_delta", stop_reason="tool_use", usage={"output_tokens": 1})
+        yield StreamEvent(type="message_stop")
 
 
 def _build(tmp_path, limit):

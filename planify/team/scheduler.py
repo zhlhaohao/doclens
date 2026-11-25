@@ -345,7 +345,10 @@ class Scheduler:
             if not st or st.get("task_id") is None:
                 return
             task = json.loads(sc.tasks.get(st["task_id"]))
+            logger.info("[scheduler] verifying task #%s step=%s dag=%s", task["id"], sid, dag_id)
             ok, failures, manuals = run_acceptance(Path(output_dir), task.get("acceptance", []))
+            logger.info("[scheduler] acceptance task #%s step=%s ok=%s failures=%s",
+                        task["id"], sid, ok, failures[:3] if failures else [])
 
             def _current():
                 """验收期间的竞争检查（ADR-0060 §4）。
@@ -353,23 +356,33 @@ class Scheduler:
                 pause_scope / cancel 可能在本函数验收期间把 DAG 转 paused/cancelled、
                 task 转 pending（`_release_held_task`）：此时验收结果必须整体丢弃。
 
-                **只查 DAG active + task verifying，不查 step**——`_advance_dag` 的收集
-                循环每 tick 重读 step，Bot 退出时 `_release_held_task` 只动 task 不动
+                **只查 DAG 非 paused/cancelled + task verifying，不查 step**——`_advance_dag`
+                的收集循环每 tick 重读 step，Bot 退出时 `_release_held_task` 只动 task 不动
                 verifying step，step 状态在此期间会反复变动（合法的重验），不能当前置。
+
+                **stalled 不算停止**：§6 是「一个分支 failed → DAG stalled，**其他分支继续**」。
+                某分支 stalled 后，其他分支的验收仍须照常标 done/failed（用户能看到它们
+                的真实结果），只是不再推进下游。若闸门要求 DAG_ACTIVE，stalled 后所有在飞
+                的验收都会被静默丢弃、step 永远卡 verifying——真机验证踩到：releases 失败
+                把 DAG 拖入 stalled，ecosystem 的验收被丢弃，页面显示「进行中」但 Bot 已空闲。
                 task 才是验收结果的唯一闸门（三处 update_raw 用 expect_status 条件写）。
                 """
                 d = D.read_dag(sc.dags_dir, dag_id) or {}
                 t = sc.tasks.get_raw(st["task_id"]) or {}
-                return d.get("status") == D.DAG_ACTIVE and t.get("status") == "verifying"
+                return d.get("status") not in (D.DAG_PAUSED, D.DAG_CANCELLED) and t.get("status") == "verifying"
 
             if not _current():
+                logger.info("[scheduler] acceptance result dropped for task #%s step=%s "
+                            "(DAG paused/cancelled or task no longer verifying)", task["id"], sid)
                 return  # 已被暂停 / 取消 / 重派——丢弃验收结果
 
             if ok:
                 snap = {p: (output_dir / p).stat().st_mtime for p in self._deliverable_paths(task) if (output_dir / p).exists()}
                 def _mut_ok(d):
-                    if d.get("status") != D.DAG_ACTIVE:
-                        return  # 暂停后不再标完成
+                    # stalled（其他分支失败）也允许标 done——用户要看到这个分支的真实结果；
+                    # 仅 paused/cancelled 才不写（那时结果已被丢弃）
+                    if d.get("status") in (D.DAG_PAUSED, D.DAG_CANCELLED):
+                        return
                     s = d["steps"].get(sid)
                     if s and s.get("status") == D.STEP_VERIFYING:
                         s["status"] = D.STEP_DONE
@@ -385,7 +398,7 @@ class Scheduler:
                 rounds = int(cur.get("fix_rounds", 0)) + 1
                 if rounds > int(cur.get("max_fix_rounds", 1)):
                     def _mut_fail(d):
-                        if d.get("status") != D.DAG_ACTIVE:
+                        if d.get("status") in (D.DAG_PAUSED, D.DAG_CANCELLED):
                             return
                         s = d["steps"].get(sid)
                         if s and s.get("status") == D.STEP_VERIFYING:
