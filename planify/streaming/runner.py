@@ -236,6 +236,7 @@ class StreamingAgent:
         system_prompt_extra: Optional[str] = None,
         tracer: Optional[LLMTracer] = None,
         fallback_resolver: Optional[FallbackResolver] = None,
+        fallback_base_label: Optional[str] = None,
     ):
         """
         初始化流式代理。
@@ -260,6 +261,10 @@ class StreamingAgent:
             fallback_resolver: 兜底模型解析器（可选，ADR-0061）。宿主注入的
                 「主模型不可用时下一个该用谁」决策方；None = 不做兜底切换
                 （CLI/TUI 等未接线宿主行为不变）
+            fallback_base_label: 主模型的用户可见名（可选）。兜底切换通知里
+                「从谁切走」的标签——与 resolver 给出的候选 label 同口径
+                （宿主的预设名），宿主前端据此判定「激活预设是否已换」。
+                None 时退回 model 字符串（机制层不知道宿主预设）。
         """
         self.client = client
         # provider 是 client 的别名（LLMProvider 抽象接口），
@@ -269,6 +274,7 @@ class StreamingAgent:
         # 兜底切换（ADR-0061）：resolver 由宿主注入；当前所用模型的用户
         # 可见名（toast / 时间线用），None 时退回 model_id
         self.fallback_resolver = fallback_resolver
+        self.fallback_base_label = fallback_base_label
         self._fallback_label: Optional[str] = None
         # 回合内切换记录：[(from_label, to_label, reason)]——宿主轮末读取
         # 落时间线（planify 不感知存储）
@@ -523,9 +529,13 @@ class StreamingAgent:
         # （chat.py 每请求新建实例天然隔离；CLI/TUI 复用 agent 时防串轮）
         self.last_compaction = None
         self.round_cleared_tool_use_ids = []
-        # 兜底切换记账按轮隔离（CLI/TUI 复用实例时防串轮）
+        # 兜底切换记账按轮隔离（CLI/TUI 复用实例时防串轮）。_fallback_label
+        # 回到轮首主模型：宿主注入了可见名就用它（与候选 label 同口径），
+        # 否则清空——上轮切到的兜底不得被当成本轮「从谁切走」
         self.fallback_switches = []
         self._fallback_tried = []
+        base_label = (self.fallback_base_label or "").strip()
+        self._fallback_label = base_label or None
 
         # 每轮重建 skill-context（头部稳定部分 + 尾部已加载 skill body，
         # 两个注入方法均可重入——压缩管道替换历史后同样调用，见压缩分支）
@@ -1619,6 +1629,8 @@ class StreamingAgent:
         里（只有 content_block_stop 才 append），天然被丢弃。
         """
         assert self.fallback_resolver is not None
+        # 「从谁切走」= 本轮当前所用模型：轮首为主模型可见名（宿主注入，
+        # 与候选 label 同口径），切过一次后为上一跳候选的 label
         from_label = self._fallback_label or self.model
 
         # 告知：切换进行中（宿主进时间线「正在寻找可用兜底模型」）

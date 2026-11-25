@@ -200,10 +200,11 @@ async def _stream_agent_response(
 
     # 兜底模型解析器（ADR-0061）：每回合一个实例，清单/阈值此刻读一次
     # （回合内固定，保存即对下一回合生效）。带图回合只选 vision 预设。
-    from doclens.web_v2.fallback_resolver import QuotaFallbackResolver
+    from doclens.web_v2.fallback_resolver import QuotaFallbackResolver, preset_label
 
     _fb_cfg = get_config()
     # getattr 兜底：测试/旧配置对象可能缺这两个阈值字段（取 Field 默认值）
+    _preset_name = getattr(_fb_cfg, "active_llm_preset", "") or ""
     fallback_resolver = QuotaFallbackResolver(
         current_model_id=getattr(runtime.config, "model_id", "") or "",
         current_base_url=getattr(runtime.config, "base_url", "") or "",
@@ -211,8 +212,12 @@ async def _stream_agent_response(
         window_pct=getattr(_fb_cfg, "fallback_window_used_pct", 80),
         balance_min=getattr(_fb_cfg, "fallback_balance_min", 10.0),
         thinking_depth=getattr(runtime.config, "planify_thinking_depth", None),
-        current_preset_name=getattr(_fb_cfg, "active_llm_preset", ""),
+        current_preset_name=_preset_name,
     )
+    # 主模型用户可见名（ADR-0061 补充）：与 resolver 候选 label 同口径
+    # （preset_label），落进 model_switch 记录的 from——前端下一条消息前据此
+    # 比对激活预设是否已换，口径不一致提醒框永远不弹（2026-11-25 实测）
+    fallback_base_label = preset_label({"name": _preset_name, "model_id": getattr(runtime.config, "model_id", "") or ""})
     from planify.tools import (
         bind_ask_user_question_handler,
         bind_user_interaction_handlers,
@@ -336,6 +341,7 @@ async def _stream_agent_response(
             label="main", session_key=session_id, workdir=agent.workdir
         ),
         fallback_resolver=fallback_resolver,
+        fallback_base_label=fallback_base_label,
     )
 
     # 消费端断开标志（ADR-0028）：SSE 生成器放生本 task 时置位——收尾时

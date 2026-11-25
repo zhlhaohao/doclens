@@ -157,7 +157,7 @@ class _Resolver:
         return self.candidates.pop(0)
 
 
-def _agent(provider, resolver=None):
+def _agent(provider, resolver=None, base_label=None):
     tmp = SimpleNamespace(
         config=SimpleNamespace(workdir=".", assets_dir=None),
         skill_access_state=None,
@@ -173,6 +173,7 @@ def _agent(provider, resolver=None):
         skills_loader=None,
         runtime=tmp,
         fallback_resolver=resolver,
+        fallback_base_label=base_label,
     )
     return agent, emitter
 
@@ -291,6 +292,37 @@ class TestSwitchSuccess:
         assert resolver.calls[1] == {"current": "B", "tried": ["B"], "reason": "quota"}
         assert "".join(emitter.texts) == "C 的回答"
         assert agent.fallback_switches == [("A", "B", "quota"), ("B", "C", "quota")]
+
+    def test_injected_base_label_used_as_from(self):
+        """宿主注入 fallback_base_label：from 用注入名而非裸 model_id。
+
+        2026-11-25 实测事故：from 落的是 model_id「glm-5.4」，宿主前端拿预设名
+        比对「激活预设是否已换」恒不等 → 下一条消息的提醒框永远不弹。
+        """
+        a = _ScriptedProvider([{"fail": _glm_quota_error()}], name="glm-5.4")
+        b = _ScriptedProvider([{"text": "ok"}], name="glm-5.4")
+        resolver = _Resolver([
+            FallbackCandidate(provider=b, model_id="glm-5.4", label="账号B · glm-5.4"),
+        ])
+        agent, emitter = _agent(a, resolver, base_label="主账号 · glm-5.4")
+        _run(agent)
+        assert agent.fallback_switches == [("主账号 · glm-5.4", "账号B · glm-5.4", "quota")]
+        notices = [e for e in emitter.notices if e.get("fallback_phase") == FALLBACK_PHASE_SWITCHED]
+        assert notices and notices[0]["fallback_from"] == "主账号 · glm-5.4"
+
+    def test_base_label_not_stale_across_rounds(self):
+        """复用实例（CLI/TUI）跨轮：上轮切到的兜底不得被当成本轮「从谁切走」。"""
+        a = _ScriptedProvider([{"fail": _glm_quota_error()}], name="A")
+        b = _ScriptedProvider([{"text": "ok"}], name="B")
+        resolver = _Resolver([FallbackCandidate(provider=b, model_id="B", label="B")])
+        agent, _ = _agent(a, resolver, base_label="主模型A · A")
+        _run(agent)
+        assert agent.model == "B" and agent._fallback_label == "B"
+        # 第二轮（脚本最后一步复用：B 持续返回 ok）：轮首回到主模型标签，
+        # 上轮切到的 B 不得残留为本轮「从谁切走」
+        asyncio.run(agent.run_stream([], "第二问", "sid"))
+        assert agent._fallback_label == "主模型A · A"
+        assert agent.fallback_switches == []
 
 
 class TestMidStreamSwitch:

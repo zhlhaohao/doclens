@@ -450,4 +450,46 @@ describe("<chat-view> 对话流程集成（AP-12 安全网）", () => {
     expect(store.getState().chat.messages.filter((m) => m.role === "user").length).toBe(1);
     void chatCalls0;
   });
+
+  it("⑨ 回看落库会话：末条 assistant 带 model_switch → 恢复 _lastSwitch，下一条消息照常弹提醒框", async () => {
+    // 后端落库的 from 现为「预设名 · model_id」（与 to 同口径，2026-11-25 修）。
+    // 刷新/切会话后不靠内存里的 _lastSwitch，而是 _loadSession 从落库记录恢复。
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    await el.updateComplete;
+    installFetch({ events: [], statusModel: "主模型A" });
+    const baseFetch = global.fetch;
+    const switchTrace = {
+      tool_use_id: "model_switch_1", name: "model_switch",
+      input: { from: "主模型A · glm-5.4", to: "账号B · glm-5.4", reason: "transient" },
+      output: "主模型A · glm-5.4 → 账号B · glm-5.4", is_error: false,
+    };
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u === "/api/sessions/s-hist") {
+        return jsonRes({
+          id: "s-hist", type: "chat", title: "t", preview: "", updated_at: "",
+          message_count: 2, generating: false, context_window: 0,
+          items: [
+            { seq: 0, kind: "message_user", payload: JSON.stringify({ content: "第一问" }) },
+            {
+              seq: 1, kind: "message_ai",
+              payload: JSON.stringify({
+                content: "上一回合的回答",
+                tool_calls: [switchTrace],
+              }),
+            },
+          ],
+        });
+      }
+      return baseFetch(u, init);
+    }) as unknown as typeof fetch;
+    await (el as any)._loadSession({ id: "s-hist", type: "chat", title: "t", preview: "", updated_at: "", message_count: 2 });
+    await el.updateComplete;
+    expect((el as any)._lastSwitch).toEqual({ base: "主模型A", fallback: "账号B" });
+
+    await submit(el, "第二问");
+    await el.updateComplete;
+    expect((el as any)._fallbackReminderOpen).toBe(true);
+    expect(el.draft).toBe("第二问");
+  });
 });

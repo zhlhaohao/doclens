@@ -60,11 +60,19 @@ def provider_key(base_url: str) -> str:
         return (base_url or "").lower()
 
 
-def _label(preset: Dict[str, Any]) -> str:
-    """用户可见名：预设名 + 模型 id（「GLM-5.3（账号2）」形态）。"""
+def preset_label(preset: Dict[str, Any]) -> str:
+    """用户可见名：预设名 + 模型 id（「GLM-5.3（账号2）」形态）。
+
+    兜底切换通知的 from/to 与前端提醒框的「激活预设是否已换」判定都用
+    这个口径——宿主注入 planify 的主模型标签也必须经此生成，两边才可比。
+    """
     name = str(preset.get("name") or "").strip()
     model = str(preset.get("model_id") or "").strip()
     return f"{name} · {model}" if name and model else (name or model or "未命名预设")
+
+
+#: 兼容旧名（模块内与既有测试引用）
+_label = preset_label
 
 
 def rank_candidates(
