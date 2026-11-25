@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..core.llm.trace import LLMTracer
 from ..core.llm.types import ToolUseBlock  # noqa: F401  (Tool 转换收敛到 tools.basic.to_tool_defs)
 from ..core.logging_config import data_dirname
+from ..prompts import BASE_PROMPT_VARIANTS
 from ..tools.basic import to_tool_defs
 from .emitter import EventEmitter, SSEEmitter
 from .types import (
@@ -237,6 +238,8 @@ class StreamingAgent:
         tracer: Optional[LLMTracer] = None,
         fallback_resolver: Optional[FallbackResolver] = None,
         fallback_base_label: Optional[str] = None,
+        base_prompt: str = "default",
+        scratch_dir: Optional[str] = None,
     ):
         """
         初始化流式代理。
@@ -265,6 +268,14 @@ class StreamingAgent:
                 「从谁切走」的标签——与 resolver 给出的候选 label 同口径
                 （宿主的预设名），宿主前端据此判定「激活预设是否已换」。
                 None 时退回 model 字符串（机制层不知道宿主预设）。
+            base_prompt: 基础提示词变体（``prompts.BASE_PROMPT_VARIANTS``）。
+                ``"default"`` = 现状；``"minimal"`` = 面向无人值守工作代理的
+                精简变体（剔除任务管理/技能加载/向人提问引导；头部注入同步
+                精简——不注技能清单与 agent.md）。未知值回落 default。
+            scratch_dir: 临时文件目录（可选，相对工作目录的路径）。指定后
+                头部注入的「临时文件」指引指向该目录而非默认的
+                ``<数据目录>/tmp/<session_id>/``——供宿主把工作代理的临时
+                文件约束在其可写范围内。None = 默认行为。
         """
         self.client = client
         # provider 是 client 的别名（LLMProvider 抽象接口），
@@ -297,7 +308,9 @@ class StreamingAgent:
         self.runtime = runtime
         self._interrupt_event = interrupt_event
         self._system_prompt_extra = system_prompt_extra
-        # LLM 追踪（调试/缓存命中率观测）：由调用方按会话创建，None 即不落盘
+        # 基础提示词变体 / 宿主指定的临时目录（ADR-0064 中性扩展；默认不变）
+        self.base_prompt = base_prompt if base_prompt in BASE_PROMPT_VARIANTS else "default"
+        self.scratch_dir = scratch_dir        # LLM 追踪（调试/缓存命中率观测）：由调用方按会话创建，None 即不落盘
         self.tracer = tracer
 
         # 本轮消息起点下标（run_stream 内全部头部/尾部注入完成、追加 user
@@ -369,7 +382,10 @@ class StreamingAgent:
         # logger.info("System prompt start generate:\n")
 
         prompt = self._prompt_builder.get(
-            workdir, agent_type="streaming", extra_prompt=self._system_prompt_extra
+            workdir,
+            agent_type="streaming",
+            extra_prompt=self._system_prompt_extra,
+            variant=self.base_prompt,
         )
         # logger.info(f"System prompt:\n{prompt}")
         return prompt
@@ -384,6 +400,19 @@ class StreamingAgent:
         _inject_loaded_skill_bodies）。
         """
         context_parts: List[str] = []
+
+        # 精简变体（无人值守工作代理）：不注技能清单与 agent.md（技能已由宿主
+        # 预加载进 system prompt；agent.md 是交互式对话助手的用户上下文），
+        # 只注临时文件指引（目录可由宿主指定）。
+        if self.base_prompt == "minimal":
+            if session_id:
+                context_parts.append(self._scratch_files_guidance(session_id))
+            if context_parts:
+                combined = "\n\n".join(context_parts)
+                if CONTEXT_MARKER not in combined:
+                    combined = f"{CONTEXT_MARKER}:\n\n(no skills)\n\n" + combined
+                _refresh_or_insert_context(messages, CONTEXT_MARKER, combined)
+            return
 
         # 1. skills descriptions（稳定：仅安装/卸载技能时变化；含技能根目录事实，
         #    恒非空——空清单也注入目录，防对话安装时装错地方）
@@ -426,20 +455,10 @@ class StreamingAgent:
             )
 
         # 3. 临时文件工作区指引（仅 prompt 软引导，工具层不做硬重定向）：
-        # 临时脚本写到 <数据目录>/tmp/<session_id>/，该目录由宿主应用负责
-        # 从索引/监控中排除并定期清理。
+        # 临时脚本写到 <数据目录>/tmp/<session_id>/（或宿主指定的 scratch_dir），
+        # 该目录由宿主应用负责从索引/监控中排除并定期清理。
         if session_id:
-            tmp_rel = f"{data_dirname()}/tmp/{session_id}"
-            context_parts.append(
-                "<system-reminder>\n"
-                "# Temporary Files\n\n"
-                f"为完成任务而临时生成并运行的代码/脚本文件，必须写入 `{tmp_rel}/` 目录"
-                "（相对工作目录，不存在时用 write_file 直接写入即可，父目录会自动创建），"
-                "并在该目录内运行；禁止把临时脚本写到知识库根目录或其他文档目录；"
-                "运行产生的中间输出（日志、临时数据等）也放在该目录。\n"
-                "只有用户明确要求保存的成果文件（文档、报告等）才可写入知识库的正常位置。\n"
-                "</system-reminder>"
-            )
+            context_parts.append(self._scratch_files_guidance(session_id))
 
         if context_parts:
             combined = "\n\n".join(context_parts)
@@ -448,6 +467,27 @@ class StreamingAgent:
                 # 会每轮重复 insert 导致历史无限增长
                 combined = f"{CONTEXT_MARKER}:\n\n(no skills)\n\n" + combined
             _refresh_or_insert_context(messages, CONTEXT_MARKER, combined)
+
+    def _scratch_files_guidance(self, session_id: str) -> str:
+        """临时文件指引段（仅 prompt 软引导，工具层不做硬重定向）。
+
+        宿主指定 ``scratch_dir`` 时指向该目录（供工作代理把临时文件约束在
+        可写范围内）；否则用默认的 ``<数据目录>/tmp/<session_id>/``。
+        """
+        if self.scratch_dir:
+            tmp_rel = f"{self.scratch_dir}/{session_id}"
+        else:
+            tmp_rel = f"{data_dirname()}/tmp/{session_id}"
+        return (
+            "<system-reminder>\n"
+            "# Temporary Files\n\n"
+            f"为完成任务而临时生成并运行的代码/脚本文件，必须写入 `{tmp_rel}/` 目录"
+            "（相对工作目录，不存在时用 write_file 直接写入即可，父目录会自动创建），"
+            "并在该目录内运行；禁止把临时脚本写到知识库根目录或其他文档目录；"
+            "运行产生的中间输出（日志、临时数据等）也放在该目录。\n"
+            "只有用户明确要求保存的成果文件（文档、报告等）才可写入知识库的正常位置。\n"
+            "</system-reminder>"
+        )
 
     def _inject_loaded_skill_bodies(self, messages: List[Dict], session_id: str) -> None:
         """已加载 skill body → 尾部消息对注入（可重入）。
