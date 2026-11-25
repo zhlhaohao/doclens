@@ -219,6 +219,20 @@ export class ChatStream extends LitElement {
    *  程序性滚动自身触发的 scroll 事件不计为用户滚动（_pinned 置位期间忽略）。 */
   private _pinned = true;
   private _scrollRafPending = false;
+  /** 强制回底窗口（2026-11-25 历史会话不滚底修复）：scrollToBottom() 调用时
+   *  新时间线往往尚未渲染（宿主在 setChatState 后同步调用，内容还在下一帧），
+   *  而首帧视口在顶部、距底远超阈值——下方 updated() 的「按位置复核」会把
+   *  这次回底当作「用户已上滚」否决，视口就此停在顶部（移动端实测）。
+   *  窗口内贴底不受复核否决，且不依赖 Lit 更新（子组件异步长高——代码高亮、
+   *  图片——也会跟到新底）；到期或用户主动滚动（触摸/滚轮/指针/按键）即失效，
+   *  回到常规「贴底粘滞 + 位置复核」。 */
+  private _forceUntil = 0;
+  private _forceTimer: number | undefined;
+  private static readonly FORCE_SETTLE_MS = 800;
+  private static readonly FORCE_TICK_MS = 50;
+  private get _forced(): boolean {
+    return performance.now() < this._forceUntil;
+  }
   /** 距底判定阈值（px）：容差视口高度的小比例，容纳字体缩放/最后一行渲染抖动 */
   private static readonly PIN_THRESHOLD = 80;
   /** 三钮组显隐门槛（px）：远大于预览页的 300px——会话滚动空间本就长，
@@ -257,6 +271,12 @@ export class ChatStream extends LitElement {
     // 用户滚动才更新粘滞状态，避免跟随动作本身把自己顶下线
     this.addEventListener("scroll", this._onScroll, { passive: true });
     this.addEventListener("trace-expanded", this._onTraceExpanded as EventListener);
+    // 用户主动滚动 → 强制回底窗口作废（触摸/滚轮/指针拖滚动条/滚动键）。
+    // 宿主外的输入（点历史条目、输入框）不经过这里，不会误杀刚开的窗口。
+    for (const ev of ["touchstart", "wheel", "pointerdown"] as const) {
+      this.addEventListener(ev, this._cancelForceBottom, { passive: true });
+    }
+    this.addEventListener("keydown", this._onScrollKey);
     this._scrollJump.attach(this);
   }
 
@@ -264,6 +284,11 @@ export class ChatStream extends LitElement {
     super.disconnectedCallback();
     this.removeEventListener("scroll", this._onScroll);
     this.removeEventListener("trace-expanded", this._onTraceExpanded as EventListener);
+    for (const ev of ["touchstart", "wheel", "pointerdown"] as const) {
+      this.removeEventListener(ev, this._cancelForceBottom);
+    }
+    this.removeEventListener("keydown", this._onScrollKey);
+    this._cancelForceBottom();
   }
 
   willUpdate(changed: Map<string, unknown>) {
@@ -345,6 +370,7 @@ export class ChatStream extends LitElement {
   /** 回到顶部（宿主菜单与悬浮三钮组共用）：先脱离贴底粘滞，
    *  否则流式增量一到就把视口拽回底部。 */
   jumpToTop(): void {
+    this._cancelForceBottom();
     this._scrollJump.jumpTop();
   }
 
@@ -383,8 +409,60 @@ export class ChatStream extends LitElement {
    *  （新内容在底部，用户意图明确指向底部，无视当前滚动位置）。 */
   scrollToBottom(): void {
     this._pinned = true;
-    // 立即滚一次；若同帧有 pending 渲染，updated() 的 rAF 会再补一次对齐
+    this._forceUntil = performance.now() + ChatStream.FORCE_SETTLE_MS;
+    // 立即滚一次；若同帧有 pending 渲染，updated() 的 rAF 会再补一次对齐。
+    // 没有 pending 渲染时（宿主在内容渲染前调用）也要排定 rAF，否则新内容
+    // 渲染后无人补滚——这正是历史会话停在顶部的直接原因。
     this.scrollTop = this.scrollHeight;
+    if (!this._scrollRafPending) this._scheduleFollow();
+    // 窗口内定时贴底：覆盖不触发本组件 updated() 的内容长高
+    if (this._forceTimer === undefined) {
+      this._forceTimer = window.setTimeout(this._onForceTick, ChatStream.FORCE_TICK_MS);
+    }
+  }
+
+  /** 强制回底窗口作废（用户主动滚动 / 回顶 / 组件卸载）。 */
+  private _cancelForceBottom = (): void => {
+    this._forceUntil = 0;
+    if (this._forceTimer !== undefined) {
+      window.clearTimeout(this._forceTimer);
+      this._forceTimer = undefined;
+    }
+  };
+
+  private _onForceTick = (): void => {
+    this._forceTimer = undefined;
+    if (!this._forced) return;
+    this.scrollTop = this.scrollHeight;
+    this._forceTimer = window.setTimeout(this._onForceTick, ChatStream.FORCE_TICK_MS);
+  };
+
+  /** 滚动键（方向键 / PageUp·Down / Home·End / Space）视同用户主动滚动。 */
+  private _onScrollKey = (e: KeyboardEvent): void => {
+    const keys = ["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "];
+    if (keys.includes(e.key)) this._cancelForceBottom();
+  };
+
+  /** 排定下一帧的贴底跟随（guard 合并同帧多次 updated 为单次 rAF）。 */
+  private _scheduleFollow(): void {
+    this._scrollRafPending = true;
+    requestAnimationFrame(() => {
+      this._scrollRafPending = false;
+      const forced = this._forced;
+      // rAF 间隙用户上滚：放弃本次跟随（强制回底窗口内不放弃）
+      if (!this._pinned && !forced) return;
+      // 双保险（移动端滚动回拽修复）：_pinned 由 scroll 事件维护，但
+      // iOS/Android 惯性滚动期间 scroll 事件批量滞后，可能在 rAF 排定后
+      // 才到达——只信标志会把用户刚滚上去的视口拽回底部（「上去又自动
+      // 下来」）。执行前按当前实际位置复核：已离底超过阈值即放弃跟随。
+      // 复核只约束「跟随」——scrollToBottom() 的显式回底（切会话/发消息）
+      // 正是从离底位置出发的，不受复核否决。
+      const distance = this.scrollHeight - this.scrollTop - this.clientHeight;
+      if (!forced && distance > ChatStream.PIN_THRESHOLD) return;
+      this._pinned = true;
+      this.scrollTop = this.scrollHeight;
+      this._scrollJump.refresh(); // 滚到底后「回底」钮该消失了
+    });
   }
 
   updated() {
@@ -392,24 +470,12 @@ export class ChatStream extends LitElement {
     // ResizeObserver 不触发，须在此显式重算
     this._scrollJump.refresh();
     this._emitNavState();
-    // 贴底粘滞：仅 pinned 时跟随滚底。延迟到下一帧，等子组件
+    // 贴底粘滞：仅 pinned 或强制回底窗口内跟随滚底。延迟到下一帧，等子组件
     // （chat-message → chat-tool-trace）渲染/展开后再算 scrollHeight；
     // guard 合并同帧多次 updated 为单次 rAF
-    if (!this._pinned) return;
+    if (!this._pinned && !this._forced) return;
     if (this._scrollRafPending) return;
-    this._scrollRafPending = true;
-    requestAnimationFrame(() => {
-      this._scrollRafPending = false;
-      if (!this._pinned) return; // rAF 间隙用户上滚：放弃本次跟随
-      // 双保险（移动端滚动回拽修复）：_pinned 由 scroll 事件维护，但
-      // iOS/Android 惯性滚动期间 scroll 事件批量滞后，可能在 rAF 排定后
-      // 才到达——只信标志会把用户刚滚上去的视口拽回底部（「上去又自动
-      // 下来」）。执行前按当前实际位置复核：已离底超过阈值即放弃跟随。
-      const distance = this.scrollHeight - this.scrollTop - this.clientHeight;
-      if (distance > ChatStream.PIN_THRESHOLD) return;
-      this.scrollTop = this.scrollHeight;
-      this._scrollJump.refresh(); // 滚到底后「回底」钮该消失了
-    });
+    this._scheduleFollow();
   }
 
   private _toggleDivider = (boundarySeq: number): void => {

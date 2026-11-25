@@ -155,6 +155,48 @@ describe("<chat-stream> stick-to-bottom", () => {
     rafCb!(0);
     expect(el.scrollTop).toBe(0); // 未被拽回底部
   });
+
+  it("scrollToBottom() before content renders still lands on bottom (history session on mobile)", async () => {
+    // 2026-11-25 回归：打开历史会话时宿主在消息渲染**前**调 scrollToBottom()，
+    // 新内容渲染后首帧视口在顶部、距底远超阈值——旧「按位置复核」把这次
+    // 显式回底当作用户上滚否决，视口停在顶部。强制回底窗口内不受复核否决。
+    const el = await fixture(html`<chat-stream .nodes=${nodes(3)}></chat-stream>`) as ChatStream;
+    let top = 0;
+    let contentH = 300; // 尚未渲染：内容不超出视口
+    stubLayout(el, 300, 300);
+    Object.defineProperty(el, "scrollHeight", { configurable: true, get: () => contentH });
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => { top = Math.max(0, Math.min(v, contentH - 300)); },
+    });
+    el.scrollToBottom(); // 宿主：切会话，内容还没渲染
+    contentH = 1000; // 历史消息渲染完成，视口仍在顶部（距底 700）
+    el.nodes = nodes(4); // → updated() → rAF
+    await el.updateComplete;
+    expect(top).toBe(700); // 无条件回底
+    expect(el.pinned).toBe(true);
+  });
+
+  it("user touch cancels the forced scroll-to-bottom window", async () => {
+    const el = await fixture(html`<chat-stream .nodes=${nodes(3)}></chat-stream>`) as ChatStream;
+    let top = 0;
+    stubLayout(el, 1000, 300);
+    Object.defineProperty(el, "scrollTop", {
+      configurable: true,
+      get: () => top,
+      set: (v: number) => { top = v; },
+    });
+    el.scrollToBottom();
+    expect(top).toBe(1000);
+    el.dispatchEvent(new Event("touchstart")); // 用户立刻上滑
+    top = 0;
+    el.dispatchEvent(new Event("scroll")); // 距底 700 → 脱离粘滞
+    expect(el.pinned).toBe(false);
+    el.nodes = nodes(4); // 后续流式增量不拽回
+    await el.updateComplete;
+    expect(top).toBe(0);
+  });
 });
 
 /** 会话导航三钮组（2026-10-21）：回顶 / 展开-收起思考过程 / 回底。
