@@ -76,6 +76,7 @@ def rank_candidates(
     require_vision: bool,
     tried: List[str],
     current_preset_id: Optional[str] = None,
+    current_api_key: str = "",
 ) -> List[CandidateEntry]:
     """候选排序（纯函数，便于测试）：剔除 → 同源提权 → 稳定排序。
 
@@ -84,6 +85,8 @@ def rank_candidates(
       1. 同供应商
       2. 其余
     ``current_preset_id`` = 当前激活预设（跳过它——切到自己等于没切）。
+    ``current_api_key`` = 当前模型所用 api_key：同主机同 key 的候选一并跳过
+    （额度按 key 计，同账号必同耗尽，不预检不试调）。
     """
     cur_key = provider_key(current_base_url)
     cur_model = (current_model_id or "").strip().lower()
@@ -93,6 +96,11 @@ def rank_candidates(
     # 不得跳过。调用方以 current_preset_id 显式告知时按 id 判；否则按
     # 三元组全等判（缺 api_key 时退化为 base_url+model_id 全等）。
     cur_pid = current_preset_id
+    # 与当前模型**同账号**（同供应商主机 + 同 api_key）的候选一律跳过：
+    # 额度按 key 计，不按模型计——当前模型额度耗尽，同 key 下换模型照样
+    # 被拒，预检/试调都是白跑（2026-11-25 用户决议）。不同账号的同名
+    # 模型不受影响（那是首选候选）。
+    cur_api_key = (current_api_key or "").strip()
 
     entries: List[CandidateEntry] = []
     for pid in order_ids:
@@ -106,6 +114,13 @@ def rank_candidates(
             continue
         # 带图回合只选支持视觉的预设（ADR-0034 能力位）
         if require_vision and not p.get("vision"):
+            continue
+        # 同账号（同主机 + 同 api_key）跳过：额度按 key 计，同 key 必同耗尽
+        if (
+            cur_api_key
+            and provider_key(p.get("base_url", "")) == cur_key
+            and str(p.get("api_key") or "").strip() == cur_api_key
+        ):
             continue
         entries.append(CandidateEntry(
             preset=p,
@@ -197,12 +212,19 @@ class QuotaFallbackResolver:
         # ADR-0011），这里按名（大小写不敏感）反查 id；查不到则不按 id 剔除
         # （退化为不剔除——清单里若有与当前三元组全同的预设也只是多试一次）
         self._current_preset_id: Optional[str] = None
+        self._current_api_key: str = ""
         if current_preset_name:
             want = current_preset_name.strip().lower()
-            for pid, p in by_id.items():
-                if str(p.get("name", "")).strip().lower() == want:
-                    self._current_preset_id = pid
-                    break
+            # 激活预设不一定在兜底清单里：按名在全部 LLM 预设里反查 id
+            hit = next(
+                (p for p in presets_store.list_presets("llm")
+                 if str(p.get("name", "")).strip().lower() == want),
+                None,
+            )
+            if hit is not None:
+                self._current_preset_id = hit["id"]
+                raw = presets_store.get_preset_raw(hit["id"])
+                self._current_api_key = str((raw or {}).get("api_key") or "").strip()
         self._queue: Optional[List[CandidateEntry]] = None  # 惰性：首次 resolve 时预检
         self._all_entries: List[CandidateEntry] = []        # 预检前的全量候选（标签回查）
         self._rejected: List[CandidateEntry] = []            # 预检/试调被拒的候选
@@ -264,6 +286,7 @@ class QuotaFallbackResolver:
             require_vision=self.require_vision,
             tried=tried,
             current_preset_id=self._current_preset_id,
+            current_api_key=self._current_api_key,
         )
         if not entries:
             self._queue = []

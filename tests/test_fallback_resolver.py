@@ -86,6 +86,34 @@ class TestRankCandidates:
         ]
         assert ids == ["g2", "k1"]
 
+    def test_same_account_skipped_entirely(self):
+        """同主机 + 同 api_key = 同账号：额度按 key 计必同耗尽，不预检不试调。"""
+        g1b = {**G1, "id": "g1b", "name": "GLM 主(flash)", "model_id": "glm-5.3-flash"}
+        by_id = {**BY_ID, "g1b": g1b}
+        ids = [
+            e.preset["id"]
+            for e in rank_candidates(["g1b", "k1", "g2"], by_id, current_model_id="glm-5.3",
+                                     current_base_url=G1["base_url"],
+                                     require_vision=False, tried=[],
+                                     current_preset_id="g1",
+                                     current_api_key=G1["api_key"])
+        ]
+        assert "g1b" not in ids, "同账号候选必须整体跳过"
+        assert ids == ["g2", "k1"], "不同账号的同名模型仍是首选"
+
+    def test_same_account_rule_inactive_without_key(self):
+        """调用方未提供 api_key 时不启用同账号剔除（退化为只按 id 剔除）。"""
+        g1b = {**G1, "id": "g1b", "name": "GLM 主(flash)", "model_id": "glm-5.3-flash"}
+        by_id = {**BY_ID, "g1b": g1b}
+        ids = [
+            e.preset["id"]
+            for e in rank_candidates(["g1b"], by_id, current_model_id="glm-5.3",
+                                     current_base_url=G1["base_url"],
+                                     require_vision=False, tried=[],
+                                     current_preset_id="g1")
+        ]
+        assert ids == ["g1b"]
+
     def test_tried_excluded(self):
         assert self._rank(tried=["g2"]) == ["g3", "g4", "k1", "k2"]
 
@@ -297,6 +325,37 @@ class TestResolverQueue:
         monkeypatch.setattr(r, "_make_provider", bad_make)
         out = asyncio.run(r.resolve(current_model_id="glm-5.3", tried=[], reason="quota"))
         assert out is not None and out.label.startswith("GLM 账号2"), "g3 构造失败被跳过"
+
+    def test_active_preset_key_filters_same_account(self, monkeypatch):
+        """按激活预设名反查其 api_key → 同账号的清单候选整体跳过。"""
+        # 清单含 g1 的同账号兄弟 g1b（同 key）与另一账号 g2
+        g1b = {**G1, "id": "g1b", "name": "GLM 主(flash)", "model_id": "glm-5.3-flash"}
+        by_id = {**BY_ID, "g1b": g1b}
+        monkeypatch.setattr(presets_store, "get_fallback_order", lambda: ["g1b", "g2", "k1"])
+        monkeypatch.setattr(presets_store, "get_preset_raw", lambda pid: {**by_id[pid]})
+        monkeypatch.setattr(
+            presets_store, "list_presets",
+            lambda kind=None: [{k: v for k, v in p.items() if k != "api_key"} | {"api_key": "***"}
+                               for p in by_id.values() if p.get("kind") == "llm"],
+        )
+        probed = []
+
+        async def fake(base_url, api_key, timeout=15.0):
+            probed.append(api_key)
+            return QuotaInfo(kind="none")
+
+        monkeypatch.setattr("doclens.web_v2.fallback_resolver.fetch_quota", fake)
+        r = QuotaFallbackResolver(
+            current_model_id="glm-5.3", current_base_url=G1["base_url"],
+            current_preset_name="GLM 主",
+        )
+        assert r._current_preset_id == "g1"
+        assert r._current_api_key == G1["api_key"]
+        monkeypatch.setattr(r, "_make_provider", lambda e: object())
+        out = asyncio.run(r.resolve(current_model_id="glm-5.3", tried=[], reason="quota"))
+        # g1b 与 g1 同 key：既不预检也不出队；首个出队的是另一账号的 g2
+        assert G1["api_key"] not in probed
+        assert out is not None and out.label.startswith("GLM 账号2")
 
 
 class TestPresetsStoreFallbackOrder:
