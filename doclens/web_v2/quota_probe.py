@@ -186,14 +186,24 @@ def _window_hours(duration: Optional[int], time_unit: object) -> Optional[float]
 
 
 def _parse_glm(payload: dict) -> QuotaInfo:
-    """GLM Coding Plan：TOKENS_LIMIT(unit=3,number=5)=5h；(unit=6,number=1)=每周。
-    TIME_LIMIT（每月 MCP）不展示（Q9 决议）。"""
+    """GLM Coding Plan：限额窗口（unit=3,number=5)=5h；(unit=6,number=1)=每周。
+    TIME_LIMIT（每月 MCP）不展示（Q9 决议）。
+
+    限额类型两种都要认（2026-11-25 发行版实测）：
+    - ``TOKENS_LIMIT``：按 token 计的套餐（pro/标准档），直接给 percentage
+    - ``CREDIT_LIMIT``：按 credit 计的套餐（max 档等），给 usage/currentValue/
+      remaining，percentage 可能缺省或为 0 —— 需按 currentValue/usage 兜底算
+
+    只认 TOKENS_LIMIT 时，max 档账号拿到 CREDIT_LIMIT 全被过滤 →
+    windows 为空 → 前端显示「无套餐额度」（同账号其它模型正常，
+    因为同接口同 key，但解析器只认一种类型）。
+    """
     data = payload.get("data") or {}
     windows: list[QuotaWindow] = []
     for item in data.get("limits") or []:
         if not isinstance(item, dict):
             continue
-        if str(item.get("type") or "") != "TOKENS_LIMIT":
+        if str(item.get("type") or "") not in ("TOKENS_LIMIT", "CREDIT_LIMIT"):
             continue
         unit, number = _to_int(item.get("unit")), _to_int(item.get("number"))
         if unit == 3 and number == 5:
@@ -205,7 +215,7 @@ def _parse_glm(payload: dict) -> QuotaInfo:
         windows.append(
             QuotaWindow(
                 label=label,
-                percentage=float(item.get("percentage") or 0),
+                percentage=_glm_percentage(item),
                 next_reset_ms=_to_int(item.get("nextResetTime")),
             )
         )
@@ -213,6 +223,18 @@ def _parse_glm(payload: dict) -> QuotaInfo:
         return QuotaInfo(kind="none")
     windows.sort(key=lambda w: 0 if w.label == "5 小时" else 1)
     return QuotaInfo(kind="windows", windows=tuple(windows))
+
+
+def _glm_percentage(item: dict) -> float:
+    """GLM 限额已用百分比：CREDIT_LIMIT 常缺 percentage，按 currentValue/usage 兜底。"""
+    pct = _to_float(item.get("percentage"))
+    if pct is not None:
+        return pct
+    used = _to_float(item.get("currentValue"))
+    total = _to_float(item.get("usage"))
+    if used is None or not total:
+        return 0.0
+    return max(0.0, min(100.0, used / total * 100.0))
 
 
 def _parse_kimi(payload: dict) -> QuotaInfo:

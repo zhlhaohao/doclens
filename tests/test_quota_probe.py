@@ -94,6 +94,72 @@ def test_parse_glm_empty_limits():
     assert info.kind == "none"
 
 
+def _glm_credit_payload():
+    """max 档账号实测返回：CREDIT_LIMIT（按 credit 计），非 TOKENS_LIMIT。"""
+    return {
+        "data": {
+            "level": "max",
+            "limits": [
+                {
+                    "type": "CREDIT_LIMIT",
+                    "unit": 3,
+                    "number": 5,
+                    "usage": 28000,
+                    "currentValue": 0,
+                    "remaining": 28000,
+                    "percentage": 0,
+                },
+                {
+                    "type": "CREDIT_LIMIT",
+                    "unit": 6,
+                    "number": 1,
+                    "usage": 140000,
+                    "currentValue": 47919,
+                    "remaining": 92080,
+                    "percentage": 34,
+                    "nextResetTime": 1796000275984,
+                },
+            ],
+        }
+    }
+
+
+def test_parse_glm_credit_limit_windows():
+    """CREDIT_LIMIT（max 档）也要解析出 5h / 每周两个窗口。
+
+    回归：2026-11-25 发行版「GLM-5.4-new 查不到额度（显示无套餐额度）」，
+    同 key 的其它模型正常 —— 解析器只认 TOKENS_LIMIT，把 CREDIT_LIMIT
+    全过滤掉 → windows 空 → 前端落到「无套餐额度」。
+    """
+    info = quota_probe._parse_glm(_glm_credit_payload())
+    assert info.kind == "windows"
+    assert [w.label for w in info.windows] == ["5 小时", "每周"]
+    assert info.windows[0].percentage == pytest.approx(0)
+    assert info.windows[1].percentage == pytest.approx(34)
+    assert info.windows[1].next_reset_ms == 1796000275984
+
+
+def test_parse_glm_credit_limit_percentage_fallback():
+    """CREDIT_LIMIT 缺 percentage 时按 currentValue/usage 兜底算已用。"""
+    info = quota_probe._parse_glm(
+        {
+            "data": {
+                "limits": [
+                    {
+                        "type": "CREDIT_LIMIT",
+                        "unit": 6,
+                        "number": 1,
+                        "usage": 200,
+                        "currentValue": 50,
+                    }
+                ]
+            }
+        }
+    )
+    assert info.kind == "windows"
+    assert info.windows[0].percentage == pytest.approx(25.0)
+
+
 def test_parse_kimi_old_member():
     """老会员：5h 窗口 + usage 每周额度。"""
     payload = {
