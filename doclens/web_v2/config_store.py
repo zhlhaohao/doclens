@@ -43,6 +43,9 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     # LLM 思考深度档位（auto/off/low/medium/high；保存即热生效：经
     # apply_config → update_llm_config 重建主 Provider，对新回合生效）
     "PLANIFY_THINKING_DEPTH",
+    # 兜底模型切换预检阈值（ADR-0061；每回合开始时读，保存即热生效）
+    "CORTEX_FALLBACK_WINDOW_USED_PCT",
+    "CORTEX_FALLBACK_BALANCE_MIN",
     # 视觉模型（图像文件解析，独立于 AI 对话配置）
     "VISION_API_KEY",
     "VISION_BASE_URL",

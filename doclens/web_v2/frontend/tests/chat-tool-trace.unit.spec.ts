@@ -5,8 +5,10 @@ import {
   buildFullText,
   isRedundantOutput,
   isShellOutputCollapsed,
+  lastModelSwitch,
   lineDiff,
   orderedArgEntries,
+  presetNameOf,
   skillResultSummary,
 } from "../src/components/chat-tool-trace";
 import type { ToolStep } from "../src/state/types";
@@ -163,5 +165,27 @@ describe("isShellOutputCollapsed", () => {
       ),
     ).toBe(false);
     expect(isShellOutputCollapsed(step({ name: "read_file", output: "content" }), false)).toBe(false);
+  });
+});
+
+describe("model switch helpers (ADR-0061)", () => {
+  it("presetNameOf strips the · model_id suffix; tolerates null/empty", () => {
+    expect(presetNameOf("主模型A · glm-5.3")).toBe("主模型A");
+    expect(presetNameOf("裸名")).toBe("裸名");
+    expect(presetNameOf("  前后空格 · m ")).toBe("前后空格");
+    expect(presetNameOf(null)).toBe("");
+    expect(presetNameOf("")).toBe("");
+  });
+
+  it("lastModelSwitch picks the last model_switch step; none → null", () => {
+    const mk = (from: string, to: string | null): ToolStep => ({
+      tool_use_id: "x", name: "model_switch",
+      input: { from, to, reason: "quota" }, status: "done",
+    });
+    expect(lastModelSwitch(undefined)).toBeNull();
+    expect(lastModelSwitch([{ tool_use_id: "s", name: "search", input: {}, status: "done" }])).toBeNull();
+    expect(lastModelSwitch([mk("A · m", "B · m"), mk("B · m", "C · m2")])).toEqual({ base: "B", fallback: "C" });
+    // failed 态 to=null → fallback 空串
+    expect(lastModelSwitch([mk("A · m", null)])).toEqual({ base: "A", fallback: "" });
   });
 });

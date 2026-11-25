@@ -197,6 +197,22 @@ async def _stream_agent_response(
     from planify.streaming.runner import StreamingAgent
     from planify.streaming.types import StreamingConfig
     from planify.streaming.waiter import get_global_waiter
+
+    # 兜底模型解析器（ADR-0061）：每回合一个实例，清单/阈值此刻读一次
+    # （回合内固定，保存即对下一回合生效）。带图回合只选 vision 预设。
+    from doclens.web_v2.fallback_resolver import QuotaFallbackResolver
+
+    _fb_cfg = get_config()
+    # getattr 兜底：测试/旧配置对象可能缺这两个阈值字段（取 Field 默认值）
+    fallback_resolver = QuotaFallbackResolver(
+        current_model_id=getattr(runtime.config, "model_id", "") or "",
+        current_base_url=getattr(runtime.config, "base_url", "") or "",
+        require_vision=bool(images),
+        window_pct=getattr(_fb_cfg, "fallback_window_used_pct", 80),
+        balance_min=getattr(_fb_cfg, "fallback_balance_min", 10.0),
+        thinking_depth=getattr(runtime.config, "planify_thinking_depth", None),
+        current_preset_name=getattr(_fb_cfg, "active_llm_preset", ""),
+    )
     from planify.tools import (
         bind_ask_user_question_handler,
         bind_user_interaction_handlers,
@@ -319,6 +335,7 @@ async def _stream_agent_response(
         tracer=LLMTracer.create(
             label="main", session_key=session_id, workdir=agent.workdir
         ),
+        fallback_resolver=fallback_resolver,
     )
 
     # 消费端断开标志（ADR-0028）：SSE 生成器放生本 task 时置位——收尾时

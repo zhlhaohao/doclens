@@ -243,3 +243,13 @@ class QuotaResult(BaseModel):
         default_factory=list, description="[currency, total_balance] 对"
     )
     is_available: bool = True
+
+
+class FallbackOrderUpdate(BaseModel):
+    """PUT /presets/fallback-order：覆写兜底清单（有序 LLM 预设 id，ADR-0061）。"""
+    preset_ids: list[str] = Field(default_factory=list)
+
+
+class FallbackOrderResult(BaseModel):
+    """兜底清单落库后的回显（已剔除不存在/非 LLM 的 id）。"""
+    preset_ids: list[str]

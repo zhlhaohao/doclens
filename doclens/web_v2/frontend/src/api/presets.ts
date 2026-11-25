@@ -224,3 +224,24 @@ export interface QuotaResult {
 export async function fetchPresetQuota(id: string): Promise<QuotaResult> {
   return handle<QuotaResult>(await fetch(`/api/presets/${id}/quota`));
 }
+
+/** 兜底模型清单（ADR-0061）：有序 LLM 预设 id；读取时已剔除不存在的预设。 */
+export async function getFallbackOrder(): Promise<string[]> {
+  const r = await handle<{ preset_ids: string[] }>(
+    await fetch("/api/presets/fallback-order"),
+  );
+  return r.preset_ids;
+}
+
+/** 覆写兜底清单（ADR-0061）：后端只接受存在的 kind=llm 预设 id，去重保序。
+ *  返回落库后的清单（下一回合开始时生效）。 */
+export async function setFallbackOrder(presetIds: string[]): Promise<string[]> {
+  const r = await handle<{ preset_ids: string[] }>(
+    await fetch("/api/presets/fallback-order", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preset_ids: presetIds }),
+    }),
+  );
+  return r.preset_ids;
+}

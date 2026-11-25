@@ -248,5 +248,26 @@ def validate_values(values: dict[str, str]) -> ValidationErrors:
     errors.extend(_llm_trace_rule(values))
     # AI 轮次预算规则（主循环 0–500、子代理 1–200；0 = 不限）
     errors.extend(_round_budget_rules(values))
+    # 兜底预检阈值规则（ADR-0061：窗口 1–100%，余额 ≥ 0）
+    errors.extend(_int_range_rule("CORTEX_FALLBACK_WINDOW_USED_PCT", values, 1, 100, "%"))
+    errors.extend(_fallback_balance_rule(values))
 
     return ValidationErrors(fields=errors)
+
+
+def _fallback_balance_rule(values: dict[str, str]) -> list[ConfigValidationError]:
+    """兜底余额阈值：空 = 默认 10；非空必须是 ≥ 0 的数（允许小数）。"""
+    raw = values.get("CORTEX_FALLBACK_BALANCE_MIN", "").strip()
+    if not raw:
+        return []
+    try:
+        v = float(raw)
+    except ValueError:
+        return [ConfigValidationError(
+            field="CORTEX_FALLBACK_BALANCE_MIN", error="必须是数字（元）",
+        )]
+    if v < 0:
+        return [ConfigValidationError(
+            field="CORTEX_FALLBACK_BALANCE_MIN", error="不能为负数",
+        )]
+    return []

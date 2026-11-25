@@ -113,21 +113,52 @@ class InterjectReportEvent(TypedDict):
     text: str
 
 
+class FallbackEvent(TypedDict, total=False):
+    """兜底模型切换进度（ADR-0061）：phase = searching（进时间线「正在
+    寻找」）/ switched（已切换，含 from→to）/ failed（全部不可用，含各
+    候选被拒原因报告）。switched/failed 同时经 tool_calls 合成条目落库。"""
+    type: str  # "fallback"
+    phase: str  # "searching" | "switched" | "failed"
+    detail: str
+    from_model: Optional[str]
+    to_model: Optional[str]
+    reason: Optional[str]  # "quota" | "transient"
+    report: List[Dict[str, str]]  # [{"label", "reason"}]（failed 时）
+
+
 ChatQueueEvent = Union[
     TokenEvent, ToolCallEvent, ToolResultEvent, AskEvent, ToastEvent, ErrorEvent,
     UsageEvent, DoneEvent, ThinkingEvent, InterjectAckEvent, InterjectReportEvent,
-    UserSeqEvent,
+    UserSeqEvent, FallbackEvent,
 ]
 
 #: 消费侧已知的全部事件类型（未知类型应记 warning，不得静默丢弃）
 KNOWN_EVENT_TYPES = frozenset(
     {"token", "tool_call", "tool_result", "ask", "toast", "compact", "error", "usage",
-     "done", "thinking", "interject_ack", "interject_report", "user_seq"}
+     "done", "thinking", "interject_ack", "interject_report", "user_seq", "fallback"}
 )
 
 
 def token_event(text: str) -> TokenEvent:
     return {"type": "token", "text": text}
+
+
+def fallback_event(
+    phase: str,
+    detail: str = "",
+    *,
+    from_model: Optional[str] = None,
+    to_model: Optional[str] = None,
+    reason: Optional[str] = None,
+    report: Optional[List[Dict[str, str]]] = None,
+) -> FallbackEvent:
+    """兜底切换进度（ADR-0061）：phase 同 planify FALLBACK_PHASE_*。"""
+    ev: FallbackEvent = {
+        "type": "fallback", "phase": phase, "detail": detail,
+        "from_model": from_model, "to_model": to_model, "reason": reason,
+        "report": report or [],
+    }
+    return ev
 
 
 def tool_call_event(

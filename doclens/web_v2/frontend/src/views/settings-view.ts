@@ -19,6 +19,7 @@ import "../components/toast-stack";
 import { pushLocalToast } from "../utils/toast";
 import "../components/password-section";
 import "../components/model-presets-section";
+import "../components/fallback-models-section";
 import "../components/search-presets-section";
 import "../components/mcp-servers-section";
 import "../components/skills-section";
@@ -1088,6 +1089,9 @@ export class SettingsView extends LitElement {
                         void this._refreshSystemStatus();
                       }}
                     ></model-presets-section>
+                    <fallback-models-section
+                      .activeLlm=${this._values["CORTEX_ACTIVE_LLM_PRESET"] ?? ""}
+                    ></fallback-models-section>
                   ` : nothing}
                   ${tab === "search" ? html`
                     <search-presets-section

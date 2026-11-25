@@ -62,6 +62,22 @@ def is_retryable_llm_error(e: BaseException) -> bool:
     return False
 
 
+def is_quota_exhausted_llm_error(e: BaseException) -> bool:
+    """LLM 调用失败是否属「额度耗尽」（套餐窗口上限 / 余额不足，ADR-0061）。
+
+    额度耗尽不重试、也不是配置错误——是兜底切换的触发信号之一。
+    分类器自身异常按「不是」处理（宁可不切换，不可误切换）。
+    """
+    try:
+        from .provider_context import provider_of
+        from .upstream_errors import is_quota_exhausted_error
+
+        return is_quota_exhausted_error(e, provider=provider_of(e))
+    except Exception:  # noqa: BLE001
+        logger.debug("额度耗尽分类失败，按非额度错误处理", exc_info=True)
+        return False
+
+
 def user_facing_llm_error(e: BaseException) -> str:
     """异常 → 用户可见文案（上游瞬时故障脱敏，其余原样）。"""
     try:

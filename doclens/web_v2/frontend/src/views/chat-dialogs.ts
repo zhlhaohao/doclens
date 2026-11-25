@@ -121,6 +121,28 @@ export function renderVisionGateDialog(props: {
     </c-dialog>`;
 }
 
+/** 兜底切换后下一回合提醒对话框宿主（ADR-0061 补充）。 */
+export function renderFallbackReminderDialog(props: {
+  open: boolean;
+  baseModel: string;
+  fallbackModel: string;
+  onProceed: () => void;
+  onGotoSettings: () => void;
+  onCancel: () => void;
+}) {
+  if (!props.open) return nothing;
+  return html`
+    <c-dialog ?open=${true} @cancel=${props.onCancel}>
+      <fallback-reminder-dialog
+        .baseModel=${props.baseModel}
+        .fallbackModel=${props.fallbackModel}
+        @proceed=${props.onProceed}
+        @goto-settings=${props.onGotoSettings}
+        @cancel=${props.onCancel}
+      ></fallback-reminder-dialog>
+    </c-dialog>`;
+}
+
 /** 插话输入对话框宿主（ADR-0048）。 */
 export function renderInterjectDialog(props: {
   open: boolean;

@@ -57,6 +57,9 @@ def _load_raw() -> dict:
         return _empty_data()
     if not isinstance(data, dict) or not isinstance(data.get("presets"), list):
         return _empty_data()
+    # 兜底清单键缺失（旧版文件）→ 补默认空表，调用方免判
+    if not isinstance(data.get("fallback_order"), list):
+        data["fallback_order"] = []
     return data
 
 
@@ -70,6 +73,37 @@ def _save_raw(data: dict) -> None:
         encoding="utf-8",
     )
     os.replace(tmp, path)
+
+
+# ---------------------------------------------------------------------------
+# 兜底模型清单（ADR-0061）：有序的 LLM 预设 id 列表，与 presets 同文件
+# ---------------------------------------------------------------------------
+
+
+def get_fallback_order() -> list[str]:
+    """兜底清单（有序预设 id）。读取时**静默剔除**已不存在的预设 id——
+    删除预设不级联改清单文件，引用自然失效。"""
+    with _LOCK:
+        data = _load_raw()
+    alive = {p.get("id") for p in data["presets"] if p.get("kind") == "llm"}
+    return [pid for pid in data.get("fallback_order", []) if pid in alive]
+
+
+def set_fallback_order(preset_ids: list[str]) -> list[str]:
+    """覆写兜底清单。只接受存在的 ``kind=llm`` 预设 id；去重保序。
+    返回落库后的清单。"""
+    with _LOCK:
+        data = _load_raw()
+        llm_ids = [p.get("id") for p in data["presets"] if p.get("kind") == "llm"]
+        seen: set[str] = set()
+        order: list[str] = []
+        for pid in preset_ids:
+            if pid in llm_ids and pid not in seen:
+                seen.add(pid)
+                order.append(pid)
+        data["fallback_order"] = order
+        _save_raw(data)
+    return order
 
 
 def _mask(preset: dict) -> dict:

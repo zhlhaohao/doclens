@@ -67,10 +67,20 @@ _MINIMAX_RETRYABLE = frozenset(
         2066,  # 处理超时
     }
 )
+#: 额度耗尽业务码（余额不足 / 用量超限 / 套餐不支持）——由兜底切换接手。
+_MINIMAX_QUOTA_EXHAUSTED = frozenset(
+    {
+        1008,  # 余额不足
+        2053,  # 额度不足
+        2056,  # 用量超限（等 5 小时窗口）
+        2061,  # 套餐不支持该模型
+        2067,  # 用量超限且未开自动扣费
+        2068,  # 套餐不支持该模型
+    }
+)
 _MINIMAX_NON_RETRYABLE = frozenset(
     {
         1004,  # 未授权 / token 不匹配
-        1008,  # 余额不足
         1026,  # 输入内容涉敏
         1027,  # 输出内容涉敏
         1039,  # token 限制
@@ -79,11 +89,6 @@ _MINIMAX_NON_RETRYABLE = frozenset(
         2013,  # 参数错误
         2022,  # 模型不存在
         2049,  # 无效 API Key
-        2053,  # 额度不足
-        2056,  # 用量超限（等 5 小时窗口）
-        2061,  # 套餐不支持该模型
-        2067,  # 用量超限且未开自动扣费
-        2068,  # 套餐不支持该模型
         2069,  # 模型已下线
     }
 )
@@ -98,6 +103,16 @@ _GLM_RETRYABLE = frozenset(
         1234,  # 网络错误（500）
         1302,  # 速率限制（429）
         1305,  # 该模型当前访问量过大（429）
+        # 1308/1310/1316-1321（5h/周使用上限）已移出重试表——归「额度耗尽」
+        # （见 _GLM_QUOTA_EXHAUSTED）：窗口重置前重试无用，退避空转只会
+        # 推迟兜底切换（ADR-0061）。
+    }
+)
+#: 额度耗尽业务码：套餐窗口上限 / 余额不足——窗口重置前重试无用。
+#: 这些码同时不属于「瞬时」也不属于「配置错误」：由兜底切换接手。
+_GLM_QUOTA_EXHAUSTED = frozenset(
+    {
+        1113,  # 账户欠费（429）
         1308,  # 使用上限，限额将重置（429）
         1310,  # 每周/每月使用上限，限额将重置（429）
         1316,  # 5 小时上限，主账号余额不足（429）
@@ -105,7 +120,7 @@ _GLM_RETRYABLE = frozenset(
         1318,  # 5 小时上限 + 子账号月上限（429）
         1319,  # 7 天上限 + 子账号月上限（429）
         1320,  # 5 小时上限 + 企业级月上限（429）
-        1321,  # 7 天上限 + 企业级月上限（429）
+        1321,  # 7 天时上限 + 企业级月上限（429）
     }
 )
 _GLM_NON_RETRYABLE = frozenset(
@@ -114,7 +129,6 @@ _GLM_NON_RETRYABLE = frozenset(
         1001,  # Header 未收到 Authentication（401）
         1003,  # Authentication Token 过期（401）
         1005,  # 需要二次认证（401）
-        1113,  # 账户欠费（429）
         1210,  # 参数有误（400）
         1211,  # 模型不存在（400）
         1212,  # 当前模型不支持该调用方式（400）
@@ -140,16 +154,42 @@ _GLM_NON_RETRYABLE = frozenset(
 _PROVIDER_TABLES: Dict[str, Dict[str, frozenset]] = {
     PROVIDER_MINIMAX: {
         "retryable": _MINIMAX_RETRYABLE,
+        "quota_exhausted": _MINIMAX_QUOTA_EXHAUSTED,
         "non_retryable": _MINIMAX_NON_RETRYABLE,
     },
     PROVIDER_GLM: {
         "retryable": _GLM_RETRYABLE,
+        "quota_exhausted": _GLM_QUOTA_EXHAUSTED,
         "non_retryable": _GLM_NON_RETRYABLE,
     },
-    PROVIDER_DEEPSEEK: {"retryable": frozenset(), "non_retryable": frozenset()},
-    PROVIDER_KIMI: {"retryable": frozenset(), "non_retryable": frozenset()},
-    PROVIDER_GENERIC: {"retryable": frozenset(), "non_retryable": frozenset()},
+    PROVIDER_DEEPSEEK: {
+        "retryable": frozenset(),
+        "quota_exhausted": frozenset(),
+        "non_retryable": frozenset(),
+    },
+    PROVIDER_KIMI: {
+        "retryable": frozenset(),
+        "quota_exhausted": frozenset(),
+        "non_retryable": frozenset(),
+    },
+    PROVIDER_GENERIC: {
+        "retryable": frozenset(),
+        "quota_exhausted": frozenset(),
+        "non_retryable": frozenset(),
+    },
 }
+
+#: 额度耗尽 error.type（跨 provider 通用）：套餐窗口上限 / 余额不足。
+QUOTA_EXHAUSTED_ERROR_TYPES = frozenset(
+    {
+        "exceeded_current_quota_error",  # Kimi / OpenAI
+        "insufficient_quota",  # OpenAI
+        "insufficient_user_quota",  # 部分网关
+        "quota_exceeded",  # 部分网关
+        "insufficient_balance",  # 部分网关（MiniMax anthropic 端点曾见）
+        "credit_error",  # 部分网关
+    }
+)
 
 #: 哪些 provider 允许从 message 里抠 ``(1000)`` 括号数字当业务码
 #: （MiniMax 独有写法；其它家的 message 里括号数字是普通文本，不能当码）。
@@ -206,6 +246,8 @@ _BUSINESS_CODE_RE = re.compile(r"\((\d{3,4})\)")
 
 #: 用户可见文案（不含任何原始错误码/英文占位符）
 FRIENDLY_UPSTREAM_ERROR = "模型服务暂时不可用，请稍后重试。"
+#: 额度耗尽的用户可见文案（ADR-0061）：不是「稍后重试」能解决的
+FRIENDLY_QUOTA_EXHAUSTED_ERROR = "模型套餐额度已用完（5 小时 / 每周上限或余额不足）。"
 
 
 # ---------------------------------------------------------------------------
@@ -336,9 +378,11 @@ def is_retryable_upstream_error(
     判据优先级：
 
     1. **error.type**（最具体）：命中 :data:`NON_RETRYABLE_ERROR_TYPES`
-       → False（鉴权 / 参数 / 额度 / 内容审查——即便 HTTP 429 也不重试，
-       如 Kimi ``exceeded_current_quota_error``）；命中
-       :data:`RETRYABLE_ERROR_TYPES` → True。
+       → False（鉴权 / 参数 / 内容审查——即便 HTTP 429 也不重试）；
+       命中 :data:`QUOTA_EXHAUSTED_ERROR_TYPES` → False（额度耗尽，
+       ADR-0061，归兜底切换）；命中 :data:`RETRYABLE_ERROR_TYPES` → True。
+       **例外**：已识别 provider 的额度耗尽**业务码**先于 RETRYABLE type
+       判（GLM 把 5h/周上限与真限流都装在 ``rate_limit_error`` 下）。
     2. **业务码**（仅已识别 provider 且命中其码表时）：
        ``non_retryable`` 档直接 False；``retryable`` 档直接 True。
        不同 provider 同号不同义，所以只在已识别 provider 下查表。
@@ -359,11 +403,23 @@ def is_retryable_upstream_error(
     etype = info["error_type"]
     if etype in NON_RETRYABLE_ERROR_TYPES:
         return False
+    # 额度耗尽（ADR-0061）：窗口重置前重试无用——不进重试路径，由兜底
+    # 切换接手。须先于 RETRYABLE 判定（部分网关用笼统 type）与 HTTP 429
+    # 兜底（额度错误多以 429 下发）。
+    if etype in QUOTA_EXHAUSTED_ERROR_TYPES:
+        return False
+    # 额度耗尽**业务码**也须先于笼统的 RETRYABLE type：GLM 把 5h/周上限
+    # （1308/1310）与真限流（1302）都装在 ``rate_limit_error`` type 下发，
+    # 对 GLM 而言业务码比 type 更具体——不先查码，1308 会被 type 放行重试。
+    code = info["business_code"]
+    if code is not None:
+        table = _PROVIDER_TABLES.get(prov, _PROVIDER_TABLES[PROVIDER_GENERIC])
+        if code in table["quota_exhausted"]:
+            return False
     if etype in RETRYABLE_ERROR_TYPES:
         return True
 
     # 2. 业务码（provider 分表）
-    code = info["business_code"]
     if code is not None:
         table = _PROVIDER_TABLES.get(prov, _PROVIDER_TABLES[PROVIDER_GENERIC])
         if code in table["non_retryable"]:
@@ -385,16 +441,56 @@ def is_retryable_upstream_error(
     return False
 
 
+def is_quota_exhausted_error(
+    exc: BaseException,
+    *,
+    provider: Optional[str] = None,
+) -> bool:
+    """上游错误是否属「额度耗尽」——套餐窗口上限 / 余额不足（ADR-0061）。
+
+    与 :func:`is_retryable_upstream_error` 的关系：额度耗尽**不可重试**
+    （窗口重置前退避无用），但也**不是配置错误**——由兜底切换接手。
+    ``exceeded_current_quota_error`` 同时在不可重试表里（对重试判定
+    不可重试是对的），本函数先于那张表命中它。
+
+    判据优先级：
+    1. **error.type** 命中 :data:`QUOTA_EXHAUSTED_ERROR_TYPES` → True；
+    2. **业务码**（已识别 provider）命中 ``quota_exhausted`` 档 → True；
+    3. **HTTP 402**（Payment Required——余额不足的通用状态码）→ True。
+    """
+    info = extract_upstream_error_info(exc, provider=provider)
+    prov = info["provider"]
+
+    # 1. error.type（最具体）
+    if info["error_type"] in QUOTA_EXHAUSTED_ERROR_TYPES:
+        return True
+
+    # 2. 业务码（provider 分表）
+    code = info["business_code"]
+    if code is not None:
+        table = _PROVIDER_TABLES.get(prov, _PROVIDER_TABLES[PROVIDER_GENERIC])
+        if code in table["quota_exhausted"]:
+            return True
+
+    # 3. HTTP 402
+    status = info["http_status"]
+    if isinstance(status, int) and status == 402:
+        return True
+    return False
+
+
 def friendly_upstream_error(
     exc: BaseException,
     *,
     provider: Optional[str] = None,
 ) -> str:
-    """用户可见文案；非「上游瞬时故障」返回空串（调用方按原样处理）。
+    """用户可见文案；非「上游瞬时故障 / 额度耗尽」返回空串（调用方按原样处理）。
 
     技术细节（上游原文 + 网关码 + 业务码）不进这条文案——由调用方的
     ``logger.exception`` 落进日志，转录气泡只留可读文案。
     """
+    if is_quota_exhausted_error(exc, provider=provider):
+        return FRIENDLY_QUOTA_EXHAUSTED_ERROR
     if not is_retryable_upstream_error(exc, provider=provider):
         return ""
     return FRIENDLY_UPSTREAM_ERROR

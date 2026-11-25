@@ -158,6 +158,34 @@ export function isInterjectStep(s: ToolStep): boolean {
   return s.name === USER_INTERJECT_NAME;
 }
 
+/** 兜底模型切换合成条目名（ADR-0061）：前端识别渲染切换卡（from→to /
+ *  全部失败 + 候选被拒清单），随回合落库，回看历史可见。 */
+export const MODEL_SWITCH_NAME = "model_switch";
+
+export function isModelSwitchStep(s: ToolStep): boolean {
+  return s.name === MODEL_SWITCH_NAME;
+}
+
+/** 切换卡 input.from/to 的预设名（resolver 标签形态「预设名 · 模型id」；
+ *  无分隔符时原样返回）。供下一条消息发送前的「激活预设是否已变」比对。 */
+export function presetNameOf(label: string | null | undefined): string {
+  const s = (label ?? "").trim();
+  const i = s.indexOf(" · ");
+  return (i > 0 ? s.slice(0, i) : s).trim();
+}
+
+/** 从回合的 tool_steps 里取最后一次兜底切换（{base, fallback} 预设名）；
+ *  无切换返回 null。_loadSession 回看时据此恢复「上一回合切过」状态。 */
+export function lastModelSwitch(steps: ToolStep[] | undefined): { base: string; fallback: string } | null {
+  for (let i = (steps ?? []).length - 1; i >= 0; i--) {
+    const s = steps![i];
+    if (!isModelSwitchStep(s)) continue;
+    const input = (s.input ?? {}) as { from?: string | null; to?: string | null };
+    return { base: presetNameOf(input.from), fallback: presetNameOf(input.to) };
+  }
+  return null;
+}
+
 /** 构造整个 trace 的完整可拷贝文本（所有步骤的 name + 完整 input + 完整 output，无截断）。 */
 export function buildFullText(steps: ToolStep[]): string {
   const lines: string[] = [`思考过程（${steps.length} 步）`];
@@ -290,6 +318,29 @@ export class ChatToolTrace extends LitElement {
       white-space: pre-wrap; word-break: break-word;
     }
     .interject .waiting { color: var(--cortex-primary); font-size: var(--cortex-fs-xs); }
+    /* 模型切换卡（ADR-0061）：琥珀色左缘标识「救场切换」身份；failed 态
+     * 各候选被拒原因以清单列出（用户据此知道该充值哪个账号）。 */
+    .model-switch {
+      background: var(--cortex-surface);
+      border: 1px solid var(--cortex-border);
+      border-left: 3px solid var(--cortex-warning);
+      border-radius: var(--cortex-radius-md);
+      padding: 7px 9px;
+      font-size: var(--cortex-fs-sm);
+      color: var(--cortex-text);
+    }
+    .model-switch.failed { border-left-color: var(--cortex-danger); }
+    .model-switch .sw-title { display: flex; align-items: center; gap: 6px; }
+    .model-switch .arrow { color: var(--cortex-text-muted); }
+    .model-switch .reason {
+      margin-left: auto; color: var(--cortex-text-muted); font-size: var(--cortex-fs-xs);
+    }
+    .model-switch .waiting { color: var(--cortex-primary); font-size: var(--cortex-fs-xs); }
+    .model-switch ul {
+      margin: 6px 0 0; padding-left: 18px; color: var(--cortex-text-muted);
+      font-size: var(--cortex-fs-xs);
+    }
+    .model-switch li { margin: 2px 0; }
     .interject-btn {
       /* 与复制钮同排的标题栏动作钮：生成中才渲染（ADR-0048），提交后转
        * 「已插入」提示态（等检查点送达）；停用态（插话在途）半透明。 */
@@ -461,6 +512,7 @@ export class ChatToolTrace extends LitElement {
 
   private _renderStep(s: ToolStep) {
     if (isInterjectStep(s)) return this._renderInterject(s);
+    if (isModelSwitchStep(s)) return this._renderModelSwitch(s);
     const running = s.status === "running";
     const error = s.status === "error";
     const mcpName = mcpDisplayName(s.name);
@@ -534,6 +586,44 @@ export class ChatToolTrace extends LitElement {
         composed: true,
       }),
     );
+  }
+
+  /** 模型切换卡（ADR-0061）：from → to（原因）；failed 态列各候选被拒原因。
+   *  流式期间：searching 建卡（running 态「正在寻找可用兜底模型…」），
+   *  switched/failed 到达回填。回看：落库条目字段齐全。 */
+  private _renderModelSwitch(s: ToolStep): TemplateResult {
+    const input = (s.input ?? {}) as {
+      from?: string | null; to?: string | null; reason?: string | null;
+      report?: { label: string; reason: string }[];
+    };
+    const waiting = s.status === "running";
+    const failed = s.status === "error" || (!input.to && !waiting);
+    const reasonLabel =
+      input.reason === "quota" ? "额度耗尽"
+        : input.reason === "transient" ? "服务暂时不可用"
+        : null;
+    const report = Array.isArray(input.report) ? input.report : [];
+    return html`
+      <div class="model-switch ${failed ? "failed" : ""}">
+        <div class="sw-title">
+          <span>🔀</span>
+          ${waiting
+            ? html`<span>正在寻找可用的兜底模型…</span>`
+            : failed
+              ? html`<span>兜底模型全部不可用</span>`
+              : html`<span class="from">${input.from ?? "?"}</span>
+                     <span class="arrow">→</span>
+                     <span class="to">${input.to ?? "?"}</span>`}
+          ${reasonLabel ? html`<span class="reason">${reasonLabel}</span>` : null}
+        </div>
+        ${s.output && !waiting ? html`<div class="a">${s.output}</div>` : null}
+        ${failed && report.length
+          ? html`<ul>${report.map(
+                (r) => html`<li><b>${r.label}</b>：${r.reason}</li>`,
+              )}</ul>`
+          : nothing}
+      </div>
+    `;
   }
 
   render() {

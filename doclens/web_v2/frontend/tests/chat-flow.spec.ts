@@ -29,6 +29,8 @@ interface MockOpts {
   events?: Array<[string, string]>;
   /** 流读取挂起（测停止/切走）：收到 abort 信号后结束。 */
   hang?: boolean;
+  /** /api/status 的 model_name（激活预设名）；undefined = 返回空对象。 */
+  statusModel?: string;
 }
 
 function sseBody(events: Array<[string, string]>): ReadableStream<Uint8Array> {
@@ -92,6 +94,9 @@ function installFetch(opts: MockOpts) {
     if (u === "/api/chat/stop") {
       stopCalls++;
       return jsonRes({ ok: true });
+    }
+    if (u === "/api/status") {
+      return jsonRes(opts.statusModel ? { model_name: opts.statusModel } : {});
     }
     if (u === "/api/chat") {
       if (opts.hang) {
@@ -281,5 +286,62 @@ describe("<chat-view> 对话流程集成（AP-12 安全网）", () => {
     expect((el as any)._sessionUsage).toMatchObject({
       used: 155, contextWindow: 128000, calls: 1,
     });
+  });
+
+  it("⑦ 兜底切换后的下一条消息：激活预设未变 → 弹提醒框；「继续发送」放行", async () => {
+    // 第一回合：fallback switched 事件 → 记下 {base, fallback}
+    installFetch({
+      events: [
+        ["fallback", JSON.stringify({ phase: "searching", detail: "找…", from_model: "主模型A · glm-5.3", to_model: null, reason: "quota", report: [] })],
+        ["fallback", JSON.stringify({ phase: "switched", detail: "已切换", from_model: "主模型A · glm-5.3", to_model: "账号B · glm-5.3", reason: "quota", report: [] })],
+        ["token", JSON.stringify({ text: "兜底的回答" })],
+        ["done", "{}"],
+      ],
+      statusModel: "主模型A",
+    });
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    await el.updateComplete;
+    await submit(el, "第一问");
+    await new Promise((r) => setTimeout(r, 50));
+    await el.updateComplete;
+    expect((el as any)._lastSwitch).toEqual({ base: "主模型A", fallback: "账号B" });
+
+    // 第二条消息：/api/status 仍报「主模型A」→ 拦截 + 弹提醒框，草稿回填
+    await submit(el, "第二问");
+    await el.updateComplete;
+    expect((el as any)._fallbackReminderOpen).toBe(true);
+    expect(el.draft).toBe("第二问");
+    // 未发出：没有新增 user 消息（streaming 仍 false）
+    const st = store.getState().chat;
+    expect(st.streaming).toBe(false);
+    expect(st.messages.filter((m) => m.role === "user").length).toBe(1);
+
+    // 「继续发送」→ 关框、记录清空、消息真正发出（第二回合不再切：换普通流）
+    installFetch({ events: [["token", JSON.stringify({ text: "ok" })], ["done", "{}"]], statusModel: "主模型A" });
+    void (el as any)._onReminderProceed();
+    await el.updateComplete;
+    expect((el as any)._fallbackReminderOpen).toBe(false);
+    expect((el as any)._lastSwitch).toBeNull();
+    expect(store.getState().chat.streaming).toBe(true);
+  });
+
+  it("⑧ 兜底切换后的下一条消息：激活预设已变 → 不弹框直接发送", async () => {
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    await el.updateComplete;
+    // 模拟上一回合切过（_loadSession 恢复形态），预设名「主模型A」
+    (el as any)._lastSwitch = { base: "主模型A", fallback: "账号B" };
+    actions.setChatState({ state: "focus", currentSession: { id: "s1", type: "chat", title: "t", preview: "", updated_at: "", message_count: 1 }, messages: [], streaming: false });
+
+    installFetch({ events: [["token", JSON.stringify({ text: "ok" })], ["done", "{}"]], statusModel: "账号C" });
+    const chatCalls0 = (global.fetch as any).mock.calls.length;
+    await submit(el, "第二问");
+    await el.updateComplete;
+    expect((el as any)._fallbackReminderOpen).toBe(false);
+    expect((el as any)._lastSwitch).toBeNull();
+    // 直接发出：/api/chat 被调用、user 消息已追加（未拦截在输入框）
+    const calls = (global.fetch as any).mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(calls.includes("/api/chat")).toBe(true);
+    expect(store.getState().chat.messages.filter((m) => m.role === "user").length).toBe(1);
+    void chatCalls0;
   });
 });

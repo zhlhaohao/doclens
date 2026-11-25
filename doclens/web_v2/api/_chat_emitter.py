@@ -30,6 +30,7 @@ from ._chat_events import (
     ask_event,
     compact_event,
     done_event,
+    fallback_event,
     interject_ack_event,
     interject_report_event,
     thinking_event,
@@ -40,6 +41,9 @@ from ._chat_events import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: 兜底切换原因码 → 用户可读标签（合成条目 output 用）
+_REASON_LABEL = {"quota": "额度耗尽", "transient": "服务暂时不可用"}
 
 
 class ChatEventEmitter(EventEmitter):
@@ -194,10 +198,16 @@ class ChatEventEmitter(EventEmitter):
             self._push(ev)
 
         elif event.event_type == StreamEventType.NOTICE:
+            # 兜底切换进度（ADR-0061）：带 fallback_phase 的 notice 转专用
+            # fallback 事件（前端进时间线）；switched/failed 另落 tool_calls
+            # 合成条目 model_switch（随回合落库，回看历史可见）。
+            fb_phase = event.data.get("fallback_phase")
+            if fb_phase:
+                self._handle_fallback_notice(event.data)
             # 压缩进度（ADR-0056 回合末压缩）：带 compact_phase 的 notice 转
             # 专用 compact 事件——前端弹不可关闭模态进度框；不带
             # compact_phase 的普通 notice 仍走 toast。
-            if event.data.get("compact_phase"):
+            elif event.data.get("compact_phase"):
                 self._push(
                     compact_event(
                         str(event.data.get("compact_phase", "")),
@@ -281,3 +291,42 @@ class ChatEventEmitter(EventEmitter):
         self._interject_active = False
         self._interject_entry = None
         self._interject_text = []
+
+    def _handle_fallback_notice(self, data: Dict[str, Any]) -> None:
+        """兜底切换 notice（ADR-0061）：推 fallback 事件；落定态落合成条目。
+
+        合成条目 name="model_switch"，input={from,to,reason}，output=可读
+        一行；与 user_interject 同构（tool_calls 随回合落库，展示层按序
+        渲染）。searching 态只推事件不落条目（进行中状态由前端本地维护，
+        落定态到达即替换）。
+        """
+        import uuid
+
+        phase = str(data.get("fallback_phase", ""))
+        from_model = data.get("fallback_from")
+        to_model = data.get("fallback_to")
+        reason = data.get("fallback_reason")
+        report = list(data.get("fallback_report") or [])
+        self._push(fallback_event(
+            phase, str(data.get("detail", "")),
+            from_model=from_model, to_model=to_model, reason=reason, report=report,
+        ))
+        if phase == "switched":
+            self.tool_calls.append({
+                "tool_use_id": f"model_switch_{uuid.uuid4().hex[:8]}",
+                "name": "model_switch",
+                "input": {"from": from_model, "to": to_model, "reason": reason},
+                "output": f"{from_model} → {to_model}（{_REASON_LABEL.get(reason, reason or '')}）",
+                "is_error": False,
+                "duration_ms": None,
+            })
+        elif phase == "failed":
+            lines = [f"{r.get('label', '')}：{r.get('reason', '')}" for r in report]
+            self.tool_calls.append({
+                "tool_use_id": f"model_switch_{uuid.uuid4().hex[:8]}",
+                "name": "model_switch",
+                "input": {"from": from_model, "to": None, "reason": reason, "report": report},
+                "output": "全部兜底模型不可用" + ("；" + "；".join(lines) if lines else ""),
+                "is_error": True,
+                "duration_ms": None,
+            })

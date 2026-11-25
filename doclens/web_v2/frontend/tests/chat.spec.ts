@@ -69,4 +69,32 @@ describe("chatStream", () => {
     for await (const ev of chatStream({ message: "hi" })) out.push(ev);
     expect(out).toEqual([{ type: "toast", level: "error", detail: "已兜底" }]);
   });
+
+  it("parses fallback events (ADR-0061): searching / switched / failed", async () => {
+    const chunks = sseChunks([
+      ["fallback", JSON.stringify({ phase: "searching", detail: "正在寻找…", from_model: "A", to_model: null, reason: "quota", report: [] })],
+      ["fallback", JSON.stringify({ phase: "switched", detail: "已切换", from_model: "A", to_model: "B", reason: "quota", report: [] })],
+      ["fallback", JSON.stringify({ phase: "failed", detail: "全部不可用", from_model: "A", to_model: null, reason: "quota", report: [{ label: "B", reason: "额度耗尽" }] })],
+      // 未知 phase 归一为 searching；report 非数组归空
+      ["fallback", JSON.stringify({ phase: "weird", detail: "x", report: "nope" })],
+    ]);
+    let call = 0;
+    (globalThis.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      body: { getReader: () => ({
+        read: async () => call < chunks.length
+          ? { value: chunks[call++], done: false }
+          : { value: undefined, done: true },
+      }) },
+    });
+    const out = [];
+    for await (const ev of chatStream({ message: "hi" })) out.push(ev);
+    expect(out.map((e) => e.type === "fallback" ? e.phase : e.type)).toEqual(
+      ["searching", "switched", "failed", "searching"],
+    );
+    const failed = out[2] as Extract<typeof out[number], { type: "fallback" }>;
+    expect(failed.report).toEqual([{ label: "B", reason: "额度耗尽" }]);
+    const weird = out[3] as Extract<typeof out[number], { type: "fallback" }>;
+    expect(weird.report).toEqual([]);
+  });
 });

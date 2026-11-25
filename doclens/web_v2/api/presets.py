@@ -28,9 +28,12 @@ from doclens.web_v2.models.preset import (
     ProbeTranslateRequest,
     ProbeTranslateResult,
     QuotaResult,
+    FallbackOrderUpdate,
+    FallbackOrderResult,
 )
 from doclens.web_v2 import presets_store
 from doclens.web_v2.probe_max_tokens import ProbeError, probe_max_tokens
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -124,6 +127,23 @@ async def create_preset(req: PresetCreate):
     except presets_store.PresetError as e:
         raise CortexAPIError(409, "PRESET_CONFLICT", str(e))
     return Preset(**created)
+
+
+# 兜底清单（ADR-0061）：须注册在 PUT /presets/{preset_id} 之前——静态路径
+# 优先于路径参数，否则 "fallback-order" 会被当成 preset_id 吞掉。
+@router.get("/presets/fallback-order", response_model=FallbackOrderResult)
+async def get_fallback_order():
+    """兜底清单：有序 LLM 预设 id；读取时静默剔除已删预设。"""
+    return FallbackOrderResult(preset_ids=presets_store.get_fallback_order())
+
+
+@router.put("/presets/fallback-order", response_model=FallbackOrderResult)
+async def put_fallback_order(req: FallbackOrderUpdate):
+    """覆写兜底清单：只接受存在的 kind=llm 预设 id，去重保序。
+    下一回合开始时生效（回合内清单固定）。"""
+    order = presets_store.set_fallback_order(req.preset_ids)
+    logger.info("fallback order updated: %s", order)
+    return FallbackOrderResult(preset_ids=order)
 
 
 @router.put("/presets/{preset_id}", response_model=Preset)

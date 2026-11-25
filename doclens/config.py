@@ -477,6 +477,20 @@ class CortexConfig(BaseSettings):
         "anthropic 端映射 thinking{budget_tokens} + output_config{effort}。"
         "主对话与子代理生效；压缩摘要/视觉/翻译不受影响。保存即热生效。",
     )
+    # 兜底模型切换预检阈值（ADR-0061）：宿主侧策略，每回合开始时读一次
+    fallback_window_used_pct: int = Field(
+        default=80,
+        ge=1, le=100,
+        alias="CORTEX_FALLBACK_WINDOW_USED_PCT",
+        description="兜底候选预检：套餐窗口（5h/周）已用百分比 ≥ 此值即视为不可用。"
+        "1–100，默认 80。",
+    )
+    fallback_balance_min: float = Field(
+        default=10.0,
+        ge=0,
+        alias="CORTEX_FALLBACK_BALANCE_MIN",
+        description="兜底候选预检：账户余额（元）< 此值即视为不可用。默认 10。",
+    )
 
     # 视觉模型配置（图像文件解析，OpenAI-compat，独立于 AI 对话的 PLANIFY_* 配置）
     vision_api_key: Optional[str] = Field(

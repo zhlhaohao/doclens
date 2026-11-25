@@ -91,6 +91,8 @@ export const IMPLICIT_DEFAULTS: Record<string, string> = {
   PLANIFY_MAX_SUBAGENT_ROUNDS: "30",
   PLANIFY_LLM_TRACE: "0",
   JIMENG_MODEL: "doubao-seedream-4-0",
+  CORTEX_FALLBACK_WINDOW_USED_PCT: "80",
+  CORTEX_FALLBACK_BALANCE_MIN: "10",
 };
 
 export const SETTINGS_FIELDS: SettingsField[] = [
@@ -194,6 +196,28 @@ export const SETTINGS_FIELDS: SettingsField[] = [
       { value: "high", label: "高" },
     ],
     hint: "AI 对话（含子代理）的推理深度：auto = 不传思考参数、模型自行决定（兼容一切端点）；低/中/高按档位开启思考（OpenAI 端 reasoning_effort，Anthropic 端 thinking 预算 2048/8192/16384）。注意：恒思考模型（如 MiniMax M3.1-Flash、GLM-5.3、Kimi K3）拒绝「不思考」档，报错就改回 auto。上下文压缩摘要不受影响。保存后即时生效。",
+  },
+
+  // ===== 兜底模型（ai tab；ADR-0061：清单由 <fallback-models-section> 接管，此处只有两个预检阈值） =====
+  {
+    tab: "ai",
+    section: "兜底模型",
+    envVar: "CORTEX_FALLBACK_WINDOW_USED_PCT",
+    label: "窗口已用阈值（%）",
+    component: "number",
+    min: 1,
+    max: 100,
+    hint: "主模型额度耗尽时，兜底候选若能查到套餐窗口（5 小时 / 每周）用量，任一窗口已用 ≥ 此百分比即跳过该候选。默认 80。保存后即时生效（下一回合起）。",
+  },
+  {
+    tab: "ai",
+    section: "兜底模型",
+    envVar: "CORTEX_FALLBACK_BALANCE_MIN",
+    label: "余额阈值（元）",
+    component: "number",
+    min: 0,
+    max: 100000,
+    hint: "兜底候选若只能查到账户余额（如 DeepSeek），余额低于此值即跳过。默认 10。查不到任何额度数据的候选直接试调。保存后即时生效（下一回合起）。",
   },
 
   // ===== 网络监听（network tab；effect restart：改后需重启 gui） =====

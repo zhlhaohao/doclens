@@ -3,6 +3,7 @@ import { chatViewStyles } from "../styles/chat-view-styles";
 import {
   renderCompactDialog,
   renderDeleteTurnDialog,
+  renderFallbackReminderDialog,
   renderForkDialog,
   renderImportDialog,
   renderInfoDialog,
@@ -22,6 +23,7 @@ import type { ChatStreamEvent } from "../api/chat";
 import { validateAskQuestions } from "../api/ask";
 import "../components/ask-card";
 import { createSession, fetchSessionDetail, fetchChatTrace } from "../api/sessions";
+import { getStatus } from "../api/status";
 import { router } from "../router/router";
 import { PreviewController } from "../utils/preview-controller";
 import { ChatSessionOpsController } from "../utils/chat-session-ops-controller";
@@ -35,6 +37,7 @@ import type { SkillInfo } from "../api/skills";
 import { buildChatTimeline, mergeTimeline } from "./chat-timeline";
 import type { RewindDivider } from "./chat-timeline";
 import type { ChatStream } from "../components/chat-stream";
+import { lastModelSwitch, presetNameOf } from "../components/chat-tool-trace";
 // 向后兼容再导出：mapSessionItemsToMessages 已迁至 chat-timeline（纯函数模块）
 export { mapSessionItemsToMessages } from "./chat-timeline";
 import "../components/skill-toolbox-dialog";
@@ -46,6 +49,7 @@ import "../components/turn-delete-dialog";
 import "../components/compact-confirm-dialog";
 import "../components/import-confirm-dialog";
 import "../components/vision-gate-dialog";
+import "../components/fallback-reminder-dialog";
 import "../components/interject-dialog";
 import "../components/pst-email-list";
 import "../components/preview-pane";
@@ -273,6 +277,15 @@ export class ChatView extends LitElement {
   /** 视觉能力拦截对话框（ADR-0034 L3）：当前模型不支持视觉时弹出，引导
    *  跳设置页切换；拦截的消息/图保留在草稿与暂存区。 */
   @state() private _visionGateOpen = false;
+  /** 上一回合的兜底切换记录（ADR-0061 补充）：{base, fallback} = 被切掉的主模型
+   *  与切到的兜底（预设名口径）。非空 = 下一条消息发送前要检查激活预设是否
+   *  已变——未变则弹提醒框（继续发送会先再撞一次主模型耗尽）。回合结束/
+   *  切换会话时置 null；_loadSession 回看时从末条 assistant 的 model_switch
+   *  步骤恢复。 */
+  private _lastSwitch: { base: string; fallback: string } | null = null;
+  @state() private _fallbackReminderOpen = false;
+  /** 提醒框放行后待重发的消息（与图片）——「继续发送」据此重入 _submit。 */
+  private _reminderProceed: { message: string; images?: { data: string; media_type: string }[] } | null = null;
   /** 当前渲染的 ask 卡片载荷（交互态→摘要态由卡片内部管理；
    *  与 store.pendingAsk 分离：提交后输入恢复但摘要保留至流结束） */
   @state() private _activeAsk: PendingAsk | null = null;
@@ -355,6 +368,18 @@ export class ChatView extends LitElement {
       modelName: store.getState().status?.model_name ?? "",
       onGotoSettings: this._gotoModelSettings,
       onCancel: () => { this._visionGateOpen = false; },
+    }),
+    fallbackReminder: () => renderFallbackReminderDialog({
+      open: this._fallbackReminderOpen,
+      baseModel: this._lastSwitch?.base ?? "",
+      fallbackModel: this._lastSwitch?.fallback ?? "",
+      onProceed: () => this._onReminderProceed(),
+      onGotoSettings: () => {
+        this._fallbackReminderOpen = false;
+        // 草稿已留在输入框（_submit 拦截时回填），切完模型回来重发即可
+        this._gotoModelSettings();
+      },
+      onCancel: () => { this._fallbackReminderOpen = false; },
     }),
     interject: () => renderInterjectDialog({
       open: this._interjectDialogOpen,
@@ -883,7 +908,10 @@ export class ChatView extends LitElement {
     return items;
   }
 
-  private async _submit(e: CustomEvent<{ value: string; images?: { data: string; media_type: string }[] }>) {
+  private async _submit(
+    e: CustomEvent<{ value: string; images?: { data: string; media_type: string }[] }>,
+    skipReminder = false,
+  ) {
     this._resetPreview();
     const message = e.detail.value;
     const images = e.detail.images;
@@ -916,6 +944,23 @@ export class ChatView extends LitElement {
     }
     this.draft = "";
 
+    // 兜底切换后的下一回合提醒（ADR-0061 补充）：上一回合主模型额度耗尽
+    // 自动切到了兜底，而激活预设至今未变 → 弹提醒框。用户可「继续发送」
+    // （会先再撞一次主模型耗尽再切换）/「前往设置」换模型 / 取消。
+    if (this._lastSwitch && !skipReminder) {
+      const unchanged = await this._baseModelUnchanged();
+      if (unchanged) {
+        // 草稿与附件回填（与视觉拦截同律：消息绝不丢）
+        this.draft = message;
+        this._pendingImages = images ?? [];
+        this._reminderProceed = { message, images };
+        this._fallbackReminderOpen = true;
+        return;
+      }
+      // 主模型已换：提醒作废，记录清除
+      this._lastSwitch = null;
+    }
+
     // initial 态时消息发送前先建会话（与技能对话共用路径）。
     // createSession 失败（网络抖动等）时恢复草稿与附件——绝不丢用户输入。
     if (this.viewState.state === "initial") {
@@ -931,6 +976,33 @@ export class ChatView extends LitElement {
       return;
     }
     await this._sendMessage(message, false, images);
+  }
+
+  /** 兜底提醒放行：关框、按原消息重入 _submit（跳过提醒），记录清空。 */
+  private async _onReminderProceed(): Promise<void> {
+    const p = this._reminderProceed;
+    this._fallbackReminderOpen = false;
+    this._reminderProceed = null;
+    this._lastSwitch = null;
+    if (!p) return;
+    const images = p.images && p.images.length > 0 ? p.images : undefined;
+    await this._submit({ detail: { value: p.message, images } } as CustomEvent<{ value: string; images?: { data: string; media_type: string }[] }>, true);
+  }
+
+  /** 激活预设是否仍等于上一回合被切掉的主模型（预设名口径）。
+   *  现拉 /api/status（不用缓存——用户可能刚在另一 tab 切了预设）。
+   *  任一环节拿不到数据 → 视为「已变」不提醒（宁可少弹，不可误拦）。 */
+  private async _baseModelUnchanged(): Promise<boolean> {
+    const base = this._lastSwitch?.base ?? "";
+    if (!base) return false;
+    try {
+      const st = await getStatus();
+      const cur = (st.model_name ?? "").trim().toLowerCase();
+      if (!cur) return false;
+      return cur === base.trim().toLowerCase();
+    } catch {
+      return false;
+    }
   }
 
   /** 消费跨视图技能对话请求（files 工具箱）：initial 态新建技能会话后自动发送。
@@ -1097,6 +1169,57 @@ export class ChatView extends LitElement {
             messages = [...messages.slice(0, -1), { ...last, tool_steps }];
             actions.setChatState({ messages });
           }
+        } else if (ev.type === "fallback") {
+          // 兜底模型切换（ADR-0061）：searching 建切换卡（running）→
+          // switched/failed 回填；switched 另 toast 一次（会消失，时间线留痕）。
+          const last = messages[messages.length - 1];
+          const SW = "model_switch";
+          if (ev.phase === "searching") {
+            if (last?.role === "assistant") {
+              const step: ToolStep = {
+                tool_use_id: `model_switch_live_${Date.now()}`, name: SW,
+                input: { from: ev.from_model, to: null, reason: ev.reason },
+                status: "running",
+              };
+              messages = [...messages.slice(0, -1),
+                { ...last, tool_steps: [...(last.tool_steps ?? []), step] }];
+              actions.setChatState({ messages });
+            }
+          } else if (last?.role === "assistant") {
+            const steps = last.tool_steps ?? [];
+            // 回填最后一张 running 的切换卡（没有则新建——回放/竞态兜底）
+            let idx = -1;
+            for (let i = steps.length - 1; i >= 0; i--) {
+              if (steps[i].name === SW && steps[i].status === "running") { idx = i; break; }
+            }
+            const filled: ToolStep = {
+              tool_use_id: idx >= 0 ? steps[idx].tool_use_id : `model_switch_${Date.now()}`,
+              name: SW,
+              input: {
+                from: ev.from_model, to: ev.to_model, reason: ev.reason,
+                report: ev.report,
+              },
+              output: ev.detail,
+              status: ev.phase === "failed" ? "error" : "done",
+            };
+            const tool_steps = idx >= 0
+              ? steps.map((s, i) => (i === idx ? filled : s))
+              : [...steps, filled];
+            messages = [...messages.slice(0, -1), { ...last, tool_steps }];
+            actions.setChatState({ messages });
+            if (ev.phase === "switched") {
+              this._pushToast(`主模型不可用，已切换到兜底模型：${ev.to_model ?? ""}`, "info", 6000);
+              // 记下被切掉的主模型与兜底（预设名口径），供下一条消息发送前
+              // 检查激活预设是否已变（ADR-0061 补充）
+              this._lastSwitch = {
+                base: presetNameOf(ev.from_model), fallback: presetNameOf(ev.to_model),
+              };
+            } else {
+              this._pushToast(ev.detail || "兜底模型全部不可用", "error", 8000);
+              // 全部失败：下一条消息前也提醒（主模型仍是被切掉那个）
+              this._lastSwitch = { base: presetNameOf(ev.from_model), fallback: "" };
+            }
+          }
         } else if (ev.type === "user_seq") {
           // 回退锚点即时绑定（ADR-0027 补口）：seq 绑到本地流式 user
           // 消息——回合完成即出「回退到这里」等锚点按钮，不等刷新。
@@ -1224,6 +1347,7 @@ export class ChatView extends LitElement {
     this._history.setHighlight(null); // 「新会话」返回后不残留旧高亮
     this._markTabSession(null); // 回到欢迎页：本页不再挂着任何会话
     this._rewindDividers = [];
+    this._lastSwitch = null; // 新会话不继承旧会话的切换记录
     this._ops.cancelRewind();
     this._ops.cancelDeleteTurn();
     this._stopGeneratingPoll();
@@ -1287,6 +1411,11 @@ export class ChatView extends LitElement {
       }
       if (generating) this._startGeneratingPoll(s.id);
       else this._stopGeneratingPoll();
+      // 兜底切换记录恢复（ADR-0061 补充）：末条 assistant 带切换卡 → 上一
+      // 回合切过，下一条消息发送前要检查激活预设是否已变
+      this._lastSwitch = lastModelSwitch(
+        [...messages].reverse().find((m) => m.role === "assistant")?.tool_steps,
+      );
       // 重载成功（恢复态接管 / 后端事实回填）：撤下上一轮的转录内错误卡
       if (store.getState().chat.lastError) {
         actions.setChatState({ lastError: null, lastErrorDetail: null });
@@ -1568,6 +1697,7 @@ export class ChatView extends LitElement {
         </div>
         ${this._dialogs.skill()}
         ${this._dialogs.visionGate()}
+        ${this._dialogs.fallbackReminder()}
         ${this._dialogs.fork()}
         ${this._dialogs.import()}
       `;
@@ -1706,6 +1836,7 @@ export class ChatView extends LitElement {
       ${this._dialogs.skill()}
       ${this._dialogs.rename()}
       ${this._dialogs.visionGate()}
+      ${this._dialogs.fallbackReminder()}
       ${this._dialogs.interject()}
       ${this._dialogs.info()}
       ${this._dialogs.rewind()}

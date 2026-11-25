@@ -22,6 +22,11 @@ export type ChatStreamEvent =
   | { type: "usage" } & UsagePayload
   | { type: "interject_ack"; question: string; tool_use_id: string }
   | { type: "interject_report"; tool_use_id: string; text: string }
+  | {
+      type: "fallback"; phase: "searching" | "switched" | "failed"; detail: string;
+      from_model?: string | null; to_model?: string | null; reason?: string | null;
+      report: { label: string; reason: string }[];
+    }
   | { type: "user_seq"; seq: number }
   | { type: "done"; reason?: string }
   | { type: "error"; detail: string };
@@ -140,6 +145,28 @@ export async function* chatStream(
           type: "interject_report",
           tool_use_id: String(d.tool_use_id ?? ""),
           text: String(d.text ?? ""),
+        };
+      }
+    } else if (ev.event === "fallback") {
+      // 兜底模型切换进度（ADR-0061）：searching（进时间线进行中）/
+      // switched（已切换）/ failed（全部不可用，附各候选被拒原因）
+      const d = parseData("fallback", ev.data);
+      if (d) {
+        const phase = d.phase === "switched" || d.phase === "failed" ? d.phase : "searching";
+        const report = Array.isArray(d.report)
+          ? d.report.map((r) => ({
+              label: String((r as Record<string, unknown>)?.label ?? ""),
+              reason: String((r as Record<string, unknown>)?.reason ?? ""),
+            }))
+          : [];
+        yield {
+          type: "fallback",
+          phase,
+          detail: String(d.detail ?? ""),
+          from_model: (d.from_model as string | null | undefined) ?? null,
+          to_model: (d.to_model as string | null | undefined) ?? null,
+          reason: (d.reason as string | null | undefined) ?? null,
+          report,
         };
       }
     } else if (ev.event === "user_seq") {

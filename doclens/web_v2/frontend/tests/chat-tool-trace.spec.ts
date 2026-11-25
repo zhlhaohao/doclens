@@ -319,3 +319,56 @@ describe("<chat-tool-trace> interjection", () => {
     expect(traceStepsOf([interjectDone]).length).toBe(1);
   });
 });
+
+describe("<chat-tool-trace> model switch (ADR-0061)", () => {
+  const searching: ToolStep = {
+    tool_use_id: "model_switch_1", name: "model_switch",
+    input: { from: "A · glm-5.3", to: null, reason: "quota" }, status: "running",
+  };
+  const switched: ToolStep = {
+    ...searching, output: "已切换到兜底模型 B",
+    input: { from: "A · glm-5.3", to: "B · glm-5.3", reason: "quota" }, status: "done",
+  };
+  const failed: ToolStep = {
+    ...searching, output: "全部兜底模型不可用", status: "error",
+    input: {
+      from: "A", to: null, reason: "quota",
+      report: [{ label: "B", reason: "额度已用 99%" }, { label: "C", reason: "试调失败" }],
+    },
+  };
+
+  it("traceStepsOf keeps model_switch (card lives in the timeline)", async () => {
+    const { traceStepsOf } = await import("../src/components/chat-tool-trace");
+    expect(traceStepsOf([switched]).length).toBe(1);
+  });
+
+  it("searching renders waiting text; switched renders from → to with reason", async () => {
+    const el = await trace([searching]);
+    const card = el.shadowRoot!.querySelector(".model-switch")!;
+    expect(card.textContent).toContain("正在寻找可用的兜底模型");
+    expect(card.classList.contains("failed")).toBe(false);
+    el.steps = [switched];
+    await el.updateComplete;
+    // 全部完成态 trace 自动收起（与普通步骤同规则）——展开后断言卡片内容
+    el.shadowRoot!.querySelector(".summary")!.dispatchEvent(new Event("click", { bubbles: true }));
+    await el.updateComplete;
+    const sw = el.shadowRoot!.querySelector(".model-switch")!;
+    expect(sw.querySelector(".from")!.textContent).toBe("A · glm-5.3");
+    expect(sw.querySelector(".to")!.textContent).toBe("B · glm-5.3");
+    expect(sw.querySelector(".reason")!.textContent).toBe("额度耗尽");
+  });
+
+  it("failed lists each rejected candidate with reason", async () => {
+    const el = await trace([failed]);
+    el.shadowRoot!.querySelector(".summary")!.dispatchEvent(new Event("click", { bubbles: true }));
+    await el.updateComplete;
+    const card = el.shadowRoot!.querySelector(".model-switch")!;
+    expect(card.classList.contains("failed")).toBe(true);
+    expect(card.textContent).toContain("兜底模型全部不可用");
+    const items = card.querySelectorAll("li");
+    expect(items.length).toBe(2);
+    expect(items[0].textContent).toContain("B");
+    expect(items[0].textContent).toContain("99%");
+    expect(items[1].textContent).toContain("C");
+  });
+});

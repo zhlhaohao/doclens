@@ -24,7 +24,11 @@ import logging
 
 import pytest
 
-from planify.core.llm.retry_policy import is_retryable_llm_error, user_facing_llm_error
+from planify.core.llm.retry_policy import (
+    is_quota_exhausted_llm_error,
+    is_retryable_llm_error,
+    user_facing_llm_error,
+)
 from planify.core.llm.upstream_errors import (
     PROVIDER_DEEPSEEK,
     PROVIDER_GENERIC,
@@ -33,6 +37,7 @@ from planify.core.llm.upstream_errors import (
     PROVIDER_MINIMAX,
     detect_provider,
     extract_upstream_error_info,
+    is_quota_exhausted_error,
     is_retryable_upstream_error,
 )
 from planify.streaming.runner import StreamingAgent
@@ -176,14 +181,26 @@ class TestGLMAndDeepSeekCompatibility:
         return E()
 
     def test_glm_rate_limit_retryable(self):
-        """GLM 429 rate_limit_error（事故子代理路径）必须重试。"""
+        """GLM 429 rate_limit_error（事故子代理路径）必须重试——用 1302
+        （速率限制，真瞬时类）。1308 自 ADR-0061 起归「额度耗尽」不再重试，
+        见 TestQuotaExhausted。"""
+        e = self._anthropic_err(
+            {"type": "error", "error": {"type": "rate_limit_error", "code": "1302",
+                                        "message": "[1302][API 调用频率超限]"}},
+            429,
+        )
+        assert is_retryable_upstream_error(e, provider=PROVIDER_GLM)
+        assert is_retryable_llm_error(_mark(e, PROVIDER_GLM))
+
+    def test_glm_5h_cap_no_longer_retried(self):
+        """GLM 1308（5 小时上限）自 ADR-0061 起不再退避重试——归兜底切换。"""
         e = self._anthropic_err(
             {"type": "error", "error": {"type": "rate_limit_error", "code": "1308",
                                         "message": "[1308][已达到 5 小时的使用上限]"}},
             429,
         )
-        assert is_retryable_upstream_error(e, provider=PROVIDER_GLM)
-        assert is_retryable_llm_error(_mark(e, PROVIDER_GLM))
+        assert not is_retryable_upstream_error(e, provider=PROVIDER_GLM)
+        assert not is_retryable_llm_error(_mark(e, PROVIDER_GLM))
 
     def test_glm_auth_not_retryable(self):
         e = self._anthropic_err(
@@ -248,7 +265,7 @@ class TestGLMAndDeepSeekCompatibility:
                 if calls["n"] < 2:
                     raise _FakeAPIStatusError(
                         "429",
-                        {"error": {"type": "rate_limit_error", "code": "1308"}},
+                        {"error": {"type": "rate_limit_error", "code": "1302"}},
                         429,
                     )
                 return "ok"
@@ -262,6 +279,52 @@ class TestGLMAndDeepSeekCompatibility:
             _time.sleep = orig
         assert out == "ok"
         assert calls["n"] == 2, "GLM 429 应退避重试一次"
+
+
+class TestQuotaExhausted:
+    """「额度耗尽」独立分类（ADR-0061）——不重试、也不是配置错误，
+    由兜底切换接手。"""
+
+    def _err(self, body, status_code):
+        return _FakeAPIStatusError("x", body=body, status_code=status_code)
+
+    def test_glm_window_caps_are_quota_exhausted(self):
+        for code in (1308, 1310, 1316, 1317, 1318, 1319, 1320, 1321, 1113):
+            e = self._err(
+                {"error": {"type": "rate_limit_error", "code": str(code)}}, 429
+            )
+            assert is_quota_exhausted_error(e, provider=PROVIDER_GLM), code
+            assert is_quota_exhausted_llm_error(_mark(e, PROVIDER_GLM)), code
+
+    def test_glm_transient_rate_limit_is_not_quota(self):
+        e = self._err({"error": {"type": "rate_limit_error", "code": "1302"}}, 429)
+        assert not is_quota_exhausted_error(e, provider=PROVIDER_GLM)
+
+    def test_minimax_quota_codes(self):
+        for code in (1008, 2053, 2056, 2061, 2067, 2068):
+            e = self._err(
+                {"error": {"type": "api_error", "message": f"x ({code})"}}, 200
+            )
+            assert is_quota_exhausted_error(e, provider=PROVIDER_MINIMAX), code
+
+    def test_kimi_quota_type(self):
+        e = self._err({"error": {"type": "exceeded_current_quota_error"}}, 429)
+        assert is_quota_exhausted_error(e, provider=PROVIDER_KIMI)
+        assert not is_retryable_upstream_error(e, provider=PROVIDER_KIMI)
+
+    def test_http_402_is_quota(self):
+        """通用网关 402 Payment Required（无 provider / 无业务码）也判额度耗尽。"""
+        e = self._err({"error": {"type": "api_error", "message": "insufficient balance"}}, 402)
+        assert is_quota_exhausted_error(e)
+
+    def test_auth_error_is_not_quota(self):
+        """401 鉴权失败属配置错误——不得被当额度耗尽触发切换。"""
+        e = self._err({"error": {"type": "authentication_error"}}, 401)
+        assert not is_quota_exhausted_error(e, provider=PROVIDER_GLM)
+
+    def test_plain_exception_is_not_quota(self):
+        assert not is_quota_exhausted_llm_error(ValueError("解析失败 (2056)"))
+        assert not is_quota_exhausted_llm_error(RuntimeError("boom"))
 
 
 class TestUserFacingMessage:

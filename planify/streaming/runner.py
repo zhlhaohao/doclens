@@ -23,7 +23,17 @@ from ..core.llm.types import ToolUseBlock  # noqa: F401  (Tool 转换收敛到 t
 from ..core.logging_config import data_dirname
 from ..tools.basic import to_tool_defs
 from .emitter import EventEmitter, SSEEmitter
-from .types import StreamEvent, StreamEventType, StreamingConfig, ToolCallState
+from .types import (
+    FALLBACK_PHASE_FAILED,
+    FALLBACK_PHASE_SEARCHING,
+    FALLBACK_PHASE_SWITCHED,
+    FallbackCandidate,
+    FallbackResolver,
+    StreamEvent,
+    StreamEventType,
+    StreamingConfig,
+    ToolCallState,
+)
 from .waiter import GlobalResponseWaiter, get_global_waiter
 from .interjection import interjection_ack_message, interjection_message
 from ..skills.access_state import (
@@ -132,6 +142,52 @@ def is_retryable_llm_error(e: BaseException) -> bool:
     return _impl(e)
 
 
+def fallback_trigger_reason(e: BaseException) -> Optional[str]:
+    """异常是否触发兜底切换；返回触发原因码，不触发返回 None（ADR-0061）。
+
+    - ``"quota"``：额度耗尽（套餐窗口上限 / 余额不足）——直接触发；
+    - ``"transient"``：瞬时限流 / 网络 / 5xx——**重试耗尽后**才触发，
+      调用方在退避循环放弃时才调用本函数，此时传来的即可重试异常；
+    - ``None``：配置类错误（鉴权 / 模型不存在 / 参数 / 内容审查）——
+      静默换模型会把配置问题藏起来，不切换。
+
+    配置错误与瞬时错误的区分即 ``is_retryable_llm_error``（其口径里
+    额度耗尽已归「不可重试」，故须先判额度再判瞬时）。
+    """
+    from ..core.llm.retry_policy import (
+        is_quota_exhausted_llm_error as _quota,
+        is_retryable_llm_error as _retryable,
+    )
+
+    try:
+        if _quota(e):
+            return "quota"
+        if _retryable(e):
+            return "transient"
+    except Exception:  # noqa: BLE001 — 分类器异常不得阻断回合
+        logger.debug("兜底触发判定失败，按不切换处理", exc_info=True)
+    return None
+
+
+#: 中途切换注入消息的包裹标签（与 user-interjection 注入惯例一致）
+MODEL_SWITCH_TAG = "model-switch"
+
+
+def model_switch_message() -> str:
+    """中途切换时注入给新模型的 user 消息（ADR-0061 §5）。
+
+    上一条 assistant 回复是半截（原模型额度耗尽中断），已原样进历史；
+    本消息告知新模型从头完整重答。user 角色（非 assistant 结尾）——与
+    interjection_ack 同因：thinking 模式端点拒绝以 assistant 结尾的请求。
+    """
+    return (
+        f"<{MODEL_SWITCH_TAG}>\n"
+        "上一条回复因模型切换而中断，内容不完整。请忽略那条半截回复，"
+        "从头完整地重新回答用户最近的请求；如需继续调用工具，照常进行。\n"
+        f"</{MODEL_SWITCH_TAG}>"
+    )
+
+
 def _refresh_or_insert_context(
     messages: List[Dict], marker: str, new_content: str
 ) -> None:
@@ -179,6 +235,7 @@ class StreamingAgent:
         interrupt_event: Optional[threading.Event] = None,
         system_prompt_extra: Optional[str] = None,
         tracer: Optional[LLMTracer] = None,
+        fallback_resolver: Optional[FallbackResolver] = None,
     ):
         """
         初始化流式代理。
@@ -200,12 +257,27 @@ class StreamingAgent:
             system_prompt_extra: 宿主应用注入的额外 system prompt 段（可选，
                 领域策略如知识库优先由宿主经此注入，planify 自身保持通用）
             tracer: LLM 追踪器（可选，按会话创建；None 即不落盘）
+            fallback_resolver: 兜底模型解析器（可选，ADR-0061）。宿主注入的
+                「主模型不可用时下一个该用谁」决策方；None = 不做兜底切换
+                （CLI/TUI 等未接线宿主行为不变）
         """
         self.client = client
         # provider 是 client 的别名（LLMProvider 抽象接口），
         # 所有调用点已迁移到 provider.*。self.client 保留作为兼容字段。
         self.provider = client
         self.model = model
+        # 兜底切换（ADR-0061）：resolver 由宿主注入；当前所用模型的用户
+        # 可见名（toast / 时间线用），None 时退回 model_id
+        self.fallback_resolver = fallback_resolver
+        self._fallback_label: Optional[str] = None
+        # 回合内切换记录：[(from_label, to_label, reason)]——宿主轮末读取
+        # 落时间线（planify 不感知存储）
+        self.fallback_switches: List[Tuple[str, str, str]] = []
+        # 本回合已试过的候选 model_id（resolver 契约：每候选至多一次；
+        # runner 负责记账并透传 tried，实现方据此排除）
+        self._fallback_tried: List[str] = []
+        # 本次调用已流出的正文（中途切换修补用，见 _take_partial_text）
+        self._streamed_text: str = ""
         self.tools = tools
         self.tool_handlers = tool_handlers
         self.emitter = emitter
@@ -451,6 +523,9 @@ class StreamingAgent:
         # （chat.py 每请求新建实例天然隔离；CLI/TUI 复用 agent 时防串轮）
         self.last_compaction = None
         self.round_cleared_tool_use_ids = []
+        # 兜底切换记账按轮隔离（CLI/TUI 复用实例时防串轮）
+        self.fallback_switches = []
+        self._fallback_tried = []
 
         # 每轮重建 skill-context（头部稳定部分 + 尾部已加载 skill body，
         # 两个注入方法均可重入——压缩管道替换历史后同样调用，见压缩分支）
@@ -937,11 +1012,30 @@ class StreamingAgent:
             # 业务码）透传到转录气泡用户无法理解（MiniMax 官方客户端
             # issue #420 同款）。详见 core/llm/upstream_errors.py。
             await self.emitter.emit_error(
-                self._user_facing_error(e), code="AGENT_ERROR"
+                self._round_error_text(e), code="AGENT_ERROR"
             )
             return self._cleanup_messages(messages)
         finally:
             reset_current_session_id(ctx_token)
+
+    def _round_error_text(self, e: BaseException) -> str:
+        """回合异常 → 用户可见文案：脱敏 + 兜底切换语境补充（ADR-0061）。
+
+        - 额度耗尽且**未配置**兜底 → 追加「可在设置页配置兜底模型」引导；
+        - 额度耗尽且兜底**全部失败** → resolver 已发 failed 通知（含各候选
+          被拒原因），此处只追加一句汇总。
+        """
+        text = self._user_facing_error(e)
+        if fallback_trigger_reason(e) != "quota":
+            return text
+        if self.fallback_resolver is None:
+            return f"{text}（未配置兜底模型，可在设置页「模型」中配置）"
+        if self.fallback_switches:
+            return (
+                f"{text}（已尝试兜底模型 {len(self.fallback_switches)} 个，"
+                "均不可用）"
+            )
+        return f"{text}（兜底模型均不可用）"
 
     @staticmethod
     def _user_facing_error(e: BaseException) -> str:
@@ -1185,6 +1279,7 @@ class StreamingAgent:
         """
         cur_stop_reason = "end_turn"
         cur_text = ""
+        self._streamed_text = ""
         async with aclosing(
             self.provider.astream(
                 messages=messages,
@@ -1236,6 +1331,7 @@ class StreamingAgent:
                     if event.text_delta:
                         text = event.text_delta
                         cur_text += text
+                        self._streamed_text += text
                         block_text_parts.setdefault(index, []).append(text)
                         # 发射文本事件
                         await self.emitter.emit_text(text, is_end=False)
@@ -1341,52 +1437,67 @@ class StreamingAgent:
         # 输入就是此刻的 messages 全量，usage 的 input 类字段精确覆盖它
         request_len = len(messages)
 
-        # 瞬时 429/5xx 退避重试（2026-11-01 P2）：SDK 内建 2 次重试耗尽后
-        # 整轮对话报废（debug_20261027.log：tools=68 的长任务在循环 #66
-        # 撞 "engine is currently overloaded"，68 轮成果全丢）。与子代理
-        # _chat_with_retry 同构：仅重试 retryable 异常（429/网络），指数
-        # 退避，最多 _RETRY_MAX_ATTEMPTS 次。
-        # 安全边界：**仅在未发射任何字节时重试**——emit_text 已把增量推给
-        # 用户，重试会造成正文重复；一旦有发射（或已收到任何事件），维持
-        # 原语义上抛。首字节前静默期正是 429 的发生位置（请求被网关拒绝，
-        # 尚无流事件），重试覆盖面与事故形态吻合。
-        max_attempts = 4
-        base_delay = 3.0
-        for attempt in range(1, max_attempts + 1):
-            try:
-                stop_reason, current_text = await self._astream_once(
-                    messages=messages,
-                    system=system,
-                    tool_defs=tool_defs,
-                    assistant_content=assistant_content,
-                    block_text_parts=block_text_parts,
-                    block_tool_states=block_tool_states,
-                    call_usage=call_usage,
-                )
-                break
-            except Exception as e:
-                emitted = bool(current_text or assistant_content)
-                retryable = is_retryable_llm_error(e)
-                if (
-                    retryable
-                    and attempt < max_attempts
-                    and not emitted
-                    and not (self._interrupt_event and self._interrupt_event.is_set())
-                ):
-                    delay = min(base_delay * (2 ** (attempt - 1)), 30.0)
-                    self.logger.warning(
-                        "[StreamingAgent] LLM 调用可重试失败（%s），"
-                        "%.1fs 后重试（attempt=%d/%d）: %s",
-                        type(e).__name__, delay, attempt, max_attempts, e,
+        # 模型级外循环（ADR-0061 兜底切换）：每次切换到新模型重新进入；
+        # 未注入 resolver 时最多只跑一轮，行为与旧版完全一致。
+        while True:
+            # 瞬时 429/5xx 退避重试（2026-11-01 P2）：SDK 内建 2 次重试耗尽后
+            # 整轮对话报废（debug_20261027.log：tools=68 的长任务在循环 #66
+            # 撞 "engine is currently overloaded"，68 轮成果全丢）。与子代理
+            # _chat_with_retry 同构：仅重试 retryable 异常（429/网络），指数
+            # 退避，最多 _RETRY_MAX_ATTEMPTS 次。
+            # 安全边界：**仅在未发射任何字节时重试**——emit_text 已把增量推给
+            # 用户，重试会造成正文重复；一旦有发射（或已收到任何事件），维持
+            # 原语义上抛。首字节前静默期正是 429 的发生位置（请求被网关拒绝，
+            # 尚无流事件），重试覆盖面与事故形态吻合。
+            max_attempts = 4
+            base_delay = 3.0
+            switch_reason: Optional[str] = None
+            last_error: Optional[BaseException] = None
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    stop_reason, current_text = await self._astream_once(
+                        messages=messages,
+                        system=system,
+                        tool_defs=tool_defs,
+                        assistant_content=assistant_content,
+                        block_text_parts=block_text_parts,
+                        block_tool_states=block_tool_states,
+                        call_usage=call_usage,
                     )
-                    # 重试前清空半途状态（call_usage 的 dict 在外层持引用，
-                    # 由成功轮覆盖；此处只清块级收集器）
-                    assistant_content.clear()
-                    block_text_parts.clear()
-                    block_tool_states.clear()
-                    self._tool_call_states.clear()
-                    await asyncio.sleep(delay)
-                else:
+                    break
+                except Exception as e:
+                    emitted = bool(current_text or assistant_content)
+                    retryable = is_retryable_llm_error(e)
+                    if (
+                        retryable
+                        and attempt < max_attempts
+                        and not emitted
+                        and not (self._interrupt_event and self._interrupt_event.is_set())
+                    ):
+                        delay = min(base_delay * (2 ** (attempt - 1)), 30.0)
+                        self.logger.warning(
+                            "[StreamingAgent] LLM 调用可重试失败（%s），"
+                            "%.1fs 后重试（attempt=%d/%d）: %s",
+                            type(e).__name__, delay, attempt, max_attempts, e,
+                        )
+                        # 重试前清空半途状态（call_usage 的 dict 在外层持引用，
+                        # 由成功轮覆盖；此处只清块级收集器）
+                        assistant_content.clear()
+                        block_text_parts.clear()
+                        block_tool_states.clear()
+                        self._tool_call_states.clear()
+                        await asyncio.sleep(delay)
+                        continue
+
+                    # 放弃重试：判定是否值得兜底切换（ADR-0061）
+                    interrupted = bool(
+                        self._interrupt_event and self._interrupt_event.is_set()
+                    )
+                    reason = None if interrupted else fallback_trigger_reason(e)
+                    if reason and self.fallback_resolver is not None:
+                        switch_reason = reason
+                        last_error = e
+                        break
                     if retryable:
                         self.logger.error(
                             "[StreamingAgent] LLM 调用重试耗尽/不可安全重试"
@@ -1395,6 +1506,33 @@ class StreamingAgent:
                         )
                     self.logger.exception(f"[StreamingAgent] LLM 调用异常: {e}")
                     raise
+
+            if switch_reason is None:
+                break  # 成功 break 出重试循环，或已 raise
+
+            # === 兜底切换：问 resolver 要下一个候选 ===
+            switched = await self._try_fallback_switch(
+                messages=messages,
+                reason=switch_reason,
+                emitted=bool(current_text or assistant_content),
+                error=last_error,
+            )
+            if not switched:
+                # 无可用候选：按原错误收场（resolver 已发 failed 通知）
+                self.logger.exception(
+                    f"[StreamingAgent] 兜底切换无可用候选，按原错误收场: {last_error}"
+                )
+                raise last_error  # type: ignore[misc]
+
+            # 切换成功：清空本次半途状态，用新模型重发同一请求
+            assistant_content.clear()
+            block_text_parts.clear()
+            block_tool_states.clear()
+            self._tool_call_states.clear()
+            current_text = ""
+            call_usage.clear()
+            request_len = len(messages)  # 中途切换可能追加了两条消息
+            continue
 
         # suppress_tools 下模型违规返回 tool_use（2026-11-02 实测 Kimi 端
         # bug：tools=[] 时仍下发 tool_use block，id 形如 "check_background:1119"，
@@ -1460,6 +1598,135 @@ class StreamingAgent:
 
         self.logger.info(f"[StreamingAgent] LLM 调用完成: stop_reason={stop_reason}")
         return stop_reason
+
+    async def _try_fallback_switch(
+        self,
+        *,
+        messages: List[Dict],
+        reason: str,
+        emitted: bool,
+        error: Optional[BaseException],
+    ) -> bool:
+        """兜底切换的一步：问 resolver → 修补消息 → 换 provider → 告知。
+
+        ADR-0061。返回 True = 已切到新模型、调用方应用新模型重发同一请求；
+        False = 无可用候选（已发 failed 通知），调用方按原错误收场。
+
+        中途切换（``emitted=True``）：本次调用已向用户流出部分内容，该半截
+        assistant 消息尚未进 messages（成功路径才 append）——此处补进去，
+        再追加 user 角色 ``<model-switch>`` 提示让新模型从头重答。未完成的
+        工具调用（tool_use block 流出但未 complete）不在 assistant_content
+        里（只有 content_block_stop 才 append），天然被丢弃。
+        """
+        assert self.fallback_resolver is not None
+        from_label = self._fallback_label or self.model
+
+        # 告知：切换进行中（宿主进时间线「正在寻找可用兜底模型」）
+        await self._emit_fallback_notice(
+            detail="主模型不可用，正在寻找可用的兜底模型…",
+            level="warning",
+            phase=FALLBACK_PHASE_SEARCHING,
+            fallback_from=from_label,
+            reason=reason,
+        )
+
+        try:
+            candidate = await self.fallback_resolver.resolve(
+                current_model_id=self.model,
+                tried=list(self._fallback_tried),
+                reason=reason,
+            )
+        except Exception as e:  # noqa: BLE001 — 切换失败不得拖垮回合
+            self.logger.warning("[StreamingAgent] 兜底解析器异常，按无候选处理: %s", e)
+            candidate = None
+
+        if candidate is None:
+            # 无可用候选：宿主拿到 failed 通知 + 报告，自行组织错误文案
+            report = getattr(self.fallback_resolver, "last_report", None)
+            await self._emit_fallback_notice(
+                detail="主模型与全部兜底模型均不可用",
+                level="error",
+                phase=FALLBACK_PHASE_FAILED,
+                fallback_from=from_label,
+                reason=reason,
+                report=report,
+            )
+            return False
+
+        # 中途切换：补半截 assistant + 追加重答提示
+        if emitted:
+            partial_text = self._take_partial_text()
+            if partial_text:
+                messages.append(
+                    {"role": "assistant", "content": [{"type": "text", "text": partial_text}]}
+                )
+            messages.append({"role": "user", "content": model_switch_message()})
+
+        # 执行切换
+        self.provider = candidate.provider
+        self.client = candidate.provider
+        self.model = candidate.model_id
+        self._fallback_label = candidate.label
+        self._fallback_tried.append(candidate.model_id)
+        self.fallback_switches.append((from_label, candidate.label, reason))
+        self.logger.warning(
+            "[StreamingAgent] 兜底切换：%s → %s（原因：%s）",
+            from_label, candidate.label, reason,
+        )
+
+        await self._emit_fallback_notice(
+            detail=f"已切换到兜底模型 {candidate.label}",
+            level="warning",
+            phase=FALLBACK_PHASE_SWITCHED,
+            fallback_from=from_label,
+            fallback_to=candidate.label,
+            reason=reason,
+        )
+        return True
+
+    def _take_partial_text(self) -> str:
+        """取走本次调用已流出的半截正文（中途切换修补用，取后清空）。
+
+        由 _astream_once 在每个 text_delta 处写入；正常完成路径不消费
+        （成功后 assistant_content 已含完整文本，半截缓存随之作废）。
+        """
+        text = getattr(self, "_streamed_text", "")
+        self._streamed_text = ""
+        return text
+
+    async def _emit_fallback_notice(
+        self,
+        *,
+        detail: str,
+        level: str,
+        phase: str,
+        fallback_from: Optional[str],
+        fallback_to: Optional[str] = None,
+        reason: Optional[str] = None,
+        report: Optional[List[Dict[str, Any]]] = None,
+    ) -> None:
+        """发兜底切换通知；emitter 不支持新 kwargs 时退化为普通 notice。"""
+        emit = getattr(self.emitter, "emit_notice", None)
+        if emit is None:
+            return
+        try:
+            await emit(
+                detail,
+                level,
+                fallback_phase=phase,
+                fallback_from=fallback_from,
+                fallback_to=fallback_to,
+                fallback_reason=reason,
+                fallback_report=report,
+            )
+        except TypeError:
+            # 旧宿主 emitter 的 emit_notice 不认 fallback_* kwargs
+            try:
+                await emit(detail, level)
+            except Exception as e:  # noqa: BLE001
+                self.logger.debug("[StreamingAgent] notice 发送失败: %s", e)
+        except Exception as e:  # noqa: BLE001
+            self.logger.debug("[StreamingAgent] notice 发送失败: %s", e)
 
     async def _execute_tools(
         self, messages: List[Dict]

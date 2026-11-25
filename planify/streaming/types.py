@@ -288,6 +288,11 @@ class EventEmitter(Protocol):
         compact_phase: Optional[str] = None,
         pre_tokens: Optional[int] = None,
         post_tokens: Optional[int] = None,
+        fallback_phase: Optional[str] = None,
+        fallback_from: Optional[str] = None,
+        fallback_to: Optional[str] = None,
+        fallback_reason: Optional[str] = None,
+        fallback_report: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         """
         发射中性通知事件（框架内值得告知用户的事实，如上下文自动压缩）。
@@ -303,6 +308,13 @@ class EventEmitter(Protocol):
                 不识别的旧宿主可忽略（退化为 toast）
             pre_tokens / post_tokens: 压缩前/后 token 估算（phase="done"
                 时 post_tokens 在场）
+            fallback_phase: 兜底切换进度标识（"searching" | "switched" |
+                "failed"；ADR-0061）。宿主据此进时间线并落库；不识别的
+                旧宿主退化为 toast
+            fallback_from / fallback_to: 切换前后的用户可见模型名
+            fallback_reason: 触发原因（"quota" | "transient"）
+            fallback_report: phase="failed" 时各候选的被拒原因
+                ``[{"label", "reason"}]``
         """
         data: Dict[str, Any] = {"detail": detail, "level": level}
         if compact_phase is not None:
@@ -311,6 +323,12 @@ class EventEmitter(Protocol):
             data["pre_tokens"] = pre_tokens
         if post_tokens is not None:
             data["post_tokens"] = post_tokens
+        if fallback_phase is not None:
+            data["fallback_phase"] = fallback_phase
+            data["fallback_from"] = fallback_from
+            data["fallback_to"] = fallback_to
+            data["fallback_reason"] = fallback_reason
+            data["fallback_report"] = fallback_report or []
         await self.emit(
             StreamEvent(
                 event_type=StreamEventType.NOTICE,
@@ -415,6 +433,57 @@ class StreamingConfig:
     # （prefill 需回传 thinking 块），会 400。
     # 开启：用于坚持 user/assistant 严格交替、不接受连续同角色消息的端点。
     injection_ack: bool = False
+
+
+# ---------------------------------------------------------------------------
+# 兜底模型切换（ADR-0061）：宿主注入的解析器协议
+# ---------------------------------------------------------------------------
+
+#: emit_notice 的 ``fallback_phase`` 取值：切换进行中 / 已切换 / 全部失败
+FALLBACK_PHASE_SEARCHING = "searching"
+FALLBACK_PHASE_SWITCHED = "switched"
+FALLBACK_PHASE_FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class FallbackCandidate:
+    """一个兜底候选：resolver 交给 runner 的「换到谁」。
+
+    provider: 已构造好的 LLMProvider 实例（runner 直接替换 self.provider）
+    model_id: 候选模型 ID（替换 self.model）
+    label: 用户可见名称（toast / 时间线用，如「GLM-5.3（账号2）」）
+    """
+
+    provider: Any
+    model_id: str
+    label: str
+
+
+@runtime_checkable
+class FallbackResolver(Protocol):
+    """兜底模型解析器协议（宿主实现、框架调用）。
+
+    框架只负责在切换触发点来问、执行切换、告知用户；**谁做候选、怎么
+    排序、怎么预检**全在实现方（宿主的预设 / 额度接口 / 阈值不进框架）。
+
+    调用契约：
+    - 每次切换触发点调用一次 ``resolve``；返回下一个可用候选，或 None
+      表示「没有可用兜底」（runner 按原错误收场并附带说明）。
+    - **每候选每回合至多返回一次**由实现方保证（runner 只管用，不记
+      已试过的候选——实现方拿到 ``tried`` 列表自行排除）。
+    - ``reason`` = 触发原因（"quota" 额度耗尽 / "transient" 瞬时错误重试
+      耗尽）；实现方可据此决定是否值得切换（如只在额度耗尽时切）。
+    - 实现方抛异常 = 当作 None 处理（切换失败不得拖垮回合）。
+    """
+
+    async def resolve(
+        self,
+        *,
+        current_model_id: str,
+        tried: List[str],
+        reason: str,
+    ) -> Optional[FallbackCandidate]:
+        ...
 
 
 @dataclass

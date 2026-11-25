@@ -6,8 +6,8 @@ import {
 } from "../src/views/settings-fields";
 
 describe("SETTINGS_FIELDS", () => {
-  it("has exactly 22 fields (network + MCP + 百度天气 AK + 即梦文生图×4 + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度 + 工作目录覆盖 + shell 超时/轮数/trace/记忆；模型/搜索参数由预设区块接管)", () => {
-    expect(SETTINGS_FIELDS).toHaveLength(22);
+  it("has exactly 24 fields (network + MCP + 百度天气 AK + 即梦文生图×4 + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度 + 兜底预检阈值×2 + 工作目录覆盖 + shell 超时/轮数/trace/记忆；模型/搜索参数/兜底清单由预设区块接管)", () => {
+    expect(SETTINGS_FIELDS).toHaveLength(24);
   });
 
   it("every field has a unique envVar", () => {
@@ -46,7 +46,7 @@ describe("SETTINGS_FIELDS", () => {
     expect(SETTINGS_TABS).toEqual(["ai", "search", "network", "mcp", "skills", "misc"]);
   });
 
-  it("AI tab has 百度天气 AK + 即梦文生图×4 + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度字段 (模型配置由 <model-presets-section> 接管)", () => {
+  it("AI tab has 百度天气 AK + 即梦文生图×4 + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度 + 兜底预检阈值×2 字段 (模型配置/兜底清单由预设区块接管)", () => {
     const ai = SETTINGS_FIELDS.filter((f) => f.tab === "ai");
     expect(ai.map((f) => f.envVar)).toEqual([
       "BAIDU_WEATHER_AK",
@@ -58,6 +58,8 @@ describe("SETTINGS_FIELDS", () => {
       "PLANIFY_ASK_MODE",
       "PLANIFY_OUTSIDE_WORKDIR",
       "PLANIFY_THINKING_DEPTH",
+      "CORTEX_FALLBACK_WINDOW_USED_PCT",
+      "CORTEX_FALLBACK_BALANCE_MIN",
     ]);
   });
 
