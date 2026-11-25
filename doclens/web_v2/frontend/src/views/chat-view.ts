@@ -5,6 +5,7 @@ import {
   renderDeleteTurnDialog,
   renderFallbackReminderDialog,
   renderForkDialog,
+  renderEmployeeDialog,
   renderImportDialog,
   renderInfoDialog,
   renderInterjectDialog,
@@ -30,18 +31,20 @@ import { PreviewController } from "../utils/preview-controller";
 import { ChatSessionOpsController } from "../utils/chat-session-ops-controller";
 import { ChatHistoryController } from "../utils/chat-history-controller";
 import { ChatSkillsController } from "../utils/chat-skills-controller";
+import { ChatEmployeesController } from "../utils/chat-employees-controller";
 import { sanitizeUpstreamError } from "../utils/upstream-error";
 // 向后兼容再导出：checkSlashSubmit 已迁至 chat-skills-controller（纯函数模块）
 export { checkSlashSubmit } from "../utils/chat-skills-controller";
 import { isPstFilePath, isPstEmailPath } from "../api/pst";
 import type { SkillInfo } from "../api/skills";
-import { buildChatTimeline, mergeTimeline } from "./chat-timeline";
-import type { RewindDivider } from "./chat-timeline";
+import { buildChatTimeline, mergeTimeline, type RewindDivider, type ReviewNode } from "./chat-timeline";
+import type { Employee } from "../api/employees";
 import type { ChatStream } from "../components/chat-stream";
 import { lastModelSwitch, presetNameOf } from "../components/chat-tool-trace";
 // 向后兼容再导出：mapSessionItemsToMessages 已迁至 chat-timeline（纯函数模块）
 export { mapSessionItemsToMessages } from "./chat-timeline";
 import "../components/skill-toolbox-dialog";
+import "../components/employee-picker-dialog";
 import "../components/session-rename-dialog";
 import "../components/fork-confirm-dialog";
 import "../components/session-info-dialog";
@@ -341,6 +344,21 @@ export class ChatView extends LitElement {
     prefillSkill: (name) => this._prefillSkill(name),
     sendWithSkill: (name) => this._sendWithSkill(name),
   });
+  /** 员工域（数字员工，ADR-0062）：仅 initial 态提供入口；派活后跳转到新会话。 */
+  private _employees = new ChatEmployeesController(this, {
+    onDispatched: async (res) => {
+      this._pushToast("已派活，正在新会话中执行", "success", 3000);
+      actions.setPendingSession({ id: res.session_id, type: "chat", title: "", preview: "", updated_at: "", message_count: 0, mode: "employee" });
+      router.navigate("chat");
+      // navigate 到已在的 chat 视图不会重挂载：直接加载该会话
+      await this._loadSession({ id: res.session_id, type: "chat", title: "派活中…", preview: "", updated_at: "", message_count: 0, mode: "employee" });
+      void this._history.load();
+    },
+    onError: (message) => this._pushToast(message, "error", 5000),
+    clearDraft: () => {
+      this.draft = "";
+    },
+  });
 
   /** 预填技能前缀 `/name `（尾随空格，斜杠下拉不会误弹），聚焦输入框续写问题。 */
   private _prefillSkill(name: string) {
@@ -351,6 +369,14 @@ export class ChatView extends LitElement {
   /** 对话框模板适配器（AP-1 模板域外迁）：把视图状态与回调接到
    *  views/chat-dialogs.ts 的纯模板函数——视图不再持有模板细节。 */
   private _dialogs = {
+    employee: () => renderEmployeeDialog({
+      open: this._employees.dialogOpen,
+      employees: this._employees.employees,
+      error: this._employees.error,
+      busy: this._employees.dispatching,
+      onPick: (e: CustomEvent<{ employee: Employee }>) => void this._employees.pick(e.detail.employee, this.draft),
+      onCancel: () => this._employees.cancelDialog(),
+    }),
     skill: () => renderSkillDialog({
       open: this._skills.dialogOpen,
       skills: this._skills.candidates,
@@ -469,6 +495,8 @@ export class ChatView extends LitElement {
   /** 回退折叠条（ADR-0027）：_loadSession 时从 rewound 边界构建；
    *  新会话 / 返回 initial 清空。 */
   @state() private _rewindDividers: RewindDivider[] = [];
+  /** 评审卡（数字员工）：review 条目，按 seq 插入时间线 */
+  @state() private _reviews: ReviewNode[] = [];
   /** 回退确认框载荷（null = 关闭）：seq 锚点 / content 回填内容 / deadCount 折叠数。 */
   private _unsubscribe?: () => void;
   /** 当前流式请求的中断控制器；_stop() 会 abort 它并通知后端停。 */
@@ -476,6 +504,9 @@ export class ChatView extends LitElement {
   /** 断开续跑轮询定时器（ADR-0028）：恢复态 generating 占位期间 5s 轮询
    *  detail，跑完自动刷新展示；离开会话/停止后清除。 */
   private _genPollTimer?: number;
+  /** 轮询期上次完整 detail 的 items 数 / 周期计数（多回合后台流程刷新用） */
+  private _genPollItems = -1;
+  private _genPollTick = 0;
   /** 断流恢复重试（首次失败/断网时 setTimeout，成功/有流后清零）。 */
   private _recoveryRetryTimer?: number;
   private _recoveryRetryDelayMs = 5000;
@@ -852,13 +883,34 @@ export class ChatView extends LitElement {
    *  离开会话 / 停止后自清。 */
   private _startGeneratingPoll(sessionId: string): void {
     this._stopGeneratingPoll();
+    this._genPollItems = -1;
+    this._genPollTick = 0;
     this._genPollTimer = window.setInterval(async () => {
       const cur = store.getState().chat.currentSession;
       if (!cur || cur.id !== sessionId || store.getState().chat.state !== "focus") {
         this._stopGeneratingPoll();
         return;
       }
+      this._genPollTick++;
       try {
+        // 后台多回合流程（数字员工派活，ADR-0062）：整个派活是一个后台 task，
+        // 中间的评审卡 / 返工轮次在 generating=true 期间就已落库——每 2 个
+        // 周期（10s）拉一次完整 detail，items 数增长即刷新时间线，让评审卡
+        // 不必等到派活结束才出现。普通对话单回合内 items 不变，无额外刷新。
+        if (this._genPollTick % 2 === 0) {
+          try {
+            const full = await fetchSessionDetail(sessionId);
+            const n = (full.items ?? []).length;
+            if (this._genPollItems >= 0 && n > this._genPollItems && full.generating) {
+              this._genPollItems = n;
+              await this._loadSession(cur);
+              return;
+            }
+            this._genPollItems = n;
+          } catch {
+            /* 完整拉取失败退化为 metaOnly 路径 */
+          }
+        }
         // 续跑期增量补齐（2026-10-27）：每周期拉 trace 快照，新步骤
         // append 到占位消息——重连后后台继续跑的步骤实时可见（5s 粒度，
         // 工具调用本身 3-30s 一个，够用）。与 SSE 流互斥：占位消息只在
@@ -1093,6 +1145,7 @@ export class ChatView extends LitElement {
     this._markTabSession(created.id); // 新会话也算本页当前会话
     this._sessionUsage = null; // 新会话：清空上一会话的上下文占用
     this._rewindDividers = []; // 新会话：无回退边界
+    this._reviews = [];
     this._ops.cancelRewind();
     this._ops.cancelDeleteTurn();
     actions.setChatState({
@@ -1460,7 +1513,7 @@ export class ChatView extends LitElement {
     });
     try {
       const body = await fetchSessionDetail(s.id);
-      const { messages, dividers } = buildChatTimeline(body.items ?? []);
+      const { messages, dividers, reviews } = buildChatTimeline(body.items ?? []);
       // 断开续跑恢复态（ADR-0028）：会话仍在后台生成 → 末尾占位「思考中」
       // + streaming 态（禁输入，停止钮可用）+ 轮询（跑完自动刷新展示）
       const generating = !!body.generating;
@@ -1505,6 +1558,7 @@ export class ChatView extends LitElement {
         actions.setChatState({ lastError: null, lastErrorDetail: null });
       }
       this._rewindDividers = dividers;
+      this._reviews = reviews;
       // 切换会话/刷新：视口强制回底（贴底粘滞的强制出口）——不同会话间
       // 保留的 _pinned 状态无意义，新时间线以底部为默认视位；
       // 展开指令同律清空（旧会话的「收起全部」不得带进新会话）
@@ -1709,6 +1763,23 @@ export class ChatView extends LitElement {
     pushLocalToast(this, message, level, duration);
   }
 
+  /** 派活会话顶部员工条（数字员工，ADR-0062）：员工图标 + 结局状态；进行中提示禁发。 */
+  private _renderEmployeeBar(session: Session): unknown {
+    const a = session.assignment;
+    const outcome = a?.outcome ?? null;
+    const label =
+      !outcome ? "派活进行中 · 完成前不能发消息，可点停止"
+        : outcome === "passed" ? `已达标 · ${a?.score ?? ""} 分`
+          : outcome === "exhausted" ? `轮数耗尽 · 最终 ${a?.score ?? "—"} 分，未达标`
+            : outcome === "review_failed" ? "评审失败，已终止"
+              : outcome === "stopped" ? "已停止"
+                : "已中断（进程重启时仍在进行）";
+    return html`<div class="employee-bar" role="status">
+      <doclens-icon name="user-round"></doclens-icon>
+      <span>${label}</span>
+    </div>`;
+  }
+
   private _renderNotIndexedHint(): unknown {
     return html`<div class="not-indexed-hint">
       该文件未索引，无法预览。<br>请先执行 doclens index 后重试。
@@ -1768,17 +1839,24 @@ export class ChatView extends LitElement {
               .images=${this._pendingImages}
               .skillItems=${this._skills.recentItems}
               .slashItems=${this._skills.candidates}
+              .employeeItems=${this._employees.recentItems}
               @input-change=${(e: any) => (this.draft = e.detail.value)}
               @images-change=${(e: any) => (this._pendingImages = e.detail.images)}
               @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
-              @skill-menu-open=${() => this._skills.onMenuOpen()}
+              @skill-menu-open=${() => { this._skills.onMenuOpen(); this._employees.onMenuOpen(); }}
               @skill-pick=${(e: CustomEvent<{ name: string }>) => this._skills.pickFromMenu(e.detail.name)}
               @skill-pick-empty=${(e: CustomEvent<{ name: string }>) => this._skills.prefillOnly(e.detail.name)}
               @skill-browse=${() => this._skills.openDialog()}
+              @employee-browse=${() => this._employees.openDialog()}
+              @employee-pick=${(e: CustomEvent<{ id: string }>) => {
+                const emp = (this._employees.employees ?? []).find((x) => x.id === e.detail.id);
+                if (emp) void this._employees.pick(emp, this.draft);
+              }}
               @submit=${this._submit}>
             </input-box>
           </div>
         </div>
+        ${this._dialogs.employee()}
         ${this._dialogs.skill()}
         ${this._dialogs.visionGate()}
         ${this._dialogs.fallbackReminder()}
@@ -1837,8 +1915,9 @@ export class ChatView extends LitElement {
         </focus-header>
         <div class="focus-main ${hasPreview ? "has-preview" : ""}"
              style="--preview-pane-width: ${this._previewPaneWidth}px">
+          ${s.currentSession?.mode === "employee" ? this._renderEmployeeBar(s.currentSession) : null}
           <chat-stream
-            .nodes=${mergeTimeline(this._rewindDividers, s.messages)}
+            .nodes=${mergeTimeline(this._rewindDividers, s.messages, this._reviews)}
             .modelName=${store.getState().status?.model_name ?? null}
             ?rewindDisabled=${s.streaming}
             ?generating=${s.streaming}

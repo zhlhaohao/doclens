@@ -85,6 +85,28 @@ export function renderSkillDialog(props: {
     </c-dialog>`;
 }
 
+/** 员工选择对话框宿主（数字员工，ADR-0062）。 */
+export function renderEmployeeDialog(props: {
+  open: boolean;
+  employees: import("../api/employees").Employee[] | null;
+  error: string | null;
+  busy: boolean;
+  onPick: (e: CustomEvent<{ employee: import("../api/employees").Employee }>) => void;
+  onCancel: () => void;
+}) {
+  if (!props.open) return nothing;
+  return html`
+    <c-dialog ?open=${true} @cancel=${props.onCancel}>
+      <employee-picker-dialog
+        .employees=${props.employees}
+        .error=${props.error}
+        .busy=${props.busy}
+        @pick=${props.onPick}
+        @cancel=${props.onCancel}
+      ></employee-picker-dialog>
+    </c-dialog>`;
+}
+
 /** 会话标题改名对话框宿主。 */
 export function renderRenameDialog(props: {
   open: boolean;

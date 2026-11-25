@@ -76,6 +76,11 @@ import sunIcon from "lucide-static/icons/sun.svg?raw";
 import moonIcon from "lucide-static/icons/moon.svg?raw";
 import contrastIcon from "lucide-static/icons/contrast.svg?raw";
 import paletteIcon from "lucide-static/icons/palette.svg?raw";
+import userRoundIcon from "lucide-static/icons/user-round.svg?raw";
+import clipboardCheckIcon from "lucide-static/icons/clipboard-check.svg?raw";
+import badgeCheckIcon from "lucide-static/icons/badge-check.svg?raw";
+import gaugeIcon from "lucide-static/icons/gauge.svg?raw";
+import userCheckIcon from "lucide-static/icons/user-check.svg?raw";
 import minimize2Icon from "lucide-static/icons/minimize-2.svg?raw";
 import languagesIcon from "lucide-static/icons/languages.svg?raw";
 import copyPlusIcon from "lucide-static/icons/copy-plus.svg?raw";
@@ -158,6 +163,11 @@ const ICONS: Record<string, string> = {
   moon: moonIcon,
   contrast: contrastIcon,
   palette: paletteIcon,
+  "user-round": userRoundIcon,
+  "clipboard-check": clipboardCheckIcon,
+  "badge-check": badgeCheckIcon,
+  "user-check": userCheckIcon,
+  gauge: gaugeIcon,
   "minimize-2": minimize2Icon,
   language: languagesIcon,
   "copy-plus": copyPlusIcon,

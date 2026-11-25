@@ -5,7 +5,7 @@
  * cortex/web_v2/config_store.py (backend) — they are the contract between
  * the API and this UI.
  */
-export type SettingsTab = "ai" | "search" | "network" | "mcp" | "skills" | "misc";
+export type SettingsTab = "ai" | "search" | "network" | "mcp" | "skills" | "employees" | "misc";
 export type SettingsFieldComponent =
   | "text"
   | "number"
@@ -45,7 +45,7 @@ export interface SettingsField {
   action?: { label: string; probe: "jimeng" };
 }
 
-export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
+export const SETTINGS_TABS: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "employees", "misc"];
 
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   ai: "模型",
@@ -53,6 +53,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   network: "网络",
   mcp: "MCP",
   skills: "技能",
+  employees: "数字员工",
   misc: "其它",
 };
 

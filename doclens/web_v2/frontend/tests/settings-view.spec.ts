@@ -39,15 +39,16 @@ describe("<settings-view>", () => {
     await new Promise((r) => setTimeout(r, 0));
   });
 
-  it("renders 6 tab buttons in order: 模型 / 搜索 / 网络 / MCP / 技能 / 其它", () => {
+  it("renders 7 tab buttons in order: 模型 / 搜索 / 网络 / MCP / 技能 / 数字员工 / 其它", () => {
     const tabs = el.shadowRoot?.querySelectorAll(".tab-strip button");
-    expect(tabs?.length).toBe(6);
+    expect(tabs?.length).toBe(7);
     expect(tabs?.[0].textContent?.trim()).toBe("模型");
     expect(tabs?.[1].textContent?.trim()).toBe("搜索");
     expect(tabs?.[2].textContent?.trim()).toBe("网络");
     expect(tabs?.[3].textContent?.trim()).toBe("MCP");
     expect(tabs?.[4].textContent?.trim()).toBe("技能");
-    expect(tabs?.[5].textContent?.trim()).toBe("其它");
+    expect(tabs?.[5].textContent?.trim()).toBe("数字员工");
+    expect(tabs?.[6].textContent?.trim()).toBe("其它");
   });
 
   it("AI tab is active by default", () => {

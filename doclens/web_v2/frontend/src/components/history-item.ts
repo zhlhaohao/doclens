@@ -96,6 +96,17 @@ export class HistoryItem extends LitElement {
       line-height: 1.5;
       flex-shrink: 0; /* .name 是 flex 行：tag 不被压缩，截断由 .name-text 承担 */
     }
+    /* 员工标记（数字员工，ADR-0062）：派活会话名前的图标 + 结局徽标 */
+    .emp-tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      margin-right: 6px; font-size: var(--cortex-fs-xs);
+      color: var(--cortex-primary); flex-shrink: 0; line-height: 1;
+    }
+    .emp-tag doclens-icon { font-size: 14px; }
+    .emp-tag .st { font-family: var(--cortex-font-mono); }
+    .emp-tag .st.passed { color: var(--cortex-success-ink); }
+    .emp-tag .st.failed { color: var(--cortex-danger); }
+    .emp-tag .st.warn { color: var(--cortex-warning); }
     /* 加星按钮（2026-09-17）：常显淡色描边星；加星后实心主题色。
        加星即置顶 + 删除保护，故常显（不做 hover 才显现）。 */
     .star-btn {
@@ -216,6 +227,20 @@ export class HistoryItem extends LitElement {
     }));
   }
 
+  /** 派活会话标记：员工图标 + 结局（进行中 / ✓92 / 未达标 / 失败 / 已停止 / 已中断） */
+  private _renderEmployeeTag() {
+    const a = this.session!.assignment;
+    const outcome = a?.outcome ?? null;
+    let st: { text: string; cls: string; title: string };
+    if (!outcome) st = { text: "进行中", cls: "", title: "派活进行中" };
+    else if (outcome === "passed") st = { text: `✓ ${a?.score ?? ""}`.trim(), cls: "passed", title: "已达标" };
+    else if (outcome === "exhausted") st = { text: `未达标 ${a?.score ?? ""}`.trim(), cls: "warn", title: "轮数耗尽，未达标" };
+    else if (outcome === "review_failed") st = { text: "评审失败", cls: "failed", title: "评审失败" };
+    else if (outcome === "stopped") st = { text: "已停止", cls: "warn", title: "用户停止" };
+    else st = { text: "已中断", cls: "warn", title: "进程重启时仍在进行，已中断" };
+    return html`<span class="emp-tag" title=${st.title}><doclens-icon name="user-round"></doclens-icon><span class="st ${st.cls}">${st.text}</span></span>`;
+  }
+
   render() {
     if (!this.session) return null;
     // search 历史只保留关键词（不再保存结果数量）；chat 仍显示消息数。
@@ -228,6 +253,7 @@ export class HistoryItem extends LitElement {
     return html`
       <div class="name">
         ${this.session.mode === "grep" ? html`<span class="mode-tag" title="正则 grep">grep</span>` : null}
+        ${this.session.mode === "employee" ? this._renderEmployeeTag() : null}
         <span class="name-text" title=${this.session.title}><span class="name-text-inner">${this.session.title}</span></span>
       </div>
       <div class="meta">${metaParts.join(" · ")}</div>

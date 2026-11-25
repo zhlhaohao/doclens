@@ -10,6 +10,7 @@
  */
 import type { ChatMessage } from "../state/types";
 import type { ToolStep, Reference } from "../state/types";
+import type { ReviewEvent } from "../api/employees";
 
 /** 单条回退折叠条（展示层消费；纯查看，无恢复入口）。 */
 export interface RewindDivider {
@@ -21,16 +22,38 @@ export interface RewindDivider {
   dead: ChatMessage[];
 }
 
-/** chat-stream 的渲染节点：活消息或折叠条。 */
+/** chat-stream 的渲染节点：活消息 / 折叠条 / 评审卡。 */
 export type TimelineNode =
   | { type: "message"; message: ChatMessage }
-  | ({ type: "rewind-divider" } & RewindDivider);
+  | ({ type: "rewind-divider" } & RewindDivider)
+  | ({ type: "review" } & ReviewNode);
+
+/** 评审卡（数字员工，ADR-0062）：一次评审的人读呈现。
+ *  review = 后端 ``review`` 条目 payload；rework = 其后的返工指令原文
+ *  （``<rework-order>`` 用户消息，折叠在卡内，不单独渲染为气泡）。 */
+export interface ReviewNode {
+  seq: number;
+  review: ReviewEvent;
+  rework: ChatMessage | null;
+}
+
+export const REWORK_ORDER_TAG = "rework-order";
+export const ASSIGNMENT_TAG = "assignment";
 
 interface RawItem {
   kind: string;
   payload: string;
   seq?: number;
   created_at?: string | null;
+}
+
+/** 用户消息是否为返工指令（评审意见代发，形态是 user 消息但不是真人说的）。 */
+export function isReworkOrder(content: string): boolean {
+  return content.startsWith(`<${REWORK_ORDER_TAG}`);
+}
+/** 用户消息是否为派活说明（首条：系统段 + 一句话任务）。 */
+export function isAssignmentBrief(content: string): boolean {
+  return content.startsWith(`<${ASSIGNMENT_TAG}`);
 }
 
 /** 单条 item → ChatMessage（message_user 带锚点 seq）；非消息条目返回 null。 */
@@ -94,6 +117,7 @@ export function mapSessionItemsToMessages(items: RawItem[]): ChatMessage[] {
 export function buildChatTimeline(items: RawItem[]): {
   messages: ChatMessage[];
   dividers: RewindDivider[];
+  reviews: ReviewNode[];
 } {
   // 边界区间（按 boundary seq 升序，与 items 顺序一致）
   const intervals: Array<{ point: number; boundary: number }> = [];
@@ -117,45 +141,76 @@ export function buildChatTimeline(items: RawItem[]): {
 
   const buckets: ChatMessage[][] = intervals.map(() => []);
   const messages: ChatMessage[] = [];
+  // 评审卡（数字员工）：review 条目 → ReviewNode；其后首条返工指令
+  // （<rework-order> user 消息）并入该卡的 rework 字段，不再作为独立气泡
+  const reviews: ReviewNode[] = [];
   for (const it of items) {
+    if (it.kind === "review" && typeof it.seq === "number") {
+      try {
+        const p = JSON.parse(it.payload);
+        if (p && typeof p === "object" && "kind" in p) {
+          reviews.push({ seq: it.seq, review: p as ReviewEvent, rework: null });
+        }
+      } catch {
+        /* 坏 payload 忽略 */
+      }
+      continue;
+    }
     const msg = mapItem(it);
     if (msg === null) continue;
     const owner = typeof it.seq === "number" ? dead(it.seq) : -1;
-    if (owner >= 0) buckets[owner].push(msg);
-    else messages.push(msg);
+    if (owner >= 0) {
+      buckets[owner].push(msg);
+      continue;
+    }
+    const lastReview = reviews.length ? reviews[reviews.length - 1] : null;
+    if (
+      lastReview && lastReview.rework === null && msg.role === "user" &&
+      isReworkOrder(msg.content)
+    ) {
+      lastReview.rework = msg;
+      continue;
+    }
+    messages.push(msg);
   }
   const dividers: RewindDivider[] = intervals.map((iv, i) => ({
     pointSeq: iv.point,
     boundarySeq: iv.boundary,
     dead: buckets[i],
   }));
-  return { messages, dividers };
+  return { messages, dividers, reviews };
 }
 
-/** 折叠条 × 消息数组 → 渲染节点序列：折叠条插在首条 seq > boundarySeq 的
- *  消息之前；无 seq 的消息（流式中的新消息）排在所有折叠条之后。 */
+/** 折叠条 × 评审卡 × 消息数组 → 渲染节点序列：折叠条/评审卡插在首条
+ *  seq 更大的消息之前；无 seq 的消息（流式中的新消息）排在所有节点之后。
+ *  同 seq 时折叠条先于评审卡（回退边界优先）。 */
 export function mergeTimeline(
   dividers: RewindDivider[],
   messages: ChatMessage[],
+  reviews: ReviewNode[] = [],
 ): TimelineNode[] {
-  if (dividers.length === 0) {
+  if (dividers.length === 0 && reviews.length === 0) {
     return messages.map((message) => ({ type: "message", message }));
   }
   const nodes: TimelineNode[] = [];
+  const markers: Array<{ seq: number; node: TimelineNode }> = [
+    ...dividers.map((d) => ({ seq: d.boundarySeq, node: { type: "rewind-divider", ...d } as TimelineNode })),
+    ...reviews.map((r) => ({ seq: r.seq, node: { type: "review", ...r } as TimelineNode })),
+  ].sort((a, b) => a.seq - b.seq || (a.node.type === "rewind-divider" ? -1 : 1));
   let di = 0;
   for (const message of messages) {
-    // 先吐出所有位于本消息之前的折叠条（boundarySeq < 消息 seq）
+    // 先吐出所有位于本消息之前的节点（marker.seq < 消息 seq）
     while (
-      di < dividers.length &&
-      (message.seq === undefined || dividers[di].boundarySeq < message.seq)
+      di < markers.length &&
+      (message.seq === undefined || markers[di].seq < message.seq)
     ) {
-      nodes.push({ type: "rewind-divider", ...dividers[di] });
+      nodes.push(markers[di].node);
       di++;
     }
     nodes.push({ type: "message", message });
   }
-  while (di < dividers.length) {
-    nodes.push({ type: "rewind-divider", ...dividers[di] });
+  while (di < markers.length) {
+    nodes.push(markers[di].node);
     di++;
   }
   return nodes;

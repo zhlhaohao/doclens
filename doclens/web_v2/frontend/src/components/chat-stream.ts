@@ -4,6 +4,7 @@ import type { TimelineNode } from "../views/chat-timeline";
 import { ScrollJumpController, scrollJumpFabStyles } from "../utils/scroll-jump";
 import { traceStepsOf } from "./chat-tool-trace";
 import "./chat-message";
+import "./review-card";
 import { emptyStateStyles } from "../styles/empty-state-styles";
 
 /** 展开的折叠条集合（boundarySeq 集合；默认全部折叠，点击展开/收起）。 */
@@ -491,6 +492,10 @@ export class ChatStream extends LitElement {
       // 不亮插话按钮（它们不是当前回合）
       const isLast = this.nodes[this.nodes.length - 1] === node;
       return html`<chat-message role=${node.message.role} .message=${node.message} .modelName=${this.modelName} .rewindDisabled=${this.rewindDisabled} .traceExpandOverride=${this._expandOverride} .interjectPending=${this.interjectPending} .generating=${this.generating && isLast} .recovering=${this.recovering && isLast}></chat-message>`;
+    }
+    if (node.type === "review") {
+      // 评审卡（数字员工）：返工指令折叠在卡内，不作为独立气泡
+      return html`<review-card .review=${node.review} .rework=${node.rework}></review-card>`;
     }
     const expanded = this._expanded.has(node.boundarySeq);
     return html`

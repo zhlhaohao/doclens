@@ -70,6 +70,20 @@ export const chatViewStyles = [dialogCardStyles, css`
     min-height: 0;
     flex-direction: column;
   }
+  /* 派活会话员工条（数字员工，ADR-0062）：顶部细条，跨越 stream/preview 两栏 */
+  .employee-bar {
+    display: flex; align-items: center; gap: var(--cortex-space-2);
+    padding: 6px var(--cortex-space-5);
+    font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle);
+    background: var(--cortex-primary-soft);
+    border-bottom: 1px solid var(--cortex-border-muted);
+    flex-shrink: 0;
+    flex-basis: 100%;
+    width: 100%;
+  }
+  /* 桌面有预览：focus-main 是 row 布局，员工条独占一行需换行 */
+  .focus-main.has-preview { flex-wrap: wrap; }
+  .employee-bar doclens-icon { font-size: 14px; color: var(--cortex-primary); }
   /* 悬置卡（ask-card）可收缩内滚后，多问堆叠时会把消息区压到 0——
      留最小保底，答题期间仍可见最后一两条消息上下文。row 布局
      （桌面有预览）下列高本就 stretch，此规则无实际影响。 */

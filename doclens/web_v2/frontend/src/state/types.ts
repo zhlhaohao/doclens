@@ -99,11 +99,15 @@ export interface Session {
   preview: string;
   updated_at: string;
   message_count: number;
-  /** search: "keyword" | "grep"；chat 技能会话: "skill" */
-  mode?: "keyword" | "grep" | "skill";
+  /** search: "keyword" | "grep"；chat 技能会话: "skill"；数字员工派活会话: "employee"（ADR-0062） */
+  mode?: "keyword" | "grep" | "skill" | "employee";
   /** 加星（2026-09-17）：置顶 + 删除保护；旧数据缺省视为 false */
   starred?: boolean;
+  /** 数字员工派活的结局摘要（仅派活会话；ADR-0062）。outcome 为空 = 进行中 */
+  assignment?: { outcome: AssignmentOutcome | null; score: number | null; iterations: number };
 }
+
+export type AssignmentOutcome = "passed" | "exhausted" | "review_failed" | "stopped" | "interrupted";
 
 export interface SearchViewState {
   state: FocusState;
@@ -331,7 +335,7 @@ export interface AppState {
   /** 跨视图技能对话发送请求（files 工具箱 → chat-view 自动新建会话并发送） */
   pendingSkillChat: PendingSkillChat | null;
   /** 设置页待聚焦 tab（ADR-0034 视觉路由）：chat 页「前往设置」写入 */
-  pendingSettingsTab: "ai" | "search" | "network" | "mcp" | "skills" | null;
+  pendingSettingsTab: "ai" | "search" | "network" | "mcp" | "skills" | "employees" | null;
   status: SystemStatus | null;
   watcher: WatcherStatus | null;   // 来自 SSE /api/watch/events 的 status 快照
   /** Git 同步状态（SSE status 快照 / /api/status 携带；null = 未注册） */

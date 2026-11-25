@@ -22,10 +22,11 @@ import "../components/model-presets-section";
 import "../components/fallback-models-section";
 import "../components/search-presets-section";
 import "../components/mcp-servers-section";
+import "../components/employees-section";
 import "../components/skills-section";
 import { formStyles } from "../styles/form-styles";
 
-const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "misc"];
+const TAB_ORDER: SettingsTab[] = ["ai", "search", "network", "mcp", "skills", "employees", "misc"];
 
 /** 各 tab 的线框 icon（Lucide outline，见 <doclens-icon>）。 */
 const TAB_ICONS: Record<SettingsTab, string> = {
@@ -34,6 +35,7 @@ const TAB_ICONS: Record<SettingsTab, string> = {
   network: "globe",
   mcp: "plug",
   skills: "brain",
+  employees: "user-round",
   misc: "sliders-horizontal",
 };
 
@@ -1108,6 +1110,7 @@ export class SettingsView extends LitElement {
                   ${tab === "network" ? html`<password-section></password-section>` : nothing}
                   ${tab === "mcp" ? html`<mcp-servers-section></mcp-servers-section>` : nothing}
                   ${tab === "skills" ? html`<skills-section></skills-section>` : nothing}
+                  ${tab === "employees" ? html`<employees-section></employees-section>` : nothing}
                 </div>
               `;
             })}

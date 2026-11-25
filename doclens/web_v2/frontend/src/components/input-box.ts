@@ -305,6 +305,9 @@ export class InputBox extends LitElement {
       cursor: pointer;
     }
     .menu-item:hover { background: var(--cortex-surface-muted); }
+    /* 禁用项（员工段：空输入 / 预设缺失）——灰置、不响应 hover */
+    .menu-item.disabled { opacity: 0.5; cursor: not-allowed; }
+    .menu-item.disabled:hover { background: transparent; }
     .menu-item-title { font-size: var(--cortex-fs-md); color: var(--cortex-text); font-weight: 500; white-space: nowrap;
       display: inline-flex; align-items: center; gap: var(--cortex-space-2); }
     .menu-item-desc { font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); white-space: nowrap; }
@@ -354,6 +357,12 @@ export class InputBox extends LitElement {
    *  技能项发 skill-pick，输入为空时发 skill-pick-empty（携带技能名，由宿主决定去处），
    *  点「选择技能…」发 skill-browse。 */
   @property({ attribute: false }) skillItems: { name: string; icon?: string }[] | null = null;
+
+  /** 员工菜单段（数字员工，ADR-0062）：非 null 时在技能菜单下方追加分隔线 +
+   *  「选择员工…」+ 最近员工；null = 不显示（focus 态宿主传 null）。
+   *  与技能段行为相反：员工 = 新建会话派活。空输入时员工项禁用（没有任务
+   *  无法派活）。点「选择员工…」发 employee-browse，点最近员工发 employee-pick。 */
+  @property({ attribute: false }) employeeItems: { name: string; id: string; disabled?: boolean }[] | null = null;
 
   /** 输入历史（chat 专属）：非 null 时启用 ↑/↓ 历史回溯——列表由宿主注入
    *  （chat-view 给当前会话里的用户消息），故打开任意历史会话都能回溯。
@@ -666,6 +675,20 @@ export class InputBox extends LitElement {
     this.dispatchEvent(new CustomEvent("skill-browse"));
   }
 
+  private _browseEmployees() {
+    if (this.disabled || this.streaming || !this.trimmed) return;
+    this._menuOpen = false;
+    document.removeEventListener("click", this._onDocClick);
+    this.dispatchEvent(new CustomEvent("employee-browse"));
+  }
+
+  private _pickEmployee(item: { id: string; disabled?: boolean }) {
+    if (this.disabled || this.streaming || !this.trimmed || item.disabled) return;
+    this._menuOpen = false;
+    document.removeEventListener("click", this._onDocClick);
+    this.dispatchEvent(new CustomEvent("employee-pick", { detail: { id: item.id } }));
+  }
+
   private _toggleMenu(e: Event) {
     e.stopPropagation();
     this._menuOpen = !this._menuOpen;
@@ -770,7 +793,30 @@ export class InputBox extends LitElement {
               ${item.icon ? html`<doclens-icon name=${item.icon} aria-hidden="true"></doclens-icon>` : null}${item.name}
             </span>
           </div>`)}
+        ${this.employeeItems !== null ? this._renderEmployeeMenuSegment() : null}
       </div>`;
+  }
+
+  /** 员工段（数字员工）：分隔线 + 「选择员工…」+ 最近 ≤3 个员工。
+   *  空输入时整体禁用（派活必须有任务）；禁用项灰置、不可点。 */
+  private _renderEmployeeMenuSegment() {
+    const empty = !this.trimmed;
+    const items = this.employeeItems ?? [];
+    return html`
+      <div class="menu-divider" role="separator"></div>
+      <div class="menu-item ${empty ? "disabled" : ""}" role="menuitem" aria-disabled=${empty}
+           title=${empty ? "先输入一句话任务，再选择员工" : "在新会话中派活给该员工"}
+           @click=${() => this._browseEmployees()}>
+        <span class="menu-item-title"><doclens-icon name="bot" aria-hidden="true"></doclens-icon>选择员工…</span>
+        <span class="menu-item-desc">${empty ? "先输入任务" : "在新会话中派活"}</span>
+      </div>
+      ${items.map((item) => html`
+        <div class="menu-item ${empty || item.disabled ? "disabled" : ""}" role="menuitem"
+             aria-disabled=${empty || !!item.disabled}
+             @click=${() => this._pickEmployee(item)}>
+          <span class="menu-item-title"><doclens-icon name="user-round" aria-hidden="true"></doclens-icon>${item.name}</span>
+        </div>`)}
+    `;
   }
 
   /** 斜杠技能引导下拉：输入 "/片段" 时浮现，↑↓/Enter/Esc 由 _onKeydown 处理。 */

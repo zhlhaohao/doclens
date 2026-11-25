@@ -42,8 +42,8 @@ describe("SETTINGS_FIELDS", () => {
     }
   });
 
-  it("6 tabs are exposed in SETTINGS_TABS in display order", () => {
-    expect(SETTINGS_TABS).toEqual(["ai", "search", "network", "mcp", "skills", "misc"]);
+  it("7 tabs are exposed in SETTINGS_TABS in display order", () => {
+    expect(SETTINGS_TABS).toEqual(["ai", "search", "network", "mcp", "skills", "employees", "misc"]);
   });
 
   it("AI tab has 百度天气 AK + 即梦文生图×4 + 图像自动旋转 + 提问方式 + 外部访问门禁 + 思考深度 + 兜底预检阈值×2 字段 (模型配置/兜底清单由预设区块接管)", () => {
