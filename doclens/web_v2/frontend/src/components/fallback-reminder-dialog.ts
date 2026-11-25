@@ -53,7 +53,7 @@ export class FallbackReminderDialog extends LitElement {
       <p class="hint">继续发送会先尝试主模型——若额度仍未恢复，会再次自动切换（多等几秒）。
         若想直接换模型，去设置 → 模型切换预设后回来重发，消息已保留在输入框。</p>
       <div class="buttons">
-        <button type="button" @click=${this._onCancel}>取消</button>
+        <button type="button" class="plain" @click=${this._onCancel}>取消</button>
         <button type="button" @click=${this._onGoto}>前往设置</button>
         <button class="primary" type="button" @click=${this._onProceed}>继续发送</button>
       </div>

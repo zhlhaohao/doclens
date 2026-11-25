@@ -175,7 +175,7 @@ export abstract class InputDialogBase extends LitElement {
           : nothing}
       </div>
       <div class="actions">
-        <button @click=${this._cancel}>取消</button>
+        <button class="plain" @click=${this._cancel}>取消</button>
         <button class="primary" ?disabled=${this._invalid} @click=${this._submit}>${this.submitLabel}</button>
       </div>
     `;

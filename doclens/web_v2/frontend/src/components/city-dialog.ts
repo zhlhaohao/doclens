@@ -60,7 +60,7 @@ export class CityDialog extends LitElement {
         ${CITIES.map((c) => html`<button class="city" @click=${() => this._pick(c)}>${c}</button>`)}
       </div>
       <div class="actions">
-        <button class="cancel" @click=${this._cancel}>暂不设置</button>
+        <button class="cancel plain" @click=${this._cancel}>暂不设置</button>
       </div>
     `;
   }

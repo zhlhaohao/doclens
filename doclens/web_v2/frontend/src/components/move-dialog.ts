@@ -97,7 +97,7 @@ export class MoveDialog extends LitElement {
         覆盖同名
       </label>
       <div class="actions">
-        <button @click=${this._cancel}>取消</button>
+        <button class="plain" @click=${this._cancel}>取消</button>
         <button class="primary" ?disabled=${!this._dest} @click=${this._submit}>移动到这里</button>
       </div>
     `;

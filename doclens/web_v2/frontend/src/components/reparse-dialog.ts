@@ -167,7 +167,7 @@ export class ReparseDialog extends LitElement {
       <div class="actions">
         <button @click=${this._clear} ?disabled=${this._loading || this._promptLoading}>清空</button>
         <span class="spacer"></span>
-        <button @click=${this._cancel} ?disabled=${this._loading}>取消</button>
+        <button class="plain" @click=${this._cancel} ?disabled=${this._loading}>取消</button>
         <button class="primary" ?disabled=${!canSubmit} @click=${this._submit}>${submitLabel}</button>
       </div>
     `;

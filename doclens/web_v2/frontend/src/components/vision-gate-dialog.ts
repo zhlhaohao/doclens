@@ -46,7 +46,7 @@ export class VisionGateDialog extends LitElement {
         （或编辑当前预设勾选「支持视觉」），切换即时生效，回来重新发送即可。
         消息与图片已保留在输入框。</p>
       <div class="buttons">
-        <button type="button" @click=${this._onCancel}>取消</button>
+        <button type="button" class="plain" @click=${this._onCancel}>取消</button>
         <button class="primary" type="button" @click=${this._onGoto}>前往设置</button>
       </div>
     `;

@@ -110,7 +110,7 @@ export class DeleteDialog extends LitElement {
         我确定要永久删除
       </label>
       <div class="actions">
-        <button @click=${this._cancel}>取消</button>
+        <button class="plain" @click=${this._cancel}>取消</button>
         <button
           class="danger"
           ?disabled=${!this._confirmed || this._phase === "deleting"}

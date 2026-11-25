@@ -48,6 +48,7 @@ import "../components/workdir-switch-dialog";
 import { downloadServerFile } from "../utils/download";
 import { copyText, quotePaths } from "../utils/clipboard";
 import { dialogCardStyles } from "../styles/dialog-frame";
+import { buttonBaseStyles } from "../styles/button-styles";
 
 type DialogKind = "mkdir" | "new-file" | "rename" | "move" | "delete" | "reparse" | "skill-toolbox" | "skill-run" | null;
 
@@ -70,7 +71,7 @@ export class FilesView extends LitElement {
   /** 两个 splitter 的总宽度 */
   static readonly SPLITTERS_TOTAL = 8;
 
-  static styles = [dialogCardStyles, css`
+  static styles = [dialogCardStyles, buttonBaseStyles, css`
     :host {
       display: flex; flex-direction: column;
       flex: 1; min-height: 0;
@@ -222,23 +223,7 @@ export class FilesView extends LitElement {
       justify-content: flex-end;
       gap: var(--cortex-space-2);
     }
-    .confirm-actions button {
-      padding: 6px 16px;
-      border-radius: var(--cortex-radius-md);
-      border: 1px solid var(--cortex-border);
-      font-size: var(--cortex-fs-sm);
-      font-family: inherit;
-      cursor: pointer;
-    }
-    .confirm-actions button.secondary {
-      background: var(--cortex-surface);
-      color: var(--cortex-text-muted);
-    }
-    .confirm-actions button.danger {
-      background: var(--cortex-danger);
-      border-color: var(--cortex-danger);
-      color: var(--cortex-on-danger);
-    }
+    /* 按钮形态走公共块（AP-4）：取消 = plain，删除 = danger */
     .toast {
       position: fixed; bottom: 24px; left: 50%;
       transform: translateX(-50%);
@@ -1758,7 +1743,7 @@ export class FilesView extends LitElement {
           <h3>删除深读技能</h3>
           <p>将删除「${b.title}」的深读技能（技能目录真删，不可恢复）。源文件不受影响，可随时用 /deep-read 重新生成。</p>
           <div class="confirm-actions">
-            <button class="secondary" @click=${() => { this._modes.deleteBook = null; }}>取消</button>
+            <button class="plain" @click=${() => { this._modes.deleteBook = null; }}>取消</button>
             <button class="danger" @click=${() => void this._onBookDeleteConfirm()}>删除</button>
           </div>
         </div>

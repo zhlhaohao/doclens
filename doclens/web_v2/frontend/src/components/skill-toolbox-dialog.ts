@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { SkillInfo } from "../api/skills";
 import { emptyStateStyles } from "../styles/empty-state-styles";
+import { buttonBaseStyles } from "../styles/button-styles";
 import "../components/icon";
 
 /** 技能选择对话框：列出调用方传入的技能清单，点选即确认（pick 事件）。
@@ -24,7 +25,7 @@ import "../components/icon";
  */
 @customElement("skill-toolbox-dialog")
 export class SkillToolboxDialog extends LitElement {
-  static styles = [emptyStateStyles, css`
+  static styles = [emptyStateStyles, buttonBaseStyles, css`
     :host {
       display: block;
       /* 桌面占页面宽度 50%（2026-08-17 决议），三列卡片矩阵 */
@@ -182,24 +183,13 @@ export class SkillToolboxDialog extends LitElement {
       display: flex; justify-content: flex-end;
       margin-top: var(--cortex-space-5);
     }
-    /* ghost pill：透明底 + hairline 边框，hover 浅灰底 */
+    /* ghost pill：透明底 + hairline 边框，hover 浅灰底
+       （按钮形态走公共块 buttonBaseStyles 的 .plain 变体） */
     button.cancel {
       padding: 8px 20px;
-      border: 1px solid var(--cortex-border);
-      background: transparent;
-      color: var(--cortex-text);
-      cursor: pointer;
       border-radius: var(--cortex-radius-pill);
-      font-size: var(--cortex-fs-sm);
       font-weight: 600;
       letter-spacing: var(--cortex-tracking-body);
-      transition: background var(--cortex-duration-fast) var(--cortex-ease),
-                  border-color var(--cortex-duration-fast) var(--cortex-ease);
-    }
-    button.cancel:hover { background: var(--cortex-surface-muted); }
-    button.cancel:focus-visible {
-      outline: none;
-      box-shadow: var(--cortex-focus-ring);
     }
     @media (max-width: 1023px) {
       /* border-box：dialog > * 注入的 16px 内边距计入 100% 宽度，
@@ -310,7 +300,7 @@ export class SkillToolboxDialog extends LitElement {
       </div>
       ${this._renderBody()}
       <div class="actions">
-        <button type="button" class="cancel" @click=${this._cancel}>取消</button>
+        <button type="button" class="cancel plain" @click=${this._cancel}>取消</button>
       </div>
     `;
   }

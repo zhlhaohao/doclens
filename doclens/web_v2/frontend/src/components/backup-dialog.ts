@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { dialogHeadStyles } from "../styles/dialog-frame";
 import { emptyStateStyles } from "../styles/empty-state-styles";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, property, state } from "lit/decorators.js";
 
 import {
@@ -23,7 +24,7 @@ import "./c-dialog";
  */
 @customElement("backup-dialog")
 export class BackupDialog extends LitElement {
-  static styles = [dialogHeadStyles, emptyStateStyles, css`
+  static styles = [dialogHeadStyles, emptyStateStyles, buttonBaseStyles, buttonRowStyles, css`
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -126,24 +127,12 @@ export class BackupDialog extends LitElement {
       justify-content: flex-end;
       gap: var(--cortex-space-3);
     }
+    /* 确认卡内的按钮形态走公共块（AP-4）：取消 = plain，确认恢复 = primary
+       （恢复覆盖会话库但非删除，保留墨色主按钮语义，不套 danger 红）。 */
     .btn {
-      border: none;
       border-radius: var(--cortex-radius-sm);
       padding: 6px 14px;
       font-size: var(--cortex-fs-sm);
-      cursor: pointer;
-    }
-    .btn.cancel {
-      background: var(--cortex-surface-muted);
-      color: var(--cortex-text);
-    }
-    .btn.danger {
-      background: var(--cortex-btn-primary-bg);
-      color: var(--cortex-btn-primary-fg);
-    }
-    .btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
     }
   `];
 
@@ -284,6 +273,13 @@ export class BackupDialog extends LitElement {
             : nothing}
         </div>
         ${this._confirming
+          ? nothing
+          : html`
+              <div class="actions">
+                <button class="primary" type="button" @click=${this._close}>关闭</button>
+              </div>
+            `}
+        ${this._confirming
           ? html`
               <div class="confirm-overlay">
                 <div class="confirm-card">
@@ -293,13 +289,13 @@ export class BackupDialog extends LitElement {
                     时点（${this._confirming.session_count ?? "?"} 个会话）。 当前库中此后的对话将丢失；当前库会改名保留，不会消失。
                   </p>
                   <div class="confirm-actions">
-                    <button class="btn cancel" type="button" ?disabled=${this._restoring} @click=${() => {
+                    <button class="btn cancel plain" type="button" ?disabled=${this._restoring} @click=${() => {
                       this._confirming = null;
                     }}>
                       取消
                     </button>
                     <button
-                      class="btn danger"
+                      class="btn primary"
                       type="button"
                       data-testid="confirm-restore"
                       ?disabled=${this._restoring}

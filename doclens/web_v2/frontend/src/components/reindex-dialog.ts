@@ -23,7 +23,6 @@ export class ReindexDialog extends LitElement {
       color: var(--cortex-text-muted); margin-top: var(--cortex-space-2);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    button.warn { background: var(--cortex-danger); color: var(--cortex-on-danger); border: none; border-radius: var(--cortex-radius-lg); }
     @media (max-width: 1023px) {
       .reindex-body {
         width: 100%;
@@ -114,8 +113,8 @@ export class ReindexDialog extends LitElement {
         <h3><doclens-icon name="refresh-ccw"></doclens-icon> 强制重建索引</h3>
         <div class="body"><doclens-icon name="alert-triangle"></doclens-icon> 将清空当前索引并全量重扫工作目录，期间（数十秒）搜索结果可能不完整。是否继续？</div>
         <div class="actions">
-          <button @click=${() => actions.closeReindex()}>取消</button>
-          <button class="warn" @click=${this._confirm}>确认重建</button>
+          <button class="plain" @click=${() => actions.closeReindex()}>取消</button>
+          <button class="danger" @click=${this._confirm}>确认重建</button>
         </div>
       `;
     }
@@ -125,7 +124,7 @@ export class ReindexDialog extends LitElement {
         <div class="body">已索引 <strong>${r.indexed_count}</strong> 个文件</div>
         ${r.current_file ? html`<div class="progress">当前：${r.current_file}${r.sub_label ? ` · ${r.sub_label}` : ""}</div>` : ""}
         <div class="actions">
-          <button @click=${this._close}>关闭（后台继续）</button>
+          <button class="primary" @click=${this._close}>关闭（后台继续）</button>
         </div>
       `;
     }

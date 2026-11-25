@@ -1,5 +1,6 @@
 import { LitElement, html, css, nothing } from "lit";
 import { dialogHeadStyles } from "../styles/dialog-frame";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, property } from "lit/decorators.js";
 
 import "./icon";
@@ -24,7 +25,7 @@ import "./c-dialog";
  */
 @customElement("control-panel-dialog")
 export class ControlPanelDialog extends LitElement {
-  static styles = css`${dialogHeadStyles} 
+  static styles = [dialogHeadStyles, buttonBaseStyles, buttonRowStyles, css`
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       display: flex;
@@ -71,7 +72,7 @@ export class ControlPanelDialog extends LitElement {
     .action-row .label.dot { color: var(--cortex-success); }
     .action-row .label.busy { color: var(--cortex-primary); }
     .action-row .label.warn { color: var(--cortex-warning); }
-  `;
+  `];
 
   @property({ type: Boolean, reflect: true })
   open = false;
@@ -165,6 +166,9 @@ export class ControlPanelDialog extends LitElement {
               <span class="hint">查看备份并恢复会话库</span>
             </span>
           </button>
+        </div>
+        <div class="actions">
+          <button class="primary" type="button" @click=${this._close}>关闭</button>
         </div>
       </c-dialog>
     `;

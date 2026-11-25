@@ -156,7 +156,7 @@ export class CompactConfirmDialog extends LitElement {
         <span>与上下文占用达到阈值时的自动压缩是同一机制，此处为手动提前执行。</span>
       </div>
       <div class="buttons">
-        <button type="button" @click=${this._onCancel}>取消</button>
+        <button type="button" class="plain" @click=${this._onCancel}>取消</button>
         <button class="primary" type="button" @click=${this._onConfirm}>确认压缩</button>
       </div>
     `;
@@ -192,7 +192,7 @@ export class CompactConfirmDialog extends LitElement {
       <p class="muted">上下文已替换为摘要；聊天记录展示不变，后续对话基于摘要继续。</p>
       <div class="buttons">
         ${this.compactedText ? html`
-          <button type="button" @click=${this._onCopy}>
+          <button type="button" class="plain" @click=${this._onCopy}>
             ${this._copied
               ? html`<doclens-icon name="check"></doclens-icon>已复制`
               : html`<doclens-icon name="clipboard"></doclens-icon>复制压缩内容`}

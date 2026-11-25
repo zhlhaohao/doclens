@@ -124,7 +124,7 @@ export class ImportConfirmDialog extends LitElement {
         <span>若该会话已存在（同一份文件导入过），将提示后可选择作为新副本导入。</span>
       </div>
       <div class="buttons">
-        <button type="button" @click=${this._onCancel}>取消</button>
+        <button type="button" class="plain" @click=${this._onCancel}>取消</button>
         <button class="primary" type="button" @click=${this._onConfirm}>导入</button>
       </div>
     `;
@@ -146,7 +146,7 @@ export class ImportConfirmDialog extends LitElement {
           <span>App 内导入需要重新选择该文件。</span>
         </div>` : nothing}
       <div class="buttons">
-        <button type="button" @click=${this._onCancel}>取消</button>
+        <button type="button" class="plain" @click=${this._onCancel}>取消</button>
         <button class="primary" type="button" @click=${this._onCopy}>作为副本导入</button>
       </div>
     `;
@@ -157,7 +157,7 @@ export class ImportConfirmDialog extends LitElement {
       <h2><doclens-icon name="upload"></doclens-icon>正在导入…</h2>
       <p class="detail">正在写入会话，请稍候。</p>
       <div class="buttons">
-        <button type="button" disabled>取消</button>
+        <button type="button" class="plain" disabled>取消</button>
         <button class="primary" type="button" disabled>导入中…</button>
       </div>
     `;

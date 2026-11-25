@@ -281,7 +281,7 @@ export class WorkdirSwitchDialog extends LitElement {
             : nothing}
           ${this._err ? html`<div class="err">${this._err}</div>` : nothing}
           <div class="actions">
-            <button ?disabled=${this._submitting} @click=${this._close}>取消</button>
+            <button class="plain" ?disabled=${this._submitting} @click=${this._close}>取消</button>
             <button class="primary" ?disabled=${this._submitting || this._prechecking || !this._path.trim()} @click=${this._submit}>
               ${this._prechecking ? "检查索引…"
                 : this._submitting ? "切换中…"

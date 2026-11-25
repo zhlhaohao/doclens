@@ -107,7 +107,7 @@ export class SkillRunDialog extends LitElement {
         @input=${(e: Event) => (this._prompt = (e.target as HTMLTextAreaElement).value)}
       ></textarea>
       <div class="actions">
-        <button type="button" @click=${this._cancel}>取消</button>
+        <button type="button" class="plain" @click=${this._cancel}>取消</button>
         <button
           type="button"
           class="primary"

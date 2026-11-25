@@ -73,7 +73,7 @@ export class InterjectDialog extends LitElement {
           }
         }}></textarea>
       <div class="buttons">
-        <button type="button" @click=${this._onCancel}>取消</button>
+        <button type="button" class="plain" @click=${this._onCancel}>取消</button>
         <button class="primary" type="button" ?disabled=${!this._draft.trim()}
                 @click=${this._submit}>插入</button>
       </div>

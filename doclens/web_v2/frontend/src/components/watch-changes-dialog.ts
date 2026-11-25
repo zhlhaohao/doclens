@@ -1,6 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { dialogHeadStyles } from "../styles/dialog-frame";
 import { emptyStateStyles } from "../styles/empty-state-styles";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, property } from "lit/decorators.js";
 
 import { store } from "../state/store";
@@ -13,7 +14,7 @@ import "./c-dialog";
  * 打开期间订阅 store 实时刷新列表；Esc / 点遮罩 / 关闭按钮 → 派发 close。 */
 @customElement("watch-changes-dialog")
 export class WatchChangesDialog extends LitElement {
-  static styles = [dialogHeadStyles, emptyStateStyles, css`
+  static styles = [dialogHeadStyles, emptyStateStyles, buttonBaseStyles, buttonRowStyles, css`
     .list {
       overflow-y: auto;
       padding: var(--cortex-space-2) var(--cortex-space-6) var(--cortex-space-4);
@@ -109,6 +110,9 @@ export class WatchChangesDialog extends LitElement {
           <button class="close-btn" type="button" @click=${this._close} aria-label="关闭">✕</button>
         </div>
         ${this._renderList(changes)}
+        <div class="actions">
+          <button class="primary" type="button" @click=${this._close}>关闭</button>
+        </div>
       </c-dialog>
     `;
   }

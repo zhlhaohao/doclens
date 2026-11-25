@@ -1,5 +1,6 @@
 import { LitElement, html, css } from "lit";
 import { dialogHeadStyles } from "../styles/dialog-frame";
+import { buttonBaseStyles, buttonRowStyles } from "../styles/button-styles";
 import { customElement, property, state } from "lit/decorators.js";
 import "./c-dialog";
 
@@ -24,7 +25,7 @@ interface RuntimeVitals {
  * Esc / 点遮罩 / 关闭按钮 → 派发 close。 */
 @customElement("about-dialog")
 export class AboutDialog extends LitElement {
-  static styles = css`${dialogHeadStyles} 
+  static styles = [dialogHeadStyles, buttonBaseStyles, buttonRowStyles, css`
     .body {
       padding: var(--cortex-space-4) var(--cortex-space-6) var(--cortex-space-6);
       font-family: var(--cortex-font-mono);
@@ -102,7 +103,7 @@ export class AboutDialog extends LitElement {
     .err {
       color: var(--cortex-danger);
     }
-  `;
+  `];
 
   @property({ type: Boolean, reflect: true })
   open = false;
@@ -316,6 +317,9 @@ export class AboutDialog extends LitElement {
             <span class="value sub">代码 ${this._fmtBeijing(this._health.code_mtime)} · 启动 ${this._fmtBeijing(this._health.started_at)}</span>
           </div>`
             : null}
+        </div>
+        <div class="actions">
+          <button class="primary" type="button" @click=${this._close}>关闭</button>
         </div>
       </c-dialog>
     `;

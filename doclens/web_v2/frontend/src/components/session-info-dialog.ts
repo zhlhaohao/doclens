@@ -185,7 +185,7 @@ export class SessionInfoDialog extends LitElement {
           <div class="empty">暂无上下文数据——发送首轮后显示</div>
         </div>
         <div class="actions">
-          <button @click=${this._close}>关闭</button>
+          <button class="primary" @click=${this._close}>关闭</button>
         </div>`;
     }
     const pct = this.used / this.contextWindow;
@@ -257,7 +257,7 @@ export class SessionInfoDialog extends LitElement {
           </div>`
         : ""}
       <div class="actions">
-        <button @click=${this._close}>关闭</button>
+        <button class="primary" @click=${this._close}>关闭</button>
       </div>`;
   }
 }

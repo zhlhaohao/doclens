@@ -305,8 +305,8 @@ export class TranslateDialog extends LitElement {
                 </div>
               </div>
               <div class="actions">
-                <button @click=${() => void this._cancel()}>取消翻译</button>
-                <button @click=${() => this._close()}>后台运行</button>
+                <button class="plain" @click=${() => void this._cancel()}>取消翻译</button>
+                <button class="primary" @click=${() => this._close()}>后台运行</button>
               </div>
             `}
         ${this._error ? html`<div class="status-line err">${this._error}</div>` : nothing}
@@ -377,7 +377,7 @@ export class TranslateDialog extends LitElement {
         </div>
       </label>
       <div class="actions">
-        <button @click=${() => this._close()}>取消</button>
+        <button class="plain" @click=${() => this._close()}>取消</button>
         <button class="primary" ?disabled=${this._busy} @click=${() => void this._submit()}>
           ${this._busy ? "提交中…" : "开始翻译"}
         </button>
