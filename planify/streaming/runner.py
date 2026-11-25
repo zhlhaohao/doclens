@@ -1465,6 +1465,21 @@ class StreamingAgent:
             handler = self.tool_handlers.get(name)
             if not handler:
                 return f"Unknown tool: {name}"
+            # 参数 JSON 解析失败（模型 emit 了非法 JSON，聚合器兜底标记 _parse_error）：
+            # 原样传给 handler 会 TypeError（未知 kwarg）——对用户表现为「工具一直失败」。
+            # 转成可自愈的 tool_result，让模型按 schema 重写（2026-11-25 真机：MiniMax
+            # 连续 4 次 group_plan 全 TypeError）。
+            if isinstance(input_data, dict) and "_parse_error" in input_data:
+                raw = str(input_data["_parse_error"])
+                self.logger.warning(
+                    "[StreamingAgent] 工具 %s 参数 JSON 解析失败（%d 字符），让模型重写",
+                    name, len(raw),
+                )
+                return (
+                    f"Error: 工具 {name} 的参数不是合法 JSON（流式累积后仍无法解析）。"
+                    f"你上一次发送的原文是：\n{raw[:1500]}\n"
+                    "请检查 JSON 语法（引号/括号/转义），按工具 schema 重新发送完整参数。"
+                )
             try:
                 # 检查是否是异步处理器
                 if asyncio.iscoroutinefunction(handler):

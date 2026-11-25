@@ -355,6 +355,13 @@ class BotRunner:
                             continue
                         if b["name"] not in allowed:
                             out = f"Error: tool '{b['name']}' is not available to role '{role.id}'"
+                        elif "_parse_error" in (b.get("input") or {}):
+                            # 参数 JSON 解析失败（与 lead 的 _run_handler 同语义）——
+                            # 原样进 handler 会 TypeError，转成可自愈的 tool_result
+                            raw = str(b["input"]["_parse_error"])
+                            out = (f"Error: 工具 {b['name']} 的参数不是合法 JSON。"
+                                   f"你上一次发送的原文是：\n{raw[:1200]}\n"
+                                   "请检查 JSON 语法后按 schema 重新发送完整参数。")
                         elif b["name"] == "idle":
                             idle_req = True
                             out = "Entering idle phase."
