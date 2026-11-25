@@ -35,6 +35,9 @@ logger = logging.getLogger(__name__)
 #: 预检单候选的超时（额度接口 15s 上限；并行后总耗时 ≈ 最慢者）
 PRECHECK_TIMEOUT_S = 15.0
 
+#: 预检只认的窗口标签（与 quota_probe 各 provider 解析器的 5h 窗口 label 一致）
+FIVE_HOUR_WINDOW_LABEL = "5 小时"
+
 
 @dataclass
 class CandidateEntry:
@@ -131,11 +134,16 @@ async def precheck_entry(entry: CandidateEntry, *, window_pct: int, balance_min:
         # 预检失败 ≠ 候选不可用：接口挂了 / 非订阅 key / 超时 → 退回试调
         return None
 
-    # 窗口限额：任一窗口已用 ≥ 阈值 → 不可用
+    # 窗口限额：**只看 5 小时窗口**（2026-11-25 用户决议）——周窗口不参与
+    # 预检：周额度接近上限时 5h 窗口往往仍有余量，按周窗口剔除会把同源
+    # 候选全部刷掉、直接跳到别家模型。5h 已用 ≥ 阈值 → 不可用；只有周窗口
+    # 而无 5h 数据的候选不做判断（退回试调）。
     if info.kind == "windows":
         for w in info.windows:
+            if w.label != FIVE_HOUR_WINDOW_LABEL:
+                continue
             if w.percentage >= window_pct:
-                return f"额度已用 {w.percentage:.0f}%（{w.label}窗口 ≥ {window_pct}%）"
+                return f"5 小时额度已用 {w.percentage:.0f}%（≥ {window_pct}%）"
         return None
     # 账户余额：< 阈值 → 不可用；is_available=False → 不可用
     if info.kind == "balance":

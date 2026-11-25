@@ -138,11 +138,26 @@ class TestPrecheck:
         )
         assert asyncio.run(precheck_entry(self._entry(G2), window_pct=80, balance_min=10)) is None
 
-    def test_any_window_over_rejects(self):
+    def test_weekly_window_ignored(self):
+        """只看 5 小时窗口（2026-11-25 决议）：周窗口 95% 但 5h 仅 10% → 可用。"""
         self.results[G2["base_url"]] = QuotaInfo(
             kind="windows", windows=(QuotaWindow("5 小时", 10.0), QuotaWindow("每周", 95.0))
         )
-        assert asyncio.run(precheck_entry(self._entry(G2), window_pct=80, balance_min=10)) is not None
+        assert asyncio.run(precheck_entry(self._entry(G2), window_pct=80, balance_min=10)) is None
+
+    def test_five_hour_over_rejects_even_if_weekly_fine(self):
+        self.results[G2["base_url"]] = QuotaInfo(
+            kind="windows", windows=(QuotaWindow("5 小时", 82.0), QuotaWindow("每周", 5.0))
+        )
+        out = asyncio.run(precheck_entry(self._entry(G2), window_pct=80, balance_min=10))
+        assert out is not None and "5 小时" in out
+
+    def test_weekly_only_falls_back_to_trial(self):
+        """只有周窗口无 5h 数据的候选不做判断——退回试调。"""
+        self.results[G2["base_url"]] = QuotaInfo(
+            kind="windows", windows=(QuotaWindow("每周", 100.0),)
+        )
+        assert asyncio.run(precheck_entry(self._entry(G2), window_pct=80, balance_min=10)) is None
 
     def test_balance_below_threshold_rejected(self):
         self.results[K1["base_url"]] = QuotaInfo(
