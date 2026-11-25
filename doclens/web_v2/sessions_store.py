@@ -55,16 +55,18 @@ def _sanitize_tool_pairing(history: list[dict]) -> list[dict]:
 
     规则：user 消息中的 tool_result block 仅当其 tool_use_id 出现在紧邻的
     前一条 assistant 消息的 tool_use 集合中时保留，其余剥除；剥空的消息
-    整条丢弃。连续同角色处置（与 get_chat_history._append 同款）：user/user
-    相邻补 "(interrupted)" 填充（中断轮 400 防护）；assistant/assistant
-    放行——压缩边界后摘要确认（"Understood."）紧跟 LLM 响应是真实请求
-    形态，插填充反而使回放与真实请求前缀分叉（ADR-0026）。合法配对
-    消息逐字节不动（前缀缓存）。
+    整条丢弃。连续同角色放行不插填充（见 _append_paired）：user/user 相邻
+    是 Messages API 接受的真实请求形态；assistant/assistant 是压缩边界后
+    摘要确认（"Understood."）紧跟 LLM 响应的真实请求形态，插填充反而使
+    回放与真实请求前缀分叉（ADR-0026）。合法配对消息逐字节不动（前缀
+    缓存）。存量污染的 "(interrupted)" 占位回复在此一并剔除。
     """
     out: list[dict] = []
     for m in history:
         role = m.get("role")
         content = m.get("content")
+        if _is_interrupted_placeholder(role, content):
+            continue  # 存量污染的占位回复：不进上下文（见 _append_paired）
         if role == "user" and isinstance(content, list):
             valid_ids: set = set()
             if out and out[-1].get("role") == "assistant":
@@ -85,8 +87,6 @@ def _sanitize_tool_pairing(history: list[dict]) -> list[dict]:
                 continue  # 整条都是孤儿 tool_result → 丢弃
             if len(blocks) != len(content):
                 m = {**m, "content": blocks}
-        if out and m.get("role") == "user" and out[-1].get("role") == "user":
-            out.append({"role": "assistant", "content": "(interrupted)"})
         out.append(m)
     return out
 
@@ -95,15 +95,45 @@ def _sanitize_tool_pairing(history: list[dict]) -> list[dict]:
 # 回放原语（get_chat_history 拆分后的公共件，AP-7）
 # ---------------------------------------------------------------------------
 
-def _append_paired(history: list[dict], role: str, content) -> None:
-    """追加一条回放消息，并处理连续同角色。
+_INTERRUPTED_PLACEHOLDER = "(interrupted)"
 
-    user/user 补 assistant 填充（中断轮「只有 message_user 没有 AI 回复」的
-    400 防护）；assistant/assistant 放行——压缩边界后摘要确认紧跟 LLM 响应是
-    真实请求形态，插填充反而使回放与真实请求前缀分叉（ADR-0026）。
+
+def _is_interrupted_placeholder(role, content) -> bool:
+    """是否为历史版回放合成的 "(interrupted)" 占位回复（两种落库形态）。
+
+    仅匹配**整条**：content 为该字符串，或 Anthropic block 数组仅含一个
+    text 块且 text 为该字符串。正文里提到 ``interrupted`` 的正常回答
+    （源码、日志、关于中断的讨论）内容更长的 text 块——绝不匹配。
     """
-    if history and history[-1]["role"] == role == "user":
-        history.append({"role": "assistant", "content": "(interrupted)"})
+    if role != "assistant":
+        return False
+    if isinstance(content, str):
+        return content.strip() == _INTERRUPTED_PLACEHOLDER
+    return (
+        isinstance(content, list)
+        and len(content) == 1
+        and isinstance(content[0], dict)
+        and content[0].get("type") == "text"
+        and content[0].get("text", "").strip() == _INTERRUPTED_PLACEHOLDER
+    )
+
+
+def _append_paired(history: list[dict], role: str, content) -> None:
+    """追加一条回放消息；剔除存量占位污染，连续同角色不插填充。
+
+    背景（2026-11-25 事故）：本函数曾在 user/user 相邻时插入
+    ``assistant: "(interrupted)"``（2026-09 为「Anthropic 要求角色严格
+    交替」的假设而加）。实测该假设不成立——Messages API 接受连续 user
+    并自动合并，项目内 ``<background-results>`` 通知之后一直是连续 user
+    的真实请求形态。占位符进入上下文后被模型当成可仿写的回复格式：
+    长会话累计 15 条占位后，模型对新的带图消息只回了 "(interrupted)"。
+
+    处置：不再合成任何占位文本——回放与真实请求同形态（连续 user），
+    不改写消息内容，前缀缓存不受损。存量已落库的占位回复按
+    ``_is_interrupted_placeholder`` 整条剔除（仅此精确形态）。
+    """
+    if _is_interrupted_placeholder(role, content):
+        return
     history.append({"role": role, "content": content})
 
 

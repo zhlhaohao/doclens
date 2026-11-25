@@ -89,15 +89,24 @@ class TestGetChatHistory:
         history = store.get_chat_history("s1")
         assert history[-1] == {"role": "assistant", "content": "展示文本"}
 
-    def test_alternation_guard_for_interrupted_turn(self, store):
-        """中断轮只有 message_user：相邻 user 之间补填充消息，避免 400。"""
+    def test_consecutive_user_no_filler_for_interrupted_turn(self, store):
+        """中断轮只有 message_user：相邻 user 之间**不**补占位消息。
+
+        2026-11-25 事故：合成的 ``assistant: "(interrupted)"`` 进入上下文
+        后被模型当成可仿写的回复格式（长会话累计 15 条占位后，模型对新的
+        带图消息只回了 "(interrupted)"）。Messages API 接受连续 user 并自动
+        合并——回放须与真实请求同形态。
+        """
         _create_session(store)
         _append(store, "s1", "message_user", {"content": "q1"}, 0)
         _append(store, "s1", "message_user", {"content": "q2"}, 1)
         _append(store, "s1", "message_ai", {"content": "a2"}, 2)
         history = store.get_chat_history("s1")
-        roles = [m["role"] for m in history]
-        assert all(a != b for a, b in zip(roles, roles[1:]))
+        assert history == [
+            {"role": "user", "content": "q1"},
+            {"role": "user", "content": "q2"},
+            {"role": "assistant", "content": "a2"},
+        ]
 
     def test_invalid_tool_trace_skipped(self, store):
         _create_session(store)
@@ -315,13 +324,11 @@ class TestToolPairingSanitizer:
             b for m in history if isinstance(m.get("content"), list)
             for b in m["content"]
         ]
-        # 角色交替契约（ADR-0026）：user/user 不相邻（400 防护）；
-        # assistant/assistant 允许（压缩边界后真实请求形态，不再插填充）
-        roles = [m["role"] for m in history]
-        assert not any(a == b == "user" for a, b in zip(roles, roles[1:]))
+        # 连续 user 不插填充（真实请求形态）；assistant/assistant 同样放行
+        assert not any(m["content"] == "(interrupted)" for m in history)
 
     def test_orphan_only_message_dropped(self, store):
-        """整条都是孤儿 tool_result 的 user 消息整条丢弃，交替由填充补上。"""
+        """整条都是孤儿 tool_result 的 user 消息整条丢弃，不补占位。"""
         _create_session(store)
         _append(store, "s1", "message_user", {"content": "q"}, 0)
         store.append_raw_messages("s1", [
@@ -338,9 +345,8 @@ class TestToolPairingSanitizer:
                          for b in m["content"] if isinstance(b, dict)))
             for m in history
         )
-        # 角色交替契约（ADR-0026）：user/user 不相邻；assistant/assistant 允许
-        roles = [m["role"] for m in history]
-        assert not any(a == b == "user" for a, b in zip(roles, roles[1:]))
+        # 不补占位；孤儿块确实被剥除
+        assert not any(m["content"] == "(interrupted)" for m in history)
 
     def test_mixed_blocks_keep_valid(self, store):
         """user 消息混合合法/孤儿 tool_result：只剥孤儿，合法块保留。"""
@@ -506,7 +512,7 @@ class TestCompactedReplay:
         assert all(m["content"] != "(interrupted)" for m in history)
 
     def test_interrupted_user_filler_still_applies(self, store):
-        """中断轮 user/user 填充保留（400 防护，契约另一半）。"""
+        """中断轮 user/user 相邻不再插占位（2026-11-25 事故修正）。"""
         _create_session(store)
         _append(store, "s1", "message_user", {"content": "q1"}, 0)
         _append(store, "s1", "message_user", {"content": "q2"}, 1)
@@ -514,10 +520,86 @@ class TestCompactedReplay:
         history = store.get_chat_history("s1")
         assert history == [
             {"role": "user", "content": "q1"},
-            {"role": "assistant", "content": "(interrupted)"},
             {"role": "user", "content": "q2"},
             {"role": "assistant", "content": "a2"},
         ]
+
+    def test_background_results_consecutive_user_no_filler(self, store):
+        """``<background-results>`` 通知紧跟 tool_result：真实请求即连续 user。
+
+        这是占位符的头号来源（2026-11-25 出事会话 15 条占位中 9 条来自
+        此形态）——回放不得插入合成 assistant 回复。
+        """
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "跑任务"}, 0)
+        store.append_raw_messages("s1", [
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "bg1", "name": "background_run", "input": {}}]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "bg1", "content": "started"}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "已启动"}]},
+        ])
+        # 后台任务完成通知以 user 身份追加（下一轮 message_user 之前）
+        store.append_raw_messages("s1", [
+            {"role": "user", "content": "<background-results>\n[bg:1] completed\n</background-results>"},
+        ])
+        history = store.get_chat_history("s1")
+        roles = [m["role"] for m in history]
+        assert roles == ["user", "assistant", "user", "assistant", "user"]
+        assert not any(m["content"] == "(interrupted)" for m in history)
+        assert history[-1]["content"].startswith("<background-results>")
+
+    def test_model_echoed_placeholder_dropped_from_replay(self, store):
+        """模型复述占位后落库的 "(interrupted)" 回复：回放整条剔除。
+
+        2026-11-25 事故的直接形态——模型对带图消息只回了 "(interrupted)"，
+        被当作真实回复落库（raw_messages + message_ai_raw 两种落库形态）。
+        回放时若保留，污染会一直留在上下文里并自我强化。
+        """
+        _create_session(store)
+        # 带图用户消息（与出事会话同形态：payload 平级携带 images）
+        _append(store, "s1", "message_user",
+                {"content": "看看截图", "images": [{"data": "AAAA", "media_type": "image/jpeg"}]}, 0)
+        # raw_messages 落库切片不含本轮 user（round_start_index 起算），
+        # 这里直接是模型复述的占位回复
+        store.append_raw_messages("s1", [                                   # seq 1
+            {"role": "assistant", "content": [{"type": "text", "text": "(interrupted)"}]},
+        ])
+        # 展示层副本（seq 紧随其后；含 raw 的轮回放时本就不消费这两条）
+        _append(store, "s1", "message_ai_raw", {"content": "(interrupted)"}, 2)
+        _append(store, "s1", "message_ai", {"content": "(interrupted)"}, 3)
+        # 之后正常的一轮（raw 同样不含本轮 user）
+        _append(store, "s1", "message_user", {"content": "继续"}, 4)
+        store.append_raw_messages("s1", [                                   # seq 5
+            {"role": "assistant", "content": "正常回答"},
+        ])
+        history = store.get_chat_history("s1")
+        # 占位回复被剔除：带图 user 之后直接是下一条 user（连续 user，不插填充）
+        assert [(m["role"], m["content"] if isinstance(m["content"], str) else "<img>")
+                for m in history] == [
+            ("user", "<img>"),
+            ("user", "继续"),
+            ("assistant", "正常回答"),
+        ]
+        # 展示层不受影响：占位回复仍在库里（仅回放剔除，不改写存储）
+        items = store.get_detail("s1")
+        assert any(it.kind == "message_ai" and json.loads(it.payload)["content"] == "(interrupted)"
+                   for it in items)
+        assert [it.seq for it in items] == [0, 1, 2, 3, 4, 5]
+
+    def test_normal_answer_mentioning_interrupted_is_kept(self, store):
+        """正文提到 interrupted 的正常回答绝不能被误删（精确整条匹配）。"""
+        _create_session(store)
+        _append(store, "s1", "message_user", {"content": "这个占位符是什么"}, 0)
+        store.append_raw_messages("s1", [
+            {"role": "user", "content": "这个占位符是什么"},
+            {"role": "assistant", "content": "(interrupted) 是回放时合成的占位回复，不是真实回答。"},
+        ])
+        history = store.get_chat_history("s1")
+        assert history[-1] == {
+            "role": "assistant",
+            "content": "(interrupted) 是回放时合成的占位回复，不是真实回答。",
+        }
 
 
 class TestMicrocompactReplay:
