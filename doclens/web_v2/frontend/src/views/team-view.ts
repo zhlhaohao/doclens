@@ -439,6 +439,7 @@ export class TeamView extends LitElement {
     const deps = (ps?.depends_on ?? []).join(", ");
     const owner = s.assignee ?? ps?.assignee ?? null;
     const bot = owner ? this._bots.find((b) => b.name === owner) : null;
+    const role = bot?.role ?? ps?.role ?? "";
     const openBot = () => { if (owner) this._dialogBot = owner; };
     return html`
       <div class="step ${s.status}">
@@ -452,7 +453,7 @@ export class TeamView extends LitElement {
         ${owner ? html`
           <button class="owner" @click=${openBot} title="打开 ${owner} 的会话">
             <span class="dot ${bot?.status ?? ""}" style="width:6px;height:6px;border-radius:9999px;background:var(--cortex-text-secondary)"></span>
-            ${owner}${bot ? html`<span class="role">${bot.role}</span>` : nothing}
+            ${owner}${role ? html`<span class="role">（${role}）</span>` : nothing}
           </button>` : html`<span class="meta">未指定 owner</span>`}
         ${deps ? html`<div class="meta">依赖：${deps}</div>` : nothing}
         ${(ps?.deliverables?.length ?? 0) > 0 ? html`

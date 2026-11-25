@@ -10,7 +10,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import type { PlanCard } from "../state/types";
-import { dagAction, listDags, ApiError } from "../api/team";
+import { dagAction, listDags, listBots, ApiError } from "../api/team";
 import { store, actions } from "../state/store";
 import "../components/icon";
 
@@ -56,6 +56,8 @@ export class PlanCardEl extends LitElement {
   @property({ attribute: false }) card!: PlanCard;
   @state() private _busy = false;
   @state() private _status: string = "";
+  /** assignee → 角色映射（从 /api/team/bots 取；查不到退回 plan.steps[].role） */
+  @state() private _botRoles: Record<string, string> = {};
 
   connectedCallback() {
     super.connectedCallback();
@@ -73,8 +75,8 @@ export class PlanCardEl extends LitElement {
     const sid = store.getState().chat.currentSession?.id ?? "";
     if (!sid) return;
     try {
-      
-      const dags = await listDags(sid);
+      const [dags, bots] = await Promise.all([listDags(sid), listBots(sid)]);
+      this._botRoles = Object.fromEntries(bots.map((b) => [b.name, b.role]));
       const cur = dags.find((d) => d.id === this.card.dag_id);
       if (cur) this._status = cur.status;
     } catch { /* 查不到保持快照 */ }
@@ -113,6 +115,12 @@ export class PlanCardEl extends LitElement {
     if (!c) return nothing;
     const draft = this._status === "draft";
     const steps = c.plan?.steps ?? [];
+    const ownerLabel = (s: { assignee?: string; role?: string }) => {
+      // 负责人 = Bot 名 + 角色（Bot 实体为准）；未指定 assignee 的按角色派 → 只显示角色
+      if (!s.assignee) return s.role ? `（${s.role}）` : "—";
+      const role = this._botRoles[s.assignee] ?? s.role;
+      return role ? `${s.assignee}（${role}）` : s.assignee;
+    };
     return html`
       <div class="card">
         <div class="head">
@@ -127,7 +135,7 @@ export class PlanCardEl extends LitElement {
               <tr>
                 <td class="id">${s.step_id}</td>
                 <td>${s.subject ?? ""}<div class="deliv">${(s.deliverables ?? []).map((d) => d.path).join(" · ")}</div></td>
-                <td class="owner">${s.assignee ?? s.role ?? "—"}</td>
+                <td class="owner">${ownerLabel(s)}</td>
                 <td>${(s.depends_on ?? []).join(", ") || "—"}</td>
               </tr>`)}
           </tbody>
