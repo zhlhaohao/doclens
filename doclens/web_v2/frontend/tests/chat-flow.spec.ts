@@ -265,27 +265,133 @@ describe("<chat-view> 对话流程集成（AP-12 安全网）", () => {
     hangingStream?.close();
   });
 
-  it("⑥ usage 事件累加进会话占用口径（最近一次调用）", async () => {
-    installFetch({
-      events: [
-        ["usage", JSON.stringify({
-          input_tokens: 100, output_tokens: 20,
-          cache_creation_input_tokens: 5, cache_read_input_tokens: 50,
-          context_window: 128000,
-        })],
-        ["done", "{}"],
-      ],
-    });
+  it("⑦ SSE 静默超时后自动进入恢复态，无需刷新或重发", async () => {
+    vi.useFakeTimers();
+    try {
+      installFetch({
+        hang: true,
+        events: [["tool_call", JSON.stringify({ tool_use_id: "t1", name: "search", input: {} })]],
+      });
+      const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+      await el.updateComplete;
+      let detailCalls = 0;
+      const load = vi.spyOn(el as any, "_loadSession").mockImplementation(async () => {
+        detailCalls++;
+        actions.setChatState({ streaming: true });
+        (el as any)._startGeneratingPoll("s-new");
+      });
+      void submit(el, "长任务");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getState().chat.streaming).toBe(true);
+      expect(load).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(45_000);
+      expect(detailCalls).toBe(1);
+      expect((el as any)._genPollTimer).not.toBeUndefined();
+      expect(store.getState().chat.lastError).toBeNull();
+      // 恢复只拉 detail/trace，不再次 POST /chat，也不调用停止端点。
+      expect((global.fetch as any).mock.calls.filter(([u]: [string]) => u === "/api/chat")).toHaveLength(1);
+      expect(stopCalls).toBe(0);
+      hangingStream?.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("⑧ 首次恢复遇到断网：保留占位，online 后自动重试", async () => {
+    vi.useFakeTimers();
+    try {
+      installFetch({ hang: true, events: [] });
+      const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+      await el.updateComplete;
+      const baseFetch = global.fetch;
+      let detailCalls = 0;
+      global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+        const u = String(url);
+        if (u === "/api/sessions/s-new") {
+          if (detailCalls++ === 0) throw new Error("offline");
+          return jsonRes({
+            id: "s-new", type: "chat", title: "弱网任务", preview: "",
+            updated_at: new Date().toISOString(), message_count: 1,
+            generating: true, items: [], context_window: 0,
+          });
+        }
+        if (u.startsWith("/api/chat/trace")) return jsonRes({ generating: true, steps: [] });
+        return baseFetch(u, init);
+      }) as unknown as typeof fetch;
+      const load = vi.spyOn(el as any, "_loadSession");
+      void submit(el, "弱网任务");
+      await vi.advanceTimersByTimeAsync(45_000);
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(store.getState().chat.streaming).toBe(true);
+      expect((el as any)._genPollTimer).toBeUndefined();
+
+      window.dispatchEvent(new Event("online"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(load).toHaveBeenCalledTimes(2);
+      expect((el as any)._genPollTimer).not.toBeUndefined();
+      hangingStream?.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("⑨ 后端已完成：静默超时后直接展示落库回答", async () => {
+    vi.useFakeTimers();
+    try {
+      installFetch({ hang: true, events: [["thinking", JSON.stringify({ delta: "处理中" })]] });
+      const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+      await el.updateComplete;
+      const load = vi.spyOn(el as any, "_loadSession").mockImplementation(async () => {
+        actions.setChatState({
+          messages: [
+            { role: "user", content: "弱网任务" },
+            { role: "assistant", content: "后端已完成" },
+          ],
+          streaming: false,
+        });
+        (el as any)._stopGeneratingPoll();
+      });
+      void submit(el, "弱网任务");
+      await vi.advanceTimersByTimeAsync(45_000);
+      expect(load).toHaveBeenCalledOnce();
+      expect(store.getState().chat.streaming).toBe(false);
+      expect(store.getState().chat.messages.at(-1)?.content).toBe("后端已完成");
+      hangingStream?.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("⑩ 正常完成/健康在途流不因回前台或 online 额外重拉", async () => {
+    installFetch({ events: [["token", JSON.stringify({ text: "完成" })], ["done", "{}"]] });
     const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
     await el.updateComplete;
-    await submit(el, "算用量");
-    await new Promise((r) => setTimeout(r, 50));
-    await el.updateComplete;
+    await submit(el, "普通问题");
+    const load = vi.spyOn(el as any, "_loadSession");
+    window.dispatchEvent(new Event("online"));
+    window.dispatchEvent(new Event("pageshow"));
+    expect(load).not.toHaveBeenCalled();
+  });
 
-    // used = input + cache_read + cache_creation = 155
-    expect((el as any)._sessionUsage).toMatchObject({
-      used: 155, contextWindow: 128000, calls: 1,
+  it("⑪ 手机后台冻结计时器：恢复占位回前台立即补拉，不等待旧定时器", async () => {
+    installFetch({ events: [] });
+    const el = await fixture(html`<chat-view></chat-view>`) as ChatView;
+    await el.updateComplete;
+    const session = {
+      id: "s-bg", type: "chat" as const, title: "后台", preview: "",
+      updated_at: new Date().toISOString(), message_count: 1,
+    };
+    (el as any)._suppressLifecycleRecovery = false; // 本地流已退场，后台只剩轮询
+    actions.setChatState({
+      state: "focus", currentSession: session, streaming: true,
+      messages: [{ role: "assistant", content: "" }],
     });
+    (el as any)._startGeneratingPoll(session.id);
+    const load = vi.spyOn(el as any, "_loadSession").mockResolvedValue(undefined);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(load).toHaveBeenCalledWith(session);
   });
 
   it("⑦ 兜底切换后的下一条消息：激活预设未变 → 弹提醒框；「继续发送」放行", async () => {

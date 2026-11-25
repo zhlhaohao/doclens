@@ -1,6 +1,9 @@
 import { request, streamSSE } from "./client";
 import type { AskQuestionPayload } from "./ask";
 
+/** 服务端 ping 间隔为 15s；三个心跳周期仍无任何字节即按半开连接恢复。 */
+export const CHAT_STREAM_IDLE_TIMEOUT_MS = 45_000;
+
 /** token 用量（2026-09-17）：每次 LLM 调用后发，最后一条即该轮上下文峰值占用。 */
 export interface UsagePayload {
   input_tokens: number;
@@ -51,7 +54,7 @@ export async function* chatStream(
   req: { message: string; session_id?: string; images?: ChatImage[] },
   signal?: AbortSignal,
 ): AsyncGenerator<ChatStreamEvent> {
-  for await (const ev of streamSSE("/api/chat", req, signal)) {
+  for await (const ev of streamSSE("/api/chat", req, signal, CHAT_STREAM_IDLE_TIMEOUT_MS)) {
     if (ev.event === "token") {
       const d = parseData("token", ev.data);
       if (d) yield { type: "token", text: String(d.text ?? "") };
