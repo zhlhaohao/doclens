@@ -12,7 +12,8 @@ import { customElement, property, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
 import type { DagInfo, DagStep, PlanStep, BotInfo, BotStatus, DagStatus } from "../api/team";
-import { listBots, listDags, dagAction, ApiError } from "../api/team";
+import { listBots, listDags, listRoles, dagAction, deleteBot, createBot, ApiError } from "../api/team";
+import { createSession, fetchSessionDetail, listSessions } from "../api/sessions";
 import "../components/icon";
 import "../components/bot-session-dialog";
 import "../components/toast-stack";
@@ -124,6 +125,18 @@ export class TeamView extends LitElement {
     .bot .lease { color: var(--cortex-text-secondary); font-size: var(--cortex-fs-xs); }
     .bot .del { border: 0; background: none; color: var(--cortex-text-secondary); cursor: pointer; font-size: 14px; padding: 0 2px; }
     .bot .del:hover { color: var(--cortex-danger); }
+    .bot.add { border-style: dashed; color: var(--cortex-text-secondary); }
+    .bots .hint { color: var(--cortex-text-secondary); font-size: var(--cortex-fs-xs); margin-top: var(--cortex-space-1); }
+    dialog.new-bot { border: 1px solid var(--cortex-border); border-radius: var(--cortex-radius-xl); padding: 0;
+      background: var(--cortex-surface); box-shadow: var(--cortex-shadow-lg); min-width: 360px; max-width: 90vw; }
+    dialog.new-bot::backdrop { background: rgba(0,0,0,.4); }
+    .new-form { display: flex; flex-direction: column; gap: var(--cortex-space-3); padding: var(--cortex-space-5); }
+    .new-form h3 { margin: 0; font-size: var(--cortex-fs-md); }
+    .new-form label { display: flex; flex-direction: column; gap: 4px; font-size: var(--cortex-fs-sm); }
+    .new-form input, .new-form select { padding: 6px 10px; border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-md); background: var(--cortex-bg); color: var(--cortex-text); font-size: var(--cortex-fs-sm); }
+    .role-desc { color: var(--cortex-text-secondary); font-size: var(--cortex-fs-xs); min-height: 2.4em; }
+    .new-actions { display: flex; justify-content: flex-end; gap: var(--cortex-space-2); }
     .error { color: var(--cortex-danger); font-size: var(--cortex-fs-sm); margin-bottom: var(--cortex-space-2); }
   `;
 
@@ -135,6 +148,12 @@ export class TeamView extends LitElement {
   @state() private _dialogBot: string | null = null;
   @state() private _error: string | null = null;
   @state() private _recent: { id: string; title: string }[] = [];
+  /** 新建 Bot 对话框 */
+  @state() private _newOpen = false;
+  @state() private _newName = "";
+  @state() private _newRole = "researcher";
+  @state() private _roles: { id: string; name: string; description: string }[] = [];
+  @state() private _newBusy = false;
 
   private _timer: number | null = null;
 
@@ -170,6 +189,54 @@ export class TeamView extends LitElement {
     if (changed.has("hidden")) {
       if (this.hidden) this._stop(); else this._start();
     }
+    if (changed.has("_newOpen")) {
+      const dlg = this.renderRoot.querySelector("dialog.new-bot") as HTMLDialogElement | null;
+      if (dlg) {
+        if (this._newOpen && !dlg.open) {
+          dlg.showModal();
+          void this._loadRoles();
+        } else if (!this._newOpen && dlg.open) {
+          dlg.close();
+        }
+      }
+    }
+  }
+
+  private async _loadRoles() {
+    if (this._roles.length) return;
+    try {
+      
+      this._roles = await listRoles();
+    } catch { /* 下拉空也能提交（默认 researcher） */ }
+  }
+
+  private async _createBot() {
+    const name = this._newName.trim();
+    if (!name || this._newBusy) return;
+    this._newBusy = true;
+    try {
+      let sid = this._sid;
+      if (!sid) {
+        
+        
+        const s = await createSession({ type: "chat", title: `与 ${name} 对话` });
+        const d = await fetchSessionDetail(s.id, { metaOnly: true });
+        actions.setChatState({ currentSession: { id: d.id, type: "chat", title: d.title, preview: d.preview,
+          updated_at: d.updated_at, message_count: d.message_count } });
+        sid = d.id;
+      }
+      
+      await createBot(name, this._newRole, sid);
+      this._newOpen = false;
+      this._newName = "";
+      this._toast(`已创建 ${name}`, "success");
+      await this._refresh();
+      this._dialogBot = name;
+    } catch (e) {
+      this._toast(e instanceof ApiError ? e.message : String(e), "error");
+    } finally {
+      this._newBusy = false;
+    }
   }
 
   private _start() {
@@ -183,8 +250,8 @@ export class TeamView extends LitElement {
   }
 
   private async _pickSession(id: string) {
-    const { actions } = await import("../state/store");
-    const { fetchSessionDetail } = await import("../api/sessions");
+    
+    
     try {
       const d = await fetchSessionDetail(id, { metaOnly: true });
       actions.setChatState({ currentSession: {
@@ -197,12 +264,13 @@ export class TeamView extends LitElement {
   private async _refresh() {
     const sid = this._sid;
     if (!sid) {
-      this._dags = []; this._bots = [];
-      // 空态：列最近 chat 会话供选择（不设 currentSession，用户点才设）
+      this._dags = [];
+      // 空态也列全部 Bot（实体全局可见，ADR-0060 §5）——用户能看到「有哪些 Bot 可以聊」
+      try { this._bots = await listBots(""); } catch { this._bots = []; }
       if (this._recent.length === 0) {
         try {
-          const { listSessions } = await import("../api/sessions");
-          const r = await listSessions({ type: "chat", limit: 5 });
+          
+          const r = await listSessions({ type: "chat", limit: 8 });
           this._recent = r.sessions;
         } catch { /* ignore */ }
       }
@@ -239,7 +307,7 @@ export class TeamView extends LitElement {
 
   private async _deleteBot(bot: BotInfo) {
     if (!window.confirm(`删除 Bot「${bot.name}」？实体、记忆与本会话的对话记录将被删除，不可恢复。`)) return;
-    const { deleteBot } = await import("../api/team");
+    
     try {
       await deleteBot(bot.name, this._sid);
       this._toast(`已删除 ${bot.name}`, "success");
@@ -283,13 +351,45 @@ export class TeamView extends LitElement {
           ${dag ? this._renderDag(dag) : nothing}
         `}
       </div>
-      ${sid && this._bots.length ? html`
+      ${this._bots.length ? html`
         <div class="bots">
           <h4>团队 Bot</h4>
-          <div class="bot-row">${this._bots.map((b) => this._renderBot(b))}</div>
-        </div>` : nothing}
+          <div class="bot-row">${this._bots.map((b) => this._renderBot(b))}
+            <button class="bot add" @click=${() => { this._newOpen = true; }} title="新建 Bot">
+              <doclens-icon name="plus" style="font-size:14px"></doclens-icon>新建
+            </button>
+          </div>
+          ${!sid ? html`<div class="hint">点 Bot 直接对话（会新建一个对话）；已有对话的计划在上方。</div>` : nothing}
+        </div>` : html`
+        <div class="bots">
+          <h4>团队 Bot</h4>
+          <div class="bot-row">
+            <button class="bot add" @click=${() => { this._newOpen = true; }} title="新建 Bot">
+              <doclens-icon name="plus" style="font-size:14px"></doclens-icon>新建 Bot
+            </button>
+          </div>
+        </div>`}
       <bot-session-dialog .bot=${this._dialogBot ?? ""} .sessionId=${sid} .open=${this._dialogBot !== null}
                           @closed=${() => { this._dialogBot = null; }}></bot-session-dialog>
+      <dialog class="new-bot" @cancel=${(e: Event) => { e.preventDefault(); this._newOpen = false; }}
+              @close=${() => { this._newOpen = false; }}>
+        ${this._newOpen ? html`
+          <form class="new-form" @submit=${(e: Event) => { e.preventDefault(); void this._createBot(); }}>
+            <h3>新建 Bot</h3>
+            <label>名字<input .value=${this._newName} @input=${(e: InputEvent) => { this._newName = (e.target as HTMLInputElement).value; }}
+                              placeholder="字母 / 数字 / 中文 / - _，1–32 字" autofocus /></label>
+            <label>角色<select @change=${(e: Event) => { this._newRole = (e.target as HTMLSelectElement).value; }}>
+              ${this._roles.map((r) => html`<option value=${r.id} ?selected=${r.id === this._newRole}>${r.name}（${r.id}）</option>`)}
+            </select></label>
+            <div class="role-desc">${this._roles.find((r) => r.id === this._newRole)?.description ?? ""}</div>
+            <div class="new-actions">
+              <button type="button" class="btn" @click=${() => { this._newOpen = false; }}>取消</button>
+              <button type="submit" class="btn primary" ?disabled=${this._newBusy || !this._newName.trim()}>
+                ${this._newBusy ? "创建中…" : "创建并对话"}
+              </button>
+            </div>
+          </form>` : nothing}
+      </dialog>
     `;
   }
 
@@ -364,12 +464,48 @@ export class TeamView extends LitElement {
     `;
   }
 
+  /** 点 Bot：无会话 → 先建一个 chat 会话；无租约 → 本会话租借（spawn 语义）；
+   *  他会话占用 → toast。然后打开覆盖层。 */
+  private async _openBot(b: BotInfo) {
+    let sid = this._sid;
+    if (!sid) {
+      try {
+        const { createSession } = await import("../api/sessions");
+        
+        const s = await createSession({ type: "chat", title: `与 ${b.name} 对话` });
+        
+        const d = await fetchSessionDetail(s.id, { metaOnly: true });
+        actions.setChatState({ currentSession: { id: d.id, type: "chat", title: d.title, preview: d.preview,
+          updated_at: d.updated_at, message_count: d.message_count } });
+        sid = d.id;
+      } catch (e) {
+        this._toast(e instanceof ApiError ? e.message : String(e), "error");
+        return;
+      }
+    }
+    if (b.leased_by && b.leased_by !== sid) {
+      this._toast(`${b.name} 正被其他会话占用`, "error");
+      return;
+    }
+    if (!b.leased_by) {
+      try {
+        
+        await createBot(b.name, b.role, sid);
+      } catch (e) {
+        this._toast(e instanceof ApiError ? e.message : String(e), "error");
+        return;
+      }
+    }
+    this._dialogBot = b.name;
+    void this._refresh();
+  }
+
   private _renderBot(b: BotInfo) {
     const mine = b.leased_by === this._sid;
     const lease = mine ? "本会话" : (b.leased_by ? "会话占用" : "空闲");
-    const open = () => { if (mine) this._dialogBot = b.name; else this._toast(`${b.name} 被其他会话占用`, "error"); };
+    const clickable = !b.leased_by || mine;
     return html`
-      <span class="bot" @click=${open} title=${b.memory_summary || b.name} style="cursor:${mine ? "pointer" : "default"}">
+      <span class="bot" @click=${() => clickable && void this._openBot(b)} title=${b.memory_summary || b.name} style="cursor:${clickable ? "pointer" : "default"}">
         <span class="dot ${b.status}"></span>
         <span>${b.name}</span>
         <span class="role">${b.role}</span>

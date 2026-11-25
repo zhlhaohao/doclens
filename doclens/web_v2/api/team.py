@@ -96,16 +96,61 @@ def make_session_sink():
 
 # ------------------------------------------------------------------ Bot 列表
 
-@router.get("/team/bots")
-async def list_bots(session_id: str = Query(...)):
-    """全部 Bot 实体（全局），标注租约 / 状态 / 记忆摘要 / 当前任务。"""
+class BotCreateRequest(BaseModel):
+    session_id: str
+    name: str
+    role: str
+
+
+@router.post("/team/bots")
+async def create_bot(req: BotCreateRequest):
+    """新建或租借 Bot（ADR-0060 §2 团队页直达——不经 lead）。
+
+    复用 BotRegistry.spawn 语义：不存在 → 创建；shutdown → 复活；空闲（无租约）
+    → 本会话租借；被其他会话租借 → 409。授予本会话租约后不起线程——用户开口
+    （/send）才起，避免白耗一次 LLM 调用。名字/角色校验由 registry 负责
+    （BotRegistryError 直接透传给用户看）。
+    """
     hub = _hub()
-    await _ensure_scope(hub, session_id)
+    await _ensure_scope(hub, req.session_id)
+    from planify.team.bot_registry import BotRegistryError
+
+    def _run():
+        try:
+            bot = hub.registry.spawn(req.name.strip(), req.role, req.session_id)
+        except BotRegistryError as e:
+            raise CortexAPIError(400, "BOT_INVALID", str(e))
+        return {"ok": True, "name": bot["name"], "role": bot["role"], "spawned": bot.get("_spawned", False)}
+
+    return await asyncio.to_thread(_run)
+
+
+@router.get("/team/roles")
+async def list_roles():
+    """预制角色清单（ADR-0058：内置唯一来源）——团队页新建 Bot 下拉用。
+    不含 default（spawn 不指定角色时的兜底，不给用户选）。"""
+    hub = _hub()
+    out = []
+    for rid in hub.roles.ids():
+        if rid == "default":
+            continue
+        r = hub.roles.get(rid)
+        out.append({"id": rid, "name": r.text(r.name), "description": r.text(r.description)[:160]})
+    return {"roles": out}
+
+
+@router.get("/team/bots")
+async def list_bots(session_id: str = Query("", description="当前会话；空 = 只列实体不查任务")):
+    """全部 Bot 实体（全局），标注租约 / 状态 / 记忆摘要 / 当前任务。
+    session_id 为空时跳过 scope 恢复（团队页空态也能看到全部 Bot）。"""
+    hub = _hub()
+    if session_id:
+        await _ensure_scope(hub, session_id)
     out = []
     for b in hub.registry.list_all():
         name = b["name"]
-        sc = hub.try_scope(session_id)
         task = None
+        sc = hub.try_scope(session_id) if session_id else None
         if sc is not None and b.get("leased_by") == session_id:
             from planify.team import dag as D
             for d in D.read_all_dags(sc.dags_dir):

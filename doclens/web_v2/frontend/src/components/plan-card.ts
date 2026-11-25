@@ -10,7 +10,7 @@ import { LitElement, html, css, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import type { PlanCard } from "../state/types";
-import { dagAction, ApiError } from "../api/team";
+import { dagAction, listDags, ApiError } from "../api/team";
 import { store, actions } from "../state/store";
 import "../components/icon";
 
@@ -73,7 +73,7 @@ export class PlanCardEl extends LitElement {
     const sid = store.getState().chat.currentSession?.id ?? "";
     if (!sid) return;
     try {
-      const { listDags } = await import("../api/team");
+      
       const dags = await listDags(sid);
       const cur = dags.find((d) => d.id === this.card.dag_id);
       if (cur) this._status = cur.status;

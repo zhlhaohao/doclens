@@ -96,6 +96,17 @@ export async function deleteBot(bot: string, sessionId: string): Promise<{ ok: b
   });
 }
 
+/** 新建或租借 Bot（团队页直达）：不存在→创建；空闲→本会话租借；被其他会话占用→409。 */
+export async function createBot(name: string, role: string, sessionId: string): Promise<{ ok: boolean; name: string; role: string }> {
+  return request("/api/team/bots", { method: "POST", json: { session_id: sessionId, name, role } });
+}
+
+/** 全部预制角色（从 /api/team/roles 取；团队页「新建 Bot」下拉用）。 */
+export async function listRoles(): Promise<{ id: string; name: string; description: string }[]> {
+  const r = await request<{ roles: { id: string; name: string; description: string }[] }>("/api/team/roles");
+  return r.roles;
+}
+
 export async function dagAction(dagId: number, action: string, sessionId: string, stepId?: string): Promise<Record<string, unknown>> {
   return request(`/api/team/dags/${dagId}/${action}`, { method: "POST", json: { session_id: sessionId, step_id: stepId ?? null } });
 }
