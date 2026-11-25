@@ -15,6 +15,7 @@ import {
 import { customElement, state } from "lit/decorators.js";
 
 import { store, actions } from "../state/store";
+import { StreamIdleTimeoutError } from "../api/client";
 import { loadSessionMemory } from "../utils/session-memory";
 import type { Session, ChatMessage, ToolStep, PendingAsk } from "../state/types";
 import { chatStream, stopChat, interject } from "../api/chat";
@@ -450,6 +451,11 @@ export class ChatView extends LitElement {
   /** 断开续跑轮询定时器（ADR-0028）：恢复态 generating 占位期间 5s 轮询
    *  detail，跑完自动刷新展示；离开会话/停止后清除。 */
   private _genPollTimer?: number;
+  /** 断流恢复重试（首次失败/断网时 setTimeout，成功/有流后清零）。 */
+  private _recoveryRetryTimer?: number;
+  private _recoveryRetryDelayMs = 5000;
+  /** 本地流读取结束时忽略 once 级在线/回前台恢复，防正常收尾竞态。 */
+  private _suppressLifecycleRecovery = false;
   /** 插话在途（ADR-0048）：true = 已提交待送达（按钮「已插入」禁点），
    *  interject_ack 送达后回落；回合结束由丢弃 toast 兜底复位。 */
   @state() private _interjectPending = false;
@@ -475,6 +481,9 @@ export class ChatView extends LitElement {
     // 会话库恢复完成（ADR-0047 SSE sessions_restored）：重拉历史列表；
     // 当前打开的会话若已不存在（比备份旧），清空消息流回到欢迎页。
     window.addEventListener("cortex:sessions-restored", this._onSessionsRestored);
+    document.addEventListener("visibilitychange", this._onConnectionOpportunity);
+    window.addEventListener("pageshow", this._onConnectionOpportunity);
+    window.addEventListener("online", this._onConnectionOpportunity);
     this._unsubscribe = store.subscribe(() => {
       this.requestUpdate();
       this._consumePendingSkillChat();
@@ -705,9 +714,13 @@ export class ChatView extends LitElement {
     super.disconnectedCallback();
     this._unsubscribe?.();
     this._stopGeneratingPoll();
+    this._stopRecoveryRetry();
     this._mqMobileViewport?.removeEventListener("change", this._onMobileViewportChange);
     this._mqMobileViewport = undefined;
     window.removeEventListener("cortex:sessions-restored", this._onSessionsRestored);
+    document.removeEventListener("visibilitychange", this._onConnectionOpportunity);
+    window.removeEventListener("pageshow", this._onConnectionOpportunity);
+    window.removeEventListener("online", this._onConnectionOpportunity);
   }
 
   /** 会话库恢复完成（ADR-0047）：重拉历史；当前会话不复存在时回欢迎页。 */
@@ -754,6 +767,59 @@ export class ChatView extends LitElement {
     } catch {
       // 网络抖动静默放弃（保持高亮-only 的默认恢复行为）
     }
+  }
+
+  /** 手机回前台/联网恢复：重试断流恢复；正常在途流不抢占，正常完成不回访。 */
+  private _onConnectionOpportunity = (e: Event): void => {
+    if (e.type === "visibilitychange" && document.visibilityState !== "visible") return;
+    const chat = store.getState().chat;
+    if (
+      chat.state !== "focus" || !chat.currentSession
+      || (this._suppressLifecycleRecovery && !this._recoveryRetryTimer)
+      || (this._abortController && !this._recoveryRetryTimer)
+    ) return;
+    const needsRecovery = !chat.streaming || this._genPollTimer !== undefined
+      || this._recoveryRetryTimer !== undefined;
+    if (!needsRecovery) return;
+    if (this._recoveryRetryTimer !== undefined) {
+      window.clearTimeout(this._recoveryRetryTimer);
+      this._recoveryRetryTimer = undefined;
+    }
+    void this._recoverSession(chat.currentSession, this._abortController !== null);
+  };
+
+  private _stopRecoveryRetry(): void {
+    if (this._recoveryRetryTimer !== undefined) {
+      window.clearTimeout(this._recoveryRetryTimer);
+      this._recoveryRetryTimer = undefined;
+    }
+  }
+
+  /** 流已退场后重拉会话；失败保留 generating 并退避重试，不重复 POST /chat。 */
+  private async _recoverSession(session: Session, keepGenerating = false): Promise<void> {
+    const cur = store.getState().chat.currentSession;
+    if (!cur || cur.id !== session.id) return;
+    if (keepGenerating && this._genPollTimer === undefined) {
+      // 恢复请求本身也在断网期：先展示后台续跑占位，等联网/回前台/重试。
+      actions.setChatState({ streaming: true });
+    }
+    await this._loadSession(cur);
+    const chat = store.getState().chat;
+    const recovered = chat.currentSession?.id === session.id
+      && (!chat.streaming || this._genPollTimer !== undefined);
+    if (recovered) {
+      this._stopRecoveryRetry();
+      this._recoveryRetryDelayMs = 5000;
+      return;
+    }
+    if (chat.currentSession?.id !== session.id || chat.state !== "focus") return;
+    if (this._recoveryRetryTimer !== undefined) return;
+    this._recoveryRetryTimer = window.setTimeout(() => {
+      this._recoveryRetryTimer = undefined;
+      const latest = store.getState().chat.currentSession;
+      if (latest?.id === session.id) void this._recoverSession(latest, true);
+    }, this._recoveryRetryDelayMs);
+    this._recoveryRetryDelayMs = Math.min(this._recoveryRetryDelayMs * 2, 30_000);
   }
 
   /** generating 轮询（ADR-0028）：占位期间 5s 拉 detail（metaOnly 轻量
@@ -1005,6 +1071,9 @@ export class ChatView extends LitElement {
 
     // 建立中断控制器：_stop() 会 abort 它 + 通知后端停（abort 抛 AbortError 走静默路径）
     this._abortController = new AbortController();
+    this._suppressLifecycleRecovery = false;
+    this._stopRecoveryRetry();
+    this._recoveryRetryDelayMs = 5000;
 
     // 会话归属守卫（2026-10-22 串台修复）：本流的增量只允许写回发起它的
     // 会话。用户中途切到别的对话（「返回」/历史列表/新会话）后，若继续把
@@ -1144,7 +1213,8 @@ export class ChatView extends LitElement {
           void this._history.load();
         }
       } else {
-        // 连接中断 / 异常：保留已收到内容，把残留 running 步骤标记为中断。
+        const idleTimeout = err instanceof StreamIdleTimeoutError;
+        // 静默超时 / 连接中断：保留已收到内容，把残留 running 步骤标记为中断。
         // 断开续跑自愈（ADR-0028）：后端可能仍在生成——重拉 detail 接管：
         // generating → 恢复态占位 + 轮询；已完成 → 直接展示补写结果。
         const cur = store.getState().chat.currentSession;
@@ -1153,22 +1223,29 @@ export class ChatView extends LitElement {
           messages = finalizeInterruptedMessages(messages);
           actions.setChatState({ messages });
         }
-        actions.setError(`对话失败: ${(err as Error).message}`);
-        // 失败成为转录的一部分（P1 修复）：末尾错误卡 + 重试入口；
-        // 重载 detail 成功（恢复态接管）或新回合开始时清除。
-        // 上游原始报文脱敏（2026-11-18）：主文案换友好句，原始码进
-        // 「技术详情」——用户看不懂 unknown error, 715 (1000)。
-        // 文案不带「对话失败：」前缀——错误卡已有标题，不重复。
-        const sanitized = sanitizeUpstreamError((err as Error).message ?? "");
-        actions.setChatState({
-          lastError: sanitized.message,
-          lastErrorDetail: sanitized.technicalDetail,
-        });
+        if (idleTimeout) {
+          // 半开连接不是回答失败：恢复态取代错误卡；联网失败由恢复重试接管。
+          actions.setChatState({ lastError: null, lastErrorDetail: null });
+        } else {
+          actions.setError(`对话失败: ${(err as Error).message}`);
+          // 失败成为转录的一部分（P1 修复）：末尾错误卡 + 重试入口；
+          // 重载 detail 成功（恢复态接管）或新回合开始时清除。
+          // 上游原始报文脱敏（2026-11-18）：主文案换友好句，原始码进
+          // 「技术详情」——用户看不懂 unknown error, 715 (1000)。
+          // 文案不带「对话失败：」前缀——错误卡已有标题，不重复。
+          const sanitized = sanitizeUpstreamError((err as Error).message ?? "");
+          actions.setChatState({
+            lastError: sanitized.message,
+            lastErrorDetail: sanitized.technicalDetail,
+          });
+        }
         if (cur && cur.id === sessionId) {
-          void this._loadSession(cur);
+          if (idleTimeout) await this._recoverSession(cur, true);
+          else void this._loadSession(cur);
         }
       }
     } finally {
+      this._suppressLifecycleRecovery = true;
       this._abortController = null;
       // 流结束即撤下交互卡片：问答已由消息内 tool trace 持久化展示，
       // 外挂卡片（_activeAsk）只服务悬置期交互，留着会重复/残留
@@ -1176,8 +1253,13 @@ export class ChatView extends LitElement {
       this._interjectPending = false; // 插话态复位（ADR-0048；丢弃 toast 已另行送达）
       // streaming 是当前展示会话的状态：切走了就不要解锁别人的输入框
       // （另开一轮的输入锁归它自己的流管）。
-      if (stillOwn()) {
+      if (stillOwn() && this._recoveryRetryTimer === undefined) {
         actions.setChatState({ streaming: false, pendingAsk: null });
+        // 恢复接管成功：后续 5s 轮询独占展示；已正常完成：无需生命周期重拉。
+        if (this._genPollTimer !== undefined) {
+          this._stopRecoveryRetry();
+          this._recoveryRetryDelayMs = 5000;
+        }
       }
     }
   }
@@ -1219,6 +1301,7 @@ export class ChatView extends LitElement {
   }
 
   private _backToInitial() {
+    this._stopRecoveryRetry();
     this._resetPreview();
     this._activeAsk = null;
     this._history.setHighlight(null); // 「新会话」返回后不残留旧高亮
@@ -1248,6 +1331,7 @@ export class ChatView extends LitElement {
       state: "focus",
       currentSession: s,
       messages: [],
+      streaming: true, // 恢复请求恰逢断网也保留占位，直到 detail 明确证明已结束
       pendingAsk: null,
     });
     try {
