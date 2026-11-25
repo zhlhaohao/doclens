@@ -6,7 +6,7 @@ import { createMathMarked } from "../utils/marked-math";
 import katexStyles from "katex/dist/katex.min.css?inline";
 import type { ChatMessage, ToolStep } from "../state/types";
 import { isCoarsePointer } from "../utils/device";
-import { copyText, createCopiedFlash } from "../utils/clipboard";
+import { copyText, createCopiedFlash, COPY_FEEDBACK_MS } from "../utils/clipboard";
 import { traceStepsOf } from "./chat-tool-trace";
 import "./ask-card";
 
@@ -29,10 +29,33 @@ export function formatMsgTime(iso: string | undefined, now = new Date()): string
   return `${M}-${D} ${hh}:${mm}:${ss}`;
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]!);
+}
+
 /** AI 气泡专用 marked 实例（模块级单例）。不能用全局 marked：
  *  其 KaTeX 扩展注册在 md-viewer.ensureMdConfigured()，只在打开过
  *  文档预览后才生效，聊天页不能依赖那个时序。 */
 const chatMarked = createMathMarked();
+/** 代码块复制钮（2026-11-25）：AI 气泡的围栏代码块右上角注入按钮，点击
+ *  走 _onClick 事件委托（innerHTML 内容无法用 @click 模板绑定）。仅处理
+ *  块级 code（indented / fenced），输出与 marked 默认 renderer 同构（转义
+ *  口径一致）；inline code 走默认 renderer 不受影响。
+ *  外包一层 .code-block 作定位锚：pre 自身 overflow-x 横向滚动，按钮若直接
+ *  挂在 pre 内会随长行横向滚走。 */
+chatMarked.use({
+  renderer: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    code(token: any) {
+      const lang = String(token.lang ?? "").match(/^\S+/)?.[0] ?? "";
+      const langAttr = lang ? ` class="language-${escapeHtml(lang)}"` : "";
+      const code = escapeHtml(String(token.text ?? "").replace(/\n$/, "")) + "\n";
+      return `<div class="code-block"><button class="code-copy" type="button" title="复制代码" aria-label="复制代码">复制</button><pre><code${langAttr}>${code}</code></pre></div>\n`;
+    },
+  },
+});
 
 @customElement("chat-message")
 export class ChatMessageEl extends LitElement {
@@ -144,6 +167,32 @@ export class ChatMessageEl extends LitElement {
     .md-body li:has(> code),
     .md-body p > code:first-child {
       font-family: var(--cortex-font-mono);
+    }
+    .md-body .code-block {
+      position: relative;   /* 代码块复制钮的定位锚 */
+    }
+    .md-body .code-block > pre { margin: 0.5em 0; }
+    /* 代码块复制钮（2026-11-25）：hover 代码块浮现；触屏无 hover 常显 */
+    .md-body .code-copy {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      padding: 1px 8px;
+      border: 1px solid var(--cortex-border);
+      border-radius: var(--cortex-radius-sm);
+      background: var(--cortex-surface);
+      color: var(--cortex-text-muted);
+      cursor: pointer;
+      font-size: var(--cortex-fs-xs);
+      font-family: var(--cortex-font);
+      opacity: 0;
+      transition: opacity var(--cortex-duration-fast);
+    }
+    .md-body .code-block:hover .code-copy,
+    .md-body .code-copy:focus { opacity: 1; }
+    .md-body .code-copy:hover { color: var(--cortex-primary); border-color: var(--cortex-primary); }
+    @media (hover: none) {
+      .md-body .code-copy { opacity: 1; }
     }
     .md-body pre {
       background: var(--cortex-surface-muted);
@@ -448,8 +497,25 @@ export class ChatMessageEl extends LitElement {
     this.classList.toggle("hovered");
   };
 
+  /** 点击代码块复制钮：复制该块 code 文本，按钮短暂显示「已复制」；失败冒泡
+   *  copy-failed（toast 与整条复制同协议）。按钮不响应期间置 disabled，防连点。 */
+  private _onCodeCopy = async (btn: HTMLButtonElement): Promise<void> => {
+    const code = btn.parentElement?.querySelector("pre > code")?.textContent ?? "";
+    btn.disabled = true;
+    const ok = await copyText(code);
+    btn.textContent = ok ? "已复制" : "复制失败";
+    btn.disabled = false;
+    window.setTimeout(() => { btn.textContent = "复制"; }, COPY_FEEDBACK_MS);
+    if (!ok) {
+      this.dispatchEvent(
+        new CustomEvent("copy-failed", { bubbles: true, composed: true }),
+      );
+    }
+  };
+
   /** 事件委托：命中 .ref-link 时派发 reference-click（供 chat-view 打开预览）；
    *  命中 img.kb-img 时全屏预览（复用对话图片的 img-preview-dialog）；
+   *  命中 .code-copy 时复制所在代码块；
    *  未命中时移动端走气泡点击切换（操作行浮现）。 */
   private _onClick = (e: MouseEvent): void => {
     const path_ = e.composedPath();
@@ -459,6 +525,15 @@ export class ChatMessageEl extends LitElement {
     );
     if (kbImg) {
       this._imgPreview = kbImg.src;
+      return;
+    }
+    const codeCopy = path_.find(
+      (n): n is HTMLButtonElement =>
+        n instanceof HTMLButtonElement && n.classList.contains("code-copy"),
+    );
+    if (codeCopy) {
+      e.stopPropagation();
+      void this._onCodeCopy(codeCopy);
       return;
     }
     const target = path_.find(

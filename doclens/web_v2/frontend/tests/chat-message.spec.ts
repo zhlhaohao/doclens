@@ -140,6 +140,66 @@ describe("<chat-message> thinking stream tail window", () => {
   });
 });
 
+/** 代码块复制钮（2026-11-25）：AI 气泡的围栏代码块右上角注入「复制」钮，
+ *  点击复制该块 code 文本（不含按钮自身文字），短暂反馈「已复制」；inline
+ *  code 不受影响。 */
+describe("<chat-message> code block copy button", () => {
+  const BODY = "说明\n\n```py\nprint('a')\n<b>\n```\n\n尾段 `inline`";
+
+  function mount(): Promise<ChatMessageEl> {
+    return fixture(
+      html`<chat-message role="assistant" .message=${{ role: "assistant", content: BODY } as any}></chat-message>`,
+    ) as Promise<ChatMessageEl>;
+  }
+
+  it("renders one .code-copy inside .code-block per fenced block; inline code has none", async () => {
+    const el = await mount();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll(".code-block > .code-copy").length).toBe(1);
+    expect(el.shadowRoot!.querySelectorAll(".code-block pre > code.language-py").length).toBe(1);
+    expect(el.shadowRoot!.querySelector(".code-block code")!.textContent).toBe("print('a')\n<b>\n");
+    expect(el.shadowRoot!.querySelectorAll(".code-copy").length).toBe(1); // inline code 无钮
+  });
+
+  it("click copies the block text (no button label), shows 已复制, then resets", async () => {
+    vi.useFakeTimers();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    try {
+      const el = await mount();
+      await el.updateComplete;
+      const btn = el.shadowRoot!.querySelector(".code-copy") as HTMLButtonElement;
+      btn.click();
+      // 只冲微任务（不推进定时器）：runAllTimers 会连 1500ms 复位一起跑掉
+      await vi.advanceTimersByTimeAsync(0);
+      expect(writeText).toHaveBeenCalledWith("print('a')\n<b>\n");
+      expect(btn.textContent).toBe("已复制");
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(btn.textContent).toBe("复制");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("copy failure dispatches copy-failed (composed)", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    const exec = vi.spyOn(document, "execCommand").mockReturnValue(false);
+    try {
+      const el = await mount();
+      await el.updateComplete;
+      const handler = vi.fn();
+      el.addEventListener("copy-failed", handler);
+      (el.shadowRoot!.querySelector(".code-copy") as HTMLButtonElement).click();
+      await Promise.resolve(); await Promise.resolve();
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect((handler.mock.calls[0][0] as Event).composed).toBe(true);
+    } finally {
+      exec.mockRestore();
+    }
+  });
+});
+
 /** 导出到此为止（2026-10-29）：user 气泡操作行多一个下载钮，点击冒泡
  *  锚点 seq（chat-view 走截断导出，避免整段会话上下文过长）。 */
 describe("<chat-message> user export-upto button", () => {
