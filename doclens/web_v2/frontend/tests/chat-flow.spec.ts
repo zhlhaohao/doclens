@@ -5,6 +5,8 @@ import "../src/views/chat-view";
 // app.ts 注册；测试环境需显式引入，否则 <chat-stream> 不会 upgrade
 // （_streamEl?.scrollToBottom is not a function）。
 import "../src/components/chat-stream";
+// 同理：input-box 也只由 app.ts 注册，⑦ 要断言恢复态下渲染的是「停止」钮。
+import "../src/components/input-box";
 import { resetStore, setDesktopViewport } from "./test-utils";
 import { store, actions } from "../src/state/store";
 import type { ChatView } from "../src/views/chat-view";
@@ -288,6 +290,15 @@ describe("<chat-view> 对话流程集成（AP-12 安全网）", () => {
       await vi.advanceTimersByTimeAsync(45_000);
       expect(detailCalls).toBe(1);
       expect((el as any)._genPollTimer).not.toBeUndefined();
+      // 恢复态在场 ⇒ 输入仍锁定、按钮保持红色「停止」（2026-11-26 真机回归：
+      // finally 无条件解锁把 streaming 压回 false，显示绿色「发送」）
+      expect(store.getState().chat.streaming).toBe(true);
+      // input-box 在 chat-view 的 shadow DOM 内：恢复态必须渲染红色「停止」钮，
+      // 而非可发送的「发送」钮。
+      const input = el.shadowRoot?.querySelector("input-box") as any;
+      expect(input?.streaming).toBe(true);
+      expect(input?.shadowRoot?.querySelector("button.stop")).not.toBeNull();
+      expect(input?.shadowRoot?.querySelector("button.submit")).toBeNull();
       expect(store.getState().chat.lastError).toBeNull();
       // 恢复只拉 detail/trace，不再次 POST /chat，也不调用停止端点。
       expect((global.fetch as any).mock.calls.filter(([u]: [string]) => u === "/api/chat")).toHaveLength(1);
