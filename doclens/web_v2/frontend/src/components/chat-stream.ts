@@ -495,7 +495,7 @@ export class ChatStream extends LitElement {
     }
     if (node.type === "review") {
       // 评审卡（数字员工）：返工指令折叠在卡内，不作为独立气泡
-      return html`<review-card .review=${node.review} .rework=${node.rework}></review-card>`;
+      return html`<review-card .review=${node.review} .order=${node.order} .rework=${node.rework}></review-card>`;
     }
     const expanded = this._expanded.has(node.boundarySeq);
     return html`

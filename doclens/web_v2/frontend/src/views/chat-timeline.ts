@@ -1,7 +1,7 @@
 /** 会话 items → 渲染时间线的纯函数集（ADR-0027：回退即事实）。
 
  * mapSessionItemsToMessages：items → 活消息（store.messages 口径）；
- * buildChatTimeline：items → 活消息 + 回退折叠条（dividers）；
+ * buildChatTimeline：items → 活消息 + 回退折叠条（dividers）+ 评审卡（reviews）；
  * mergeTimeline：折叠条与（流式中的）消息数组合成渲染节点序列。
  *
  * 死段语义与后端 project_live_items 一一对应：每条 rewound 边界的死段 =
@@ -29,11 +29,13 @@ export type TimelineNode =
   | ({ type: "review" } & ReviewNode);
 
 /** 评审卡（数字员工，ADR-0062）：一次评审的人读呈现。
- *  review = 后端 ``review`` 条目 payload；rework = 其后的返工指令原文
- *  （``<rework-order>`` 用户消息，折叠在卡内，不单独渲染为气泡）。 */
+ *  order = 驱动本次评审的评审指令原文（``<review-order>`` 用户消息，先于
+ *  review 条目落库）；rework = 其后的返工指令原文（``<rework-order>`` 用户
+ *  消息）。两者都折叠在卡内，不单独渲染为气泡。 */
 export interface ReviewNode {
   seq: number;
   review: ReviewEvent;
+  order: ChatMessage | null;
   rework: ChatMessage | null;
 }
 
@@ -123,7 +125,6 @@ export function buildChatTimeline(items: RawItem[]): {
   messages: ChatMessage[];
   dividers: RewindDivider[];
   reviews: ReviewNode[];
-  reviewOrders: ChatMessage[];
 } {
   // 边界区间（按 boundary seq 升序，与 items 顺序一致）
   const intervals: Array<{ point: number; boundary: number }> = [];
@@ -150,14 +151,19 @@ export function buildChatTimeline(items: RawItem[]): {
   // 评审卡（数字员工）：review 条目 → ReviewNode；其后首条返工指令
   // （<rework-order> user 消息）并入该卡的 rework 字段，不再作为独立气泡
   const reviews: ReviewNode[] = [];
-  // 评审指令（<review-order> user 消息）：从消息流摘出，由宿主并入其评审卡
-  const reviewOrders: ChatMessage[] = [];
+  // 评审指令（<review-order> user 消息）先于其 review 条目落库：摘出后挂到
+  // 其后第一张评审卡（pending；评审失败/被停时 review 条目仍在，不会悬空）
+  let pendingOrder: ChatMessage | null = null;
   for (const it of items) {
     if (it.kind === "review" && typeof it.seq === "number") {
       try {
         const p = JSON.parse(it.payload);
         if (p && typeof p === "object" && "kind" in p) {
-          reviews.push({ seq: it.seq, review: p as ReviewEvent, rework: null });
+          reviews.push({
+            seq: it.seq, review: p as ReviewEvent,
+            order: pendingOrder, rework: null,
+          });
+          pendingOrder = null;
         }
       } catch {
         /* 坏 payload 忽略 */
@@ -172,7 +178,7 @@ export function buildChatTimeline(items: RawItem[]): {
       continue;
     }
     if (msg.role === "user" && isReviewOrder(msg.content)) {
-      reviewOrders.push(msg);
+      pendingOrder = msg;
       continue;
     }
     const lastReview = reviews.length ? reviews[reviews.length - 1] : null;
@@ -190,7 +196,7 @@ export function buildChatTimeline(items: RawItem[]): {
     boundarySeq: iv.boundary,
     dead: buckets[i],
   }));
-  return { messages, dividers, reviews, reviewOrders };
+  return { messages, dividers, reviews };
 }
 
 /** 折叠条 × 评审卡 × 消息数组 → 渲染节点序列：折叠条/评审卡插在首条
