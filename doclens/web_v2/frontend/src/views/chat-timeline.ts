@@ -29,13 +29,13 @@ export type TimelineNode =
   | ({ type: "review" } & ReviewNode);
 
 /** 评审卡（数字员工，ADR-0062）：一次评审的人读呈现。
- *  order = 驱动本次评审的评审指令原文（``<review-order>`` 用户消息，先于
- *  review 条目落库）；rework = 其后的返工指令原文（``<rework-order>`` 用户
- *  消息）。两者都折叠在卡内，不单独渲染为气泡。 */
+ *  review = 后端 ``review`` 条目 payload；rework = 其后的返工指令原文
+ *  （``<rework-order>`` 用户消息，折叠在卡内，不单独渲染为气泡）。
+ *  评审指令（``<review-order>``）不摘出：它是工作回合与评审回合之间的
+ *  user 消息，按原位渲染，两条 AI 消息之间才看得出「是谁发起了评审」。 */
 export interface ReviewNode {
   seq: number;
   review: ReviewEvent;
-  order: ChatMessage | null;
   rework: ChatMessage | null;
 }
 
@@ -54,7 +54,7 @@ interface RawItem {
 export function isReworkOrder(content: string): boolean {
   return content.startsWith(`<${REWORK_ORDER_TAG}`);
 }
-/** 用户消息是否为评审指令（宿主代发，驱动评审回合）。 */
+/** 用户消息是否为评审指令（宿主代发，驱动评审回合；按原位渲染为气泡）。 */
 export function isReviewOrder(content: string): boolean {
   return content.startsWith(`<${REVIEW_ORDER_TAG}`);
 }
@@ -151,19 +151,12 @@ export function buildChatTimeline(items: RawItem[]): {
   // 评审卡（数字员工）：review 条目 → ReviewNode；其后首条返工指令
   // （<rework-order> user 消息）并入该卡的 rework 字段，不再作为独立气泡
   const reviews: ReviewNode[] = [];
-  // 评审指令（<review-order> user 消息）先于其 review 条目落库：摘出后挂到
-  // 其后第一张评审卡（pending；评审失败/被停时 review 条目仍在，不会悬空）
-  let pendingOrder: ChatMessage | null = null;
   for (const it of items) {
     if (it.kind === "review" && typeof it.seq === "number") {
       try {
         const p = JSON.parse(it.payload);
         if (p && typeof p === "object" && "kind" in p) {
-          reviews.push({
-            seq: it.seq, review: p as ReviewEvent,
-            order: pendingOrder, rework: null,
-          });
-          pendingOrder = null;
+          reviews.push({ seq: it.seq, review: p as ReviewEvent, rework: null });
         }
       } catch {
         /* 坏 payload 忽略 */
@@ -175,10 +168,6 @@ export function buildChatTimeline(items: RawItem[]): {
     const owner = typeof it.seq === "number" ? dead(it.seq) : -1;
     if (owner >= 0) {
       buckets[owner].push(msg);
-      continue;
-    }
-    if (msg.role === "user" && isReviewOrder(msg.content)) {
-      pendingOrder = msg;
       continue;
     }
     const lastReview = reviews.length ? reviews[reviews.length - 1] : null;

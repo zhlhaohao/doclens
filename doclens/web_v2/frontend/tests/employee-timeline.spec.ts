@@ -1,6 +1,6 @@
 /** 数字员工（ADR-0062）前端纯函数与控制器：
- * - chat-timeline：review 条目 → 评审卡节点；评审指令挂到其后第一张卡、返工指令
- *   并入卡内，都不单独成气泡；与回退折叠条同 seq 时的排序；
+ * - chat-timeline：review 条目 → 评审卡节点；返工指令并入卡内不单独成气泡，
+ *   评审指令按原位渲染；与回退折叠条同 seq 时的排序；
  * - chat-employees-controller：最近员工求交、派活校验（空任务 / 预设缺失）、
  *   成功回调与失败回调。
  */
@@ -35,7 +35,6 @@ describe("chat-timeline · 数字员工评审卡", () => {
     expect(t.reviews.length).toBe(2);
     expect(t.reviews[0].rework?.content).toContain("rework-order");
     expect(t.reviews[1].rework).toBeNull();          // 达标后无返工
-    expect(t.reviews[0].order).toBeNull();           // 这组样例没写评审指令
     expect(t.messages.map((m) => m.content)).toEqual([
       "<assignment>\n产物目录：/k/a\n</assignment>\n\n写报告", "完成", "已补充", " unrelated",
     ]);
@@ -43,7 +42,7 @@ describe("chat-timeline · 数字员工评审卡", () => {
     expect(nodes.map((n) => n.type)).toEqual(["message", "message", "review", "message", "review", "message"]);
   });
 
-  it("评审指令（<review-order>）挂到其后第一张评审卡，不单独成气泡", () => {
+  it("评审指令（<review-order>）按原位渲染为 user 气泡，不被摘出", () => {
     const order1 = '<review-order skill="r">\n请评审\n</review-order>';
     const order2 = '<review-order skill="r">\n再评一次\n</review-order>';
     const items = [
@@ -58,23 +57,19 @@ describe("chat-timeline · 数字员工评审卡", () => {
       item("review", { iteration: 2, kind: "review", score: 93, threshold: 90, passed: true, issues: [] }, 8),
     ];
     const t = buildChatTimeline(items);
-    expect(t.reviews[0].order?.content).toBe(order1);
-    expect(t.reviews[0].order?.seq).toBe(2);
-    expect(t.reviews[0].rework?.content).toContain("rework-order");
-    expect(t.reviews[1].order?.content).toBe(order2);
-    expect(t.reviews[1].rework).toBeNull();
-    // 指令不进消息流（评审回合的 assistant 回复是正常消息，保留）
-    expect(t.messages.some((m) => m.content === order1 || m.content === order2)).toBe(false);
-    expect(t.messages.map((m) => m.content)).toEqual(["<assignment>\n写报告</assignment>", "完成", "评审中", "已补充"]);
-  });
-
-  it("评审指令之后没有 review 条目（进行中）：指令不渲染，不泄漏到消息流", () => {
-    const t = buildChatTimeline([
-      item("message_ai", { content: "完成", tool_calls: [] }, 0),
-      item("message_user", { content: "<review-order>评审</review-order>" }, 1),
+    // 两条评审指令夹在工作回合与评审回合之间，原位保留
+    expect(t.messages.map((m) => m.role + ":" + m.content.slice(0, 16))).toEqual([
+      "user:<assignment>\n写报告", "assistant:完成", "user:" + order1.slice(0, 16), "assistant:评审中",
+      "assistant:已补充", "user:" + order2.slice(0, 16),
     ]);
-    expect(t.reviews.length).toBe(0);
-    expect(t.messages.length).toBe(1);
+    // 返工指令仍并入卡；评审卡不持有评审指令
+    expect(t.reviews[0].rework?.content).toContain("rework-order");
+    expect(t.reviews[1].rework).toBeNull();
+    expect("order" in t.reviews[0]).toBe(false);
+    const nodes = mergeTimeline(t.dividers, t.messages, t.reviews);
+    expect(nodes.map((n) => n.type)).toEqual([
+      "message", "message", "message", "message", "review", "message", "message", "review",
+    ]);
   });
 
   it("无产物预检条目也成卡（score=null）", () => {
@@ -99,7 +94,7 @@ describe("chat-timeline · 数字员工评审卡", () => {
     const nodes = mergeTimeline(
       [{ pointSeq: 0, boundarySeq: 2, dead: [] }],
       [{ role: "user", content: "a", seq: 0 }],
-      [{ seq: 2, review: { iteration: 1, kind: "review", score: 1, threshold: 90, passed: false, issues: [] }, order: null, rework: null }],
+      [{ seq: 2, review: { iteration: 1, kind: "review", score: 1, threshold: 90, passed: false, issues: [] }, rework: null }],
     );
     expect(nodes.map((n) => n.type)).toEqual(["message", "rewind-divider", "review"]);
   });

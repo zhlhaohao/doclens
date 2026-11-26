@@ -83,12 +83,9 @@ export class ReviewCard extends LitElement {
   `;
 
   @property({ attribute: false }) review!: ReviewEvent;
-  /** 评审指令原文（宿主代发，折叠在卡内） */
-  @property({ attribute: false }) order: ChatMessage | null = null;
   /** 返工指令原文（折叠在卡内） */
   @property({ attribute: false }) rework: ChatMessage | null = null;
   @state() private _open = false;
-  @state() private _reworkOpen = false;
 
   render() {
     const r = this.review;
@@ -129,24 +126,14 @@ export class ReviewCard extends LitElement {
                 </div>`)}
             </div>`
           : null}
-        ${this._orderBlock()}
         ${this.rework
-          ? html`<details ?open=${false} @toggle=${(e: Event) => (this._reworkOpen = (e.target as HTMLDetailsElement).open)}>
-              <summary><doclens-icon name=${this._reworkOpen ? "chevron-up" : "chevron-down"}></doclens-icon>查看发给员工的返工指令</summary>
+          ? html`<details ?open=${false} @toggle=${(e: Event) => (this._open = (e.target as HTMLDetailsElement).open)}>
+              <summary><doclens-icon name=${this._open ? "chevron-up" : "chevron-down"}></doclens-icon>查看发给员工的返工指令</summary>
               <pre>${this.rework.content}</pre>
             </details>`
           : null}
       </div>
     `;
-  }
-
-  /** 评审指令折叠块（无指令时不渲染） */
-  private _orderBlock() {
-    if (!this.order) return null;
-    return html`<details ?open=${false} @toggle=${(e: Event) => (this._open = (e.target as HTMLDetailsElement).open)}>
-        <summary><doclens-icon name=${this._open ? "chevron-up" : "chevron-down"}></doclens-icon>查看发给员工的评审指令</summary>
-        <pre>${this.order.content}</pre>
-      </details>`;
   }
 }
 
