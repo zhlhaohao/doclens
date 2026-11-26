@@ -77,8 +77,9 @@ export const chatViewStyles = [dialogCardStyles, css`
     font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle);
     background: var(--cortex-primary-soft);
     border-bottom: 1px solid var(--cortex-border-muted);
-    flex-shrink: 0;
-    flex-basis: 100%;
+    /* 不伸不缩按内容高：column 布局下 flex-basis 百分比会被解释为高度，
+       把消息区挤到 0（2026-11-26 手机端空白事故）；row 布局下靠 width 独占一行 */
+    flex: 0 0 auto;
     width: 100%;
   }
   /* 桌面有预览：focus-main 是 row 布局，员工条独占一行需换行 */
