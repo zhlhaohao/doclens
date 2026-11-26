@@ -59,6 +59,7 @@ function emptyForm(): FormState {
     max_iterations: 5,
     token_budget: 2000000,
     max_tool_rounds: 40,
+    review_tool_rounds: 15,
   };
 }
 
@@ -81,6 +82,7 @@ function toForm(e: Employee): FormState {
     max_iterations: e.max_iterations,
     token_budget: e.token_budget,
     max_tool_rounds: e.max_tool_rounds,
+    review_tool_rounds: e.review_tool_rounds,
   };
 }
 
@@ -320,7 +322,7 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
     const f = ed.form;
     const set = <K extends keyof FormState>(k: K) => (e: Event) => {
       const t = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-      const num = (k: string) => k === "score_threshold" || k === "max_iterations" || k === "token_budget" || k === "max_tool_rounds";
+      const num = (k: string) => k === "score_threshold" || k === "max_iterations" || k === "token_budget" || k === "max_tool_rounds" || k === "review_tool_rounds";
       this._set(k, (num(k) ? Number(t.value) : t.value) as FormState[K]);
     };
     const presetOptions = html`
@@ -433,8 +435,15 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
             <div class="hint">默认 200 万；80% 时在返工指令里预警员工尽快收尾。</div>
           </div>
           <div>
-            <div class="field-label">单回合工具调用上限（防一个回合内死循环；达到后强制终答；0 = 不限）</div>
+            <div class="field-label">工作回合工具调用上限（防死循环；达到后强制终答；0 = 不限）</div>
             <input class="input" type="number" min="0" .value=${String(f.max_tool_rounds)} @input=${set("max_tool_rounds")} />
+          </div>
+        </div>
+        <div class="grid2">
+          <div>
+            <div class="field-label">评审回合工具调用上限（抽查不是审计；达到后强制终答，只保留 submit_review；0 = 不限）</div>
+            <input class="input" type="number" min="0" .value=${String(f.review_tool_rounds)} @input=${set("review_tool_rounds")} />
+            <div class="hint">默认 15。真机教训：不设限时评审模型会把评审做成审计（29 次 bash、80 万 token）。</div>
           </div>
         </div>
 

@@ -20,6 +20,7 @@ export interface Employee {
   max_iterations: number;
   token_budget: number;
   max_tool_rounds: number;
+  review_tool_rounds: number;
   created_at: string;
   updated_at: string;
   /** 派生：模型预设已不存在（不可派活） */
