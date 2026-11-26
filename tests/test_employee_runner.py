@@ -58,7 +58,7 @@ def _emp(**over) -> dict:
         review_skill="rev-a", model_preset_id="p-work", review_model_presets=[],
         thinking_depth="auto", artifact_root="周报", template_path=None,
         review_criteria="三节齐全", score_threshold=90, max_iterations=3,
-        token_budget=0, max_tool_rounds=0, created_at="t", updated_at="t",
+        token_budget=0, max_tool_rounds=0, review_tool_rounds=0, created_at="t", updated_at="t",
     )
     base.update(over)
     return base
@@ -76,7 +76,7 @@ def _skill_names_in(loader) -> list[str]:
 
 
 def _fake_world(tmp_path: Path, monkeypatch, *, score_plan: list, usage_per_turn: int = 0,
-                review_submits: bool = True):
+                review_submits: bool = True, session_id: str = "sess-test"):
     """装配 _loop 需要的最小依赖。
 
     FakeSA：按 user 消息类型区分回合——
@@ -86,7 +86,7 @@ def _fake_world(tmp_path: Path, monkeypatch, *, score_plan: list, usage_per_turn
     usage_per_turn：每个回合模拟的 token 消耗。
     """
     workdir = tmp_path / "kb"
-    workdir.mkdir(exist_ok=True)
+    workdir.mkdir(parents=True, exist_ok=True)
     store = _store(tmp_path)
     _mk_internal_skills(tmp_path, "work-a", "rev-a")
     loader = er.internal_skill_loader()
@@ -128,6 +128,8 @@ def _fake_world(tmp_path: Path, monkeypatch, *, score_plan: list, usage_per_turn
                     "work" if message.startswith(("<assignment", "<rework-order")) else "other")
             seen["turns"].append({
                 "kind": kind, "model": self.kwargs["model"],
+                "keep_on_force": self.kwargs["config"].force_answer_keep_tools,
+                "force_rounds": self.kwargs["config"].force_answer_rounds,
                 "tools": sorted(t["name"] for t in self.kwargs["tools"]),
                 "has_submit": "submit_review" in self.kwargs["tool_handlers"],
                 "skills": _skill_names_in(self.kwargs["skills_loader"]) if self.kwargs["skills_loader"] else [],
@@ -178,10 +180,10 @@ def _fake_world(tmp_path: Path, monkeypatch, *, score_plan: list, usage_per_turn
     artifact_dir = workdir / "周报" / "20260101-任务"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     state = er.AssignmentState(
-        session_id="sess-test", employee_id="e1", employee_name="tom",
+        session_id=session_id, employee_id="e1", employee_name="tom",
         artifact_dir=artifact_dir, started_at="now",
     )
-    store.create(SessionSummary(id="sess-test", type=SessionType.CHAT, title="t", preview="",
+    store.create(SessionSummary(id=session_id, type=SessionType.CHAT, title="t", preview="",
                                 mode=er.SESSION_MODE, created_at=_now(), updated_at=_now()))
     return SimpleNamespace(store=store, state=state, artifact_dir=artifact_dir, workdir=workdir, seen=seen)
 
@@ -200,7 +202,7 @@ def _events(store, sid, kind):
 CFG = dict(model_preset_id="p-work", review_model_presets=[], thinking_depth="auto",
            score_threshold=90, max_iterations=3, review_criteria="三节齐全",
            tools_allow=[], tools_deny=[], skills_allow=["work-a"], review_skill="rev-a",
-           token_budget=0, max_tool_rounds=0)
+           token_budget=0, max_tool_rounds=0, review_tool_rounds=0)
 
 
 # ---------------------------------------------------------------------------
@@ -283,6 +285,9 @@ def test_build_brief_rework_review_order():
     vo = er.build_review_order("rev-a", Path("/k/a"), "写周报", "三节齐全", 90)
     assert vo.startswith('<review-order skill="rev-a" threshold="90">')
     assert "load_skill" in vo and "submit_review" in vo and "三节齐全" in vo and "/k/a" in vo
+    assert "工具调用上限" not in vo                       # 0 = 不明示
+    vo2 = er.build_review_order("rev-a", Path("/k/a"), "写周报", "三节齐全", 90, tool_rounds=15)
+    assert "最多 15 次工具调用" in vo2 and "抽查不是审计" in vo2
     assert er.build_budget_warning(850_000, 1_000_000).startswith("⚠️ 预算已用 85%")
 
 
@@ -373,6 +378,13 @@ def test_loop_passes_on_second_iteration(tmp_path, monkeypatch):
     for t in w.seen["turns"]:
         assert "load_skill" in t["tools"] and t["skills"] == ["rev-a", "work-a"]
         assert t["has_submit"] == (t["kind"] == "review")
+    # 评审回合用独立上限，且强制终答时保留 submit_review（否则模型到上限无法交卷）
+    w2 = _fake_world(tmp_path / "second", monkeypatch, score_plan=[95], usage_per_turn=0, session_id="sess-2")
+    asyncio.run(_run_loop(w2, {**CFG, "max_tool_rounds": 40, "review_tool_rounds": 15}))
+    rt = [t for t in w2.seen["turns"] if t["kind"] == "review"][0]
+    wt = [t for t in w2.seen["turns"] if t["kind"] == "work"][0]
+    assert rt["force_rounds"] == 15 and rt["keep_on_force"] == ("submit_review",)
+    assert wt["force_rounds"] == 40 and wt["keep_on_force"] is None
     # 消息流：brief、评审指令、返工指令（评审指令以 user 消息落库）
     users = [json.loads(i.payload)["content"] for i in w.store.get_detail("sess-test") if i.kind == "message_user"]
     assert users[0].startswith("<assignment>") and users[1].startswith("<review-order") and users[2].startswith("<rework-order")

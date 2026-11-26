@@ -37,6 +37,8 @@ DEFAULT_MAX_ITERATIONS = 5
 DEFAULT_TOKEN_BUDGET = 2_000_000
 #: 单回合工具调用上限（防一个回合内死循环）
 DEFAULT_MAX_TOOL_ROUNDS = 40
+#: 评审回合的工具调用上限——评审是抽查不是审计，比工作回合更紧
+DEFAULT_REVIEW_TOOL_ROUNDS = 15
 
 
 class EmployeeBase(BaseModel):
@@ -101,7 +103,11 @@ class EmployeeBase(BaseModel):
     )
     max_tool_rounds: int = Field(
         default=DEFAULT_MAX_TOOL_ROUNDS, ge=0,
-        description="单回合工具调用上限；达到后强制终答；0 = 不限",
+        description="工作回合工具调用上限；达到后强制终答；0 = 不限",
+    )
+    review_tool_rounds: int = Field(
+        default=DEFAULT_REVIEW_TOOL_ROUNDS, ge=0,
+        description="评审回合工具调用上限（抽查不是审计）；达到后强制终答；0 = 不限",
     )
 
 
@@ -138,6 +144,7 @@ class EmployeeUpdate(BaseModel):
     max_iterations: Optional[int] = Field(default=None, ge=1, le=50)
     token_budget: Optional[int] = Field(default=None, ge=0)
     max_tool_rounds: Optional[int] = Field(default=None, ge=0)
+    review_tool_rounds: Optional[int] = Field(default=None, ge=0)
 
 
 class Employee(EmployeeBase):

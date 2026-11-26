@@ -265,8 +265,19 @@ REVIEW_TOOL_SCHEMA = {
 
 
 def build_review_order(skill: str, artifact_dir: Path, task: str, criteria: str,
-                       threshold: int) -> str:
-    """评审指令：以用户消息形态落库（带标签），驱动评审回合。"""
+                       threshold: int, tool_rounds: int = 0) -> str:
+    """评审指令：以用户消息形态落库（带标签），驱动评审回合。
+
+    ``tool_rounds`` > 0 时在指令里明示本回合的工具调用上限——让模型据此规划
+    （把调用留给核实、尽早提交），并在评审 agent 上以 force_answer_rounds 强制执行。
+    真机教训（2026-11-26）：评审模型把「抽查」做成「审计」，29 次 bash 仍未提交，
+    上限不明示时模型不会自己收敛。
+    """
+    cap = (
+        f"工具调用上限：本评审回合最多 {tool_rounds} 次工具调用（达到即强制结束，"
+        "届时未调用 submit_review 视为评审失败）——请把调用留给核实，**尽早调用 submit_review 提交结果**。\n"
+        if tool_rounds else ""
+    )
     return (
         f"<{REVIEW_ORDER_TAG} skill=\"{skill}\" threshold=\"{threshold}\">\n"
         "请使用评审技能评审本次产物：\n"
@@ -276,7 +287,9 @@ def build_review_order(skill: str, artifact_dir: Path, task: str, criteria: str,
         f"- 评审标准：{criteria.strip()}\n"
         f"- 通过阈值：{threshold} 分\n"
         "要求：用工具核实，不凭印象；每条意见指向具体位置。不要修改被评审的交付物。"
+        "**这是抽查不是审计**：核实 2–4 处即可，不要逐条核对每个数字。\n"
         "分析完成后**调用 submit_review 提交结果**——这是评审回合唯一被接受的结束方式。\n"
+        f"{cap}"
         f"</{REVIEW_ORDER_TAG}>"
     )
 
@@ -606,7 +619,8 @@ def _check_internal_skills(cfg: dict, loader) -> None:
 
 async def _run_turn(store, session_id: str, message: str, *, runtime, workdir: Path, provider,
                     model: str, tools: list, handlers: dict, skills_loader, system_extra: str,
-                    interrupt, tracer, max_tool_rounds: int) -> Any:
+                    interrupt, tracer, max_tool_rounds: int,
+                    keep_tools_on_force: tuple = ()) -> Any:
     """跑一个回合（工作或评审通用）并落库。返回 (RoundOutcome, emitter)。"""
     from planify.streaming.runner import StreamingAgent
     from planify.streaming.types import StreamingConfig
@@ -625,6 +639,8 @@ async def _run_turn(store, session_id: str, message: str, *, runtime, workdir: P
     kw = {}
     if max_tool_rounds:
         kw["force_answer_rounds"] = max_tool_rounds
+        if keep_tools_on_force:
+            kw["force_answer_keep_tools"] = tuple(keep_tools_on_force)
     sa = StreamingAgent(
         client=provider, model=model, tools=tools, tool_handlers=handlers, emitter=emitter,
         config=StreamingConfig(
@@ -704,6 +720,7 @@ async def _loop(state: AssignmentState, cfg: dict, task: str, first_message: str
     max_iter = int(cfg.get("max_iterations") or 5)
     budget = int(cfg.get("token_budget") or 0)
     max_rounds = int(cfg.get("max_tool_rounds") or 0)
+    review_rounds = int(cfg.get("review_tool_rounds") or 0)
     criteria = cfg.get("review_criteria") or ""
     review_skill = cfg.get("review_skill") or ""
     artifact_dir = state.artifact_dir
@@ -790,13 +807,15 @@ async def _loop(state: AssignmentState, cfg: dict, task: str, first_message: str
                         break
                     except Exception as e:  # noqa: BLE001
                         logger.warning("review preset %s unusable: %s", pid, e)
-            order = build_review_order(review_skill, artifact_dir, task, criteria, threshold)
+            order = build_review_order(review_skill, artifact_dir, task, criteria, threshold,
+                                       review_rounds)
             store.ensure_message_user(session_id, order)
             review_outcome, review_emitter = await _run_turn(
                 store, session_id, order, runtime=runtime, workdir=workdir,
                 provider=review_provider, model=review_model, tools=review_tools,
                 handlers=review_handlers, skills_loader=loader, system_extra=system_extra,
-                interrupt=interrupt, tracer=tracer, max_tool_rounds=max_rounds,
+                interrupt=interrupt, tracer=tracer, max_tool_rounds=review_rounds,
+                keep_tools_on_force=("submit_review",),
             )
             spent += sum_usage(review_emitter.usages)
             if interrupt.is_set():
