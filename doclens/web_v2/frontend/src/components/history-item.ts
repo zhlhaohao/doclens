@@ -236,6 +236,7 @@ export class HistoryItem extends LitElement {
     else if (outcome === "passed") st = { text: `✓ ${a?.score ?? ""}`.trim(), cls: "passed", title: "已达标" };
     else if (outcome === "exhausted") st = { text: `未达标 ${a?.score ?? ""}`.trim(), cls: "warn", title: "轮数耗尽，未达标" };
     else if (outcome === "review_failed") st = { text: "评审失败", cls: "failed", title: "评审失败" };
+    else if (outcome === "budget_exhausted") st = { text: "预算耗尽", cls: "warn", title: "token 预算耗尽，已终止" };
     else if (outcome === "stopped") st = { text: "已停止", cls: "warn", title: "用户停止" };
     else st = { text: "已中断", cls: "warn", title: "进程重启时仍在进行，已中断" };
     return html`<span class="emp-tag" title=${st.title}><doclens-icon name="user-round"></doclens-icon><span class="st ${st.cls}">${st.text}</span></span>`;

@@ -53,6 +53,16 @@ export class ReviewCard extends LitElement {
     li { font-size: var(--cortex-fs-sm); color: var(--cortex-text); line-height: 1.6; margin: 2px 0; }
     .sug li { color: var(--cortex-text-muted); }
     .err { margin-top: var(--cortex-space-2); font-size: var(--cortex-fs-xs); color: var(--cortex-danger); }
+    .checks {
+      margin-top: var(--cortex-space-3); display: flex; flex-direction: column; gap: 2px;
+      font-size: var(--cortex-fs-xs);
+    }
+    .check-row { display: flex; align-items: center; gap: 6px; color: var(--cortex-text-muted); }
+    .check-row doclens-icon { font-size: 13px; flex-shrink: 0; }
+    .check-row.ok doclens-icon { color: var(--cortex-success-ink); }
+    .check-row.bad doclens-icon { color: var(--cortex-danger); }
+    .check-name { font-weight: 600; color: var(--cortex-text); flex-shrink: 0; }
+    .check-val { font-family: var(--cortex-font-mono); overflow-wrap: anywhere; }
     details {
       margin-top: var(--cortex-space-3); font-size: var(--cortex-fs-xs);
     }
@@ -106,6 +116,16 @@ export class ReviewCard extends LitElement {
           ? html`<ul class="sug">${r.suggestions.map((s) => html`<li>${s}</li>`)}</ul>`
           : null}
         ${r.error ? html`<div class="err">${r.error}</div>` : null}
+        ${r.checks?.length
+          ? html`<div class="checks">
+              ${r.checks.map((c) => html`
+                <div class="check-row ${c.pass ? "ok" : "bad"}">
+                  <doclens-icon name=${c.pass ? "circle-check" : "circle-x"}></doclens-icon>
+                  <span class="check-name">${c.name}</span>
+                  ${c.value ? html`<span class="check-val">${c.value}</span>` : null}
+                </div>`)}
+            </div>`
+          : null}
         ${this.rework
           ? html`<details ?open=${false} @toggle=${(e: Event) => (this._open = (e.target as HTMLDetailsElement).open)}>
               <summary><doclens-icon name=${this._open ? "chevron-up" : "chevron-down"}></doclens-icon>查看发给员工的返工指令</summary>

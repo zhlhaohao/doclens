@@ -8,6 +8,10 @@
  */
 import { LitElement, html, css, nothing } from "lit";
 
+function f0(n: number): string {
+  return n ? n.toLocaleString() : "不限";
+}
+
 function errMsg(e: unknown, fallback: string): string {
   if (e instanceof ApiError) return e.message || fallback;
   return (e as Error)?.message || fallback;
@@ -44,14 +48,17 @@ function emptyForm(): FormState {
     tools_allow: ["read_file", "grep", "glob", "write_file", "edit_file", "search_kb", "read_document", "file_info", "kb_grep"],
     tools_deny: [],
     skills_allow: [],
+    review_skill: "",
     model_preset_id: "",
-    review_model_preset_id: null,
+    review_model_presets: [],
     thinking_depth: "auto",
     artifact_root: "数字员工/产物",
     template_path: null,
     review_criteria: "产物完整、准确、符合任务要求；结构清晰、可直接使用。",
     score_threshold: 90,
     max_iterations: 5,
+    token_budget: 2000000,
+    max_tool_rounds: 40,
   };
 }
 
@@ -63,14 +70,17 @@ function toForm(e: Employee): FormState {
     tools_allow: [...e.tools_allow],
     tools_deny: [...e.tools_deny],
     skills_allow: [...e.skills_allow],
+    review_skill: e.review_skill,
     model_preset_id: e.model_preset_id,
-    review_model_preset_id: e.review_model_preset_id,
+    review_model_presets: [...e.review_model_presets],
     thinking_depth: e.thinking_depth,
     artifact_root: e.artifact_root,
     template_path: e.template_path,
     review_criteria: e.review_criteria,
     score_threshold: e.score_threshold,
     max_iterations: e.max_iterations,
+    token_budget: e.token_budget,
+    max_tool_rounds: e.max_tool_rounds,
   };
 }
 
@@ -190,6 +200,7 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
     if (!f.name.trim()) { this._formError = "请填写员工名"; return; }
     if (!f.prompt.trim()) { this._formError = "请填写专属提示词"; return; }
     if (!f.model_preset_id) { this._formError = "请选择工作模型预设"; return; }
+    if (!f.review_skill) { this._formError = "请选择评审技能"; return; }
     if (!f.artifact_root.trim()) { this._formError = "请填写产物路径"; return; }
     if (!f.review_criteria.trim()) { this._formError = "请填写评审标准"; return; }
     this._busy = true;
@@ -239,13 +250,15 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
           <div class="emp-name">
             ${e.name}
             <span class="badge neutral">工作 ${this._presetName(e.model_preset_id)}</span>
-            ${e.review_model_preset_id ? html`<span class="badge neutral">评审 ${this._presetName(e.review_model_preset_id)}</span>` : nothing}
+            <span class="badge neutral">评审 ${e.review_model_presets.length ? e.review_model_presets.map((id) => this._presetName(id)).join(" › ") : "工作模型"}</span>
+            ${e.skills_missing.length ? html`<span class="badge danger">内部技能缺失：${e.skills_missing.join(", ")}</span>` : nothing}
           </div>
           <div class="emp-desc">${e.description || "（无描述）"}</div>
-          <div class="emp-meta">产物 ${e.artifact_root} · 阈值 ${e.score_threshold} · 最多 ${e.max_iterations} 轮 · 技能 ${e.skills_allow.length} 个</div>
+          <div class="emp-meta">产物 ${e.artifact_root} · 阈值 ${e.score_threshold} · 最多 ${e.max_iterations} 轮 · 预算 ${f0(e.token_budget)} token · 评审技能 ${e.review_skill}</div>
           ${e.model_missing || e.review_model_missing
             ? html`<div class="emp-warn">模型预设缺失，暂不可派活——请编辑改配</div>`
             : nothing}
+          ${e.skills_missing.length ? html`<div class="emp-warn">内部技能不存在：${e.skills_missing.join(", ")}——暂不可派活</div>` : nothing}
         </div>
         <div class="row-actions">
           <button class="icon-btn" ?disabled=${this._busy} @click=${() => this._openEdit(e)}>编辑</button>
@@ -284,16 +297,18 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
     `;
   }
 
-  private _renderSkillChecks(list: string[]) {
+  private _renderSkillChecks(list: string[], key: "skills_allow") {
     const skills = this._skills;
-    if (skills === null) return html`<div class="hint">技能目录加载中…</div>`;
-    if (skills.length === 0) return html`<div class="hint">无可用技能</div>`;
+    if (skills === null) return html`<div class="hint">内部技能目录加载中…</div>`;
+    if (skills.length === 0) {
+      return html`<div class="hint">内部技能库为空。把 SKILL.md 放到 <code>~/.doclens/employee_skills/&lt;技能名&gt;/</code>（发行版；开发版 <code>~/.cortex/</code>）后刷新本页。</div>`;
+    }
     return html`
       <div class="checks">
         ${skills.map((s) => html`
           <label class="check" title=${s.description || s.name}>
             <input type="checkbox" .checked=${list.includes(s.name)}
-                   @change=${() => this._set("skills_allow", this._toggleIn(list, s.name))} />
+                   @change=${() => this._set(key, this._toggleIn(list, s.name))} />
             ${s.name}
           </label>`)}
       </div>`;
@@ -305,7 +320,7 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
     const f = ed.form;
     const set = <K extends keyof FormState>(k: K) => (e: Event) => {
       const t = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-      const num = (k: string) => k === "score_threshold" || k === "max_iterations";
+      const num = (k: string) => k === "score_threshold" || k === "max_iterations" || k === "token_budget" || k === "max_tool_rounds";
       this._set(k, (num(k) ? Number(t.value) : t.value) as FormState[K]);
     };
     const presetOptions = html`
@@ -334,8 +349,8 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
 
         <div class="section-title">能力</div>
         <div>
-          <div class="field-label">技能白名单（派活开始时预加载；白名单外技能对员工不可见）</div>
-          ${this._renderSkillChecks(f.skills_allow)}
+          <div class="field-label">工作技能白名单（内部技能库；员工在回合里按需 load_skill；白名单外技能不可加载）</div>
+          ${this._renderSkillChecks(f.skills_allow, "skills_allow")}
         </div>
         <div>
           <div class="field-label">工具白名单（空 = 全部可用，再减去黑名单与禁用工具）</div>
@@ -353,11 +368,12 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
             <select class="select" .value=${f.model_preset_id} @change=${set("model_preset_id")}>${presetOptions}</select>
           </div>
           <div>
-            <div class="field-label">评审模型预设（空 = 工作模型自评）</div>
-            <select class="select" .value=${f.review_model_preset_id ?? ""} @change=${(e: Event) => this._set("review_model_preset_id", ((e.target as HTMLSelectElement).value || null))}>
-              <option value="">（由工作模型自评）</option>
-              ${this._presets.map((p) => html`<option value=${p.id} ?selected=${p.id === f.review_model_preset_id}>${p.name} · ${p.model_id ?? ""}</option>`)}
+            <div class="field-label">评审技能（内部技能库，必填）</div>
+            <select class="select" .value=${f.review_skill} @change=${set("review_skill")}>
+              <option value="">（请选择）</option>
+              ${(this._skills ?? []).map((sk) => html`<option value=${sk.name} ?selected=${sk.name === f.review_skill} title=${sk.description}>${sk.name}</option>`)}
             </select>
+            <div class="hint">评审回合由员工加载该技能评审产物；引用的技能不存在则派活失败。</div>
           </div>
           <div>
             <div class="field-label">思考深度</div>
@@ -365,6 +381,20 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
               ${THINKING_OPTIONS.map((o) => html`<option value=${o.value} ?selected=${o.value === f.thinking_depth}>${o.label}</option>`)}
             </select>
           </div>
+        </div>
+        <div>
+          <div class="field-label">评审模型有序清单（按序尝试，首个不可用顺延；留空 = 用工作模型评审）</div>
+          <div class="checks">
+            ${this._presets.map((p) => html`
+              <label class="check" title=${p.model_id ?? ""}>
+                <input type="checkbox" .checked=${f.review_model_presets.includes(p.id)}
+                       @change=${() => this._set("review_model_presets", this._toggleIn(f.review_model_presets, p.id))} />
+                ${p.name}
+              </label>`)}
+          </div>
+          ${f.review_model_presets.length
+            ? html`<div class="hint">顺序：${f.review_model_presets.map((id) => this._presetName(id)).join(" › ")}</div>`
+            : html`<div class="hint">当前：用工作模型评审</div>`}
         </div>
 
         <div class="section-title">产物</div>
@@ -391,8 +421,20 @@ export class EmployeesSection extends ToastFlashMixin(LitElement) {
             <input class="input" type="number" min="0" max="100" .value=${String(f.score_threshold)} @input=${set("score_threshold")} />
           </div>
           <div>
-            <div class="field-label">最大迭代数（工作回合 + 评审 = 1 轮）</div>
+            <div class="field-label">最大迭代数（工作回合 + 评审回合 = 1 轮）</div>
             <input class="input" type="number" min="1" max="50" .value=${String(f.max_iterations)} @input=${set("max_iterations")} />
+          </div>
+        </div>
+        <div class="section-title">停止条件</div>
+        <div class="grid2">
+          <div>
+            <div class="field-label">消耗预算（token；工作 + 评审回合全算；超出即终止；0 = 不限）</div>
+            <input class="input" type="number" min="0" step="100000" .value=${String(f.token_budget)} @input=${set("token_budget")} />
+            <div class="hint">默认 200 万；80% 时在返工指令里预警员工尽快收尾。</div>
+          </div>
+          <div>
+            <div class="field-label">单回合工具调用上限（防一个回合内死循环；达到后强制终答；0 = 不限）</div>
+            <input class="input" type="number" min="0" .value=${String(f.max_tool_rounds)} @input=${set("max_tool_rounds")} />
           </div>
         </div>
 

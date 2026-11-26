@@ -107,7 +107,7 @@ export interface Session {
   assignment?: { outcome: AssignmentOutcome | null; score: number | null; iterations: number };
 }
 
-export type AssignmentOutcome = "passed" | "exhausted" | "review_failed" | "stopped" | "interrupted";
+export type AssignmentOutcome = "passed" | "exhausted" | "review_failed" | "stopped" | "interrupted" | "budget_exhausted";
 
 export interface SearchViewState {
   state: FocusState;

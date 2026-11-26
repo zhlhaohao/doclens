@@ -9,22 +9,26 @@ export interface Employee {
   tools_allow: string[];
   tools_deny: string[];
   skills_allow: string[];
+  review_skill: string;
   model_preset_id: string;
-  review_model_preset_id: string | null;
+  review_model_presets: string[];
   thinking_depth: "auto" | "off" | "low" | "medium" | "high";
   artifact_root: string;
   template_path: string | null;
   review_criteria: string;
   score_threshold: number;
   max_iterations: number;
+  token_budget: number;
+  max_tool_rounds: number;
   created_at: string;
   updated_at: string;
   /** 派生：模型预设已不存在（不可派活） */
   model_missing: boolean;
   review_model_missing: boolean;
+  skills_missing: string[];
 }
 
-export type EmployeeInput = Omit<Employee, "id" | "created_at" | "updated_at" | "model_missing" | "review_model_missing">;
+export type EmployeeInput = Omit<Employee, "id" | "created_at" | "updated_at" | "model_missing" | "review_model_missing" | "skills_missing">;
 
 export interface ToolCatalogItem {
   name: string;
@@ -100,10 +104,11 @@ export interface ReviewEvent {
   issues: string[];
   suggestions: string[];
   summary: string;
+  checks: { name: string; value: string; pass: boolean }[];
   error: string;
 }
 
-export type AssignmentOutcome = "passed" | "exhausted" | "review_failed" | "stopped" | "interrupted";
+export type AssignmentOutcome = "passed" | "exhausted" | "review_failed" | "stopped" | "interrupted" | "budget_exhausted";
 
 export interface AssignmentStartEvent {
   employee_id: string;

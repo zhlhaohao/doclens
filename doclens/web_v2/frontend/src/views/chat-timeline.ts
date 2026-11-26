@@ -38,6 +38,7 @@ export interface ReviewNode {
 }
 
 export const REWORK_ORDER_TAG = "rework-order";
+export const REVIEW_ORDER_TAG = "review-order";
 export const ASSIGNMENT_TAG = "assignment";
 
 interface RawItem {
@@ -50,6 +51,10 @@ interface RawItem {
 /** 用户消息是否为返工指令（评审意见代发，形态是 user 消息但不是真人说的）。 */
 export function isReworkOrder(content: string): boolean {
   return content.startsWith(`<${REWORK_ORDER_TAG}`);
+}
+/** 用户消息是否为评审指令（宿主代发，驱动评审回合）。 */
+export function isReviewOrder(content: string): boolean {
+  return content.startsWith(`<${REVIEW_ORDER_TAG}`);
 }
 /** 用户消息是否为派活说明（首条：系统段 + 一句话任务）。 */
 export function isAssignmentBrief(content: string): boolean {
@@ -118,6 +123,7 @@ export function buildChatTimeline(items: RawItem[]): {
   messages: ChatMessage[];
   dividers: RewindDivider[];
   reviews: ReviewNode[];
+  reviewOrders: ChatMessage[];
 } {
   // 边界区间（按 boundary seq 升序，与 items 顺序一致）
   const intervals: Array<{ point: number; boundary: number }> = [];
@@ -144,6 +150,8 @@ export function buildChatTimeline(items: RawItem[]): {
   // 评审卡（数字员工）：review 条目 → ReviewNode；其后首条返工指令
   // （<rework-order> user 消息）并入该卡的 rework 字段，不再作为独立气泡
   const reviews: ReviewNode[] = [];
+  // 评审指令（<review-order> user 消息）：从消息流摘出，由宿主并入其评审卡
+  const reviewOrders: ChatMessage[] = [];
   for (const it of items) {
     if (it.kind === "review" && typeof it.seq === "number") {
       try {
@@ -163,6 +171,10 @@ export function buildChatTimeline(items: RawItem[]): {
       buckets[owner].push(msg);
       continue;
     }
+    if (msg.role === "user" && isReviewOrder(msg.content)) {
+      reviewOrders.push(msg);
+      continue;
+    }
     const lastReview = reviews.length ? reviews[reviews.length - 1] : null;
     if (
       lastReview && lastReview.rework === null && msg.role === "user" &&
@@ -178,7 +190,7 @@ export function buildChatTimeline(items: RawItem[]): {
     boundarySeq: iv.boundary,
     dead: buckets[i],
   }));
-  return { messages, dividers, reviews };
+  return { messages, dividers, reviews, reviewOrders };
 }
 
 /** 折叠条 × 评审卡 × 消息数组 → 渲染节点序列：折叠条/评审卡插在首条
