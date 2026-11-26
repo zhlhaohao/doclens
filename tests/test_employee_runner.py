@@ -1,18 +1,18 @@
-"""数字员工：存储层 + 派活纯函数 + 派活循环状态机（ADR-0062/0063）。
+"""数字员工：存储层 + 派活纯函数 + 派活循环状态机（ADR-0062/0063/0065）。
 
 三层：
-1. employees_store CRUD（临时目录隔离）；
-2. employee_runner 纯函数：工具授权、提示词拼装、产物清单 / 无产物预检 /
-   评审材料预算、评审结果解析、写入边界、工具目录；
-3. _loop 状态机：用 FakeProvider 跑真实的后台循环（不碰 LLM / 网络），
-   覆盖达标 / 轮数耗尽 / 无产物预检 / 评审失败 / 用户停止 五种结局与
-   状态留档条目、重启补记中断。
+1. employees_store CRUD（临时目录隔离；内部技能缺失派生标记）；
+2. employee_runner 纯函数：工具授权、提示词拼装、评审指令 / 返工指令 / 预算预警、
+   submit_review 入参解析、load_skill 白名单 handler、写入边界、工具目录；
+3. _loop 状态机：FakeSA 区分工作/评审回合（评审回合调 submit_review handler），
+   覆盖达标 / 轮数耗尽 / 评审失败（未提交 / 工作回合失败）/ 预算耗尽 / 用户停止
+   五种结局与状态留档条目、重启补记中断。
 """
 from __future__ import annotations
 
 import asyncio
 import json
-import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,8 +21,7 @@ import pytest
 from doclens.web_v2 import employee_runner as er
 from doclens.web_v2 import employees_store as es
 from doclens.web_v2.models.employee import EmployeeCreate, EmployeeUpdate
-from doclens.web_v2.sessions_store import SessionItem, SessionsStore, SessionSummary, SessionType
-from planify.core.llm.types import ToolUseBlock
+from doclens.web_v2.sessions_store import SessionsStore, SessionSummary, SessionType
 
 
 # ---------------------------------------------------------------------------
@@ -33,17 +32,33 @@ from planify.core.llm.types import ToolUseBlock
 @pytest.fixture(autouse=True)
 def _isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(es, "get_global_cortex_dir", lambda: Path(tmp_path) / "global")
-    es._LOCK.acquire() and es._LOCK.release()
+    er._active.clear()
     yield
+    er._active.clear()
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def _mk_internal_skills(tmp_path: Path, *names: str) -> None:
+    root = tmp_path / "global" / "employee_skills"
+    for n in names:
+        d = root / n
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "SKILL.md").write_text(
+            f"---\nname: {n}\ndescription: {n} 技能\n---\n\n# {n}\n正文", encoding="utf-8",
+        )
 
 
 def _emp(**over) -> dict:
     base = dict(
-        id="e1", name="tom", description="调研员",
-        prompt="你是调研员。", tools_allow=[], tools_deny=[], skills_allow=[],
-        model_preset_id="p-work", review_model_preset_id=None, thinking_depth="auto",
-        artifact_root="调研", template_path=None, review_criteria="有来源、结构清楚",
-        score_threshold=90, max_iterations=3, created_at="t", updated_at="t",
+        id="e1", name="tom", description="周报撰写员",
+        prompt="你是周报撰写员。", tools_allow=[], tools_deny=[], skills_allow=["work-a"],
+        review_skill="rev-a", model_preset_id="p-work", review_model_presets=[],
+        thinking_depth="auto", artifact_root="周报", template_path=None,
+        review_criteria="三节齐全", score_threshold=90, max_iterations=3,
+        token_budget=0, max_tool_rounds=0, created_at="t", updated_at="t",
     )
     base.update(over)
     return base
@@ -53,71 +68,96 @@ def _store(tmp_path: Path) -> SessionsStore:
     return SessionsStore(tmp_path / "sessions.db")
 
 
-def _fake_world(tmp_path: Path, monkeypatch, *, score_plan: list[int], preset_cw: int = 128_000):
-    """装配 _loop 需要的最小依赖：agent/runtime/store/provider。
+def _skill_names_in(loader) -> list[str]:
+    """从 descriptions() 文本里解析技能名（行形如 ``  - name: desc``）。"""
+    import re as _re
 
-    score_plan：每次评审返回的分数（超出后重复最后一个）。评审模型直接被
-    替换为 FakeReviewer（不解析 LLM 文本，直接给 ReviewResult）。
+    return sorted(_re.findall(r"^\s*-\s+([^\s:]+):", loader.descriptions(), flags=_re.M))
+
+
+def _fake_world(tmp_path: Path, monkeypatch, *, score_plan: list, usage_per_turn: int = 0,
+                review_submits: bool = True):
+    """装配 _loop 需要的最小依赖。
+
+    FakeSA：按 user 消息类型区分回合——
+    - 首条（<assignment>）与 <rework-order> → 工作回合：追加 assistant 文本
+    - <review-order> → 评审回合：调 handlers["submit_review"]（按 score_plan），
+      review_submits=False 时模拟「忘了调」只输出文字
+    usage_per_turn：每个回合模拟的 token 消耗。
     """
     workdir = tmp_path / "kb"
     workdir.mkdir(exist_ok=True)
     store = _store(tmp_path)
-
-    class _Skills:
-        skills: dict = {}
-
-        def load(self, name):
-            return f"Error: Unknown skill '{name}'."
+    _mk_internal_skills(tmp_path, "work-a", "rev-a")
+    loader = er.internal_skill_loader()
+    assert loader is not None and set(loader.skills) == {"work-a", "rev-a"}
 
     runtime = SimpleNamespace(
         tools=[{"name": n} for n in ("read_file", "write_file", "edit_file", "grep", "bash",
                                      "ask_user_question", "task", "load_skill", "mcp__x__y")],
-        tool_handlers={n: (lambda *a, **k: "ok") for n in
-                       ("read_file", "write_file", "edit_file", "grep", "bash", "ask_user_question",
-                        "task", "load_skill", "mcp__x__y")},
-        skills=_Skills(),
-        logger=None,
+        tool_handlers={
+            n: (lambda *a, **k: "ok") for n in
+            ("read_file", "write_file", "edit_file", "grep", "bash", "ask_user_question", "task", "mcp__x__y")
+        },
+        skills=None, logger=None,
         config=SimpleNamespace(planify_context_window=128_000, planify_max_tokens=4000),
     )
     agent = SimpleNamespace(runtime=runtime, workdir=str(workdir))
     monkeypatch.setattr("doclens.web_v2.deps.get_agent", lambda: agent)
     monkeypatch.setattr("doclens.web_v2.deps.get_sessions_store", lambda: store)
     monkeypatch.setattr(er, "_preset_or_none", lambda pid: {
-        "protocol": "openai_compat", "base_url": "https://x", "model_id": "m", "api_key": "k",
-        "context_window": preset_cw, "vision": False,
+        "protocol": "openai_compat", "base_url": "https://x", "model_id": f"m-{pid}", "api_key": "k",
+        "context_window": 128_000, "vision": False,
     } if pid else None)
-    monkeypatch.setattr(er, "_make_provider", lambda preset, depth: object())
-
-    calls = {"review": 0, "rounds": 0}
+    monkeypatch.setattr(er, "_make_provider", lambda preset, depth: SimpleNamespace(model=preset["model_id"]))
+    seen = {"turns": [], "review_idx": 0}
 
     class _FakeSA:
-        """替身 StreamingAgent：写一个产物文件并记录；可被 interrupt 打断。"""
-
         def __init__(self, **kw):
             self.kwargs = kw
             self.round_start_index = 0
             self.last_compaction = None
             self.round_cleared_tool_use_ids = None
-            self._n = calls["rounds"]
-            calls["rounds"] += 1
 
         async def run_stream(self, history, message, session_id, images=None):
-            await asyncio.sleep(0.01)   # 让出控制权（interrupt 可在此间被 set）
-            if self.kwargs["interrupt_event"].is_set():
+            ev = self.kwargs["interrupt_event"]
+            await asyncio.sleep(0.005)
+            if ev.is_set():
                 return
-            # 第 1 轮不写文件（触发无产物预检），之后每轮写一个产物
-            if self._n >= 1:
-                (artifact_dir / "报告.md").write_text(f"# 报告 v{self._n}\n内容", encoding="utf-8")
+            kind = ("review" if message.startswith("<review-order") else
+                    "work" if message.startswith(("<assignment", "<rework-order")) else "other")
+            seen["turns"].append({
+                "kind": kind, "model": self.kwargs["model"],
+                "tools": sorted(t["name"] for t in self.kwargs["tools"]),
+                "has_submit": "submit_review" in self.kwargs["tool_handlers"],
+                "skills": _skill_names_in(self.kwargs["skills_loader"]) if self.kwargs["skills_loader"] else [],
+            })
             history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": f"完成（第{self._n + 1}轮）"})
+            text = f"完成（{kind}）"
+            if kind == "review":
+                h = self.kwargs["tool_handlers"].get("submit_review")
+                if h is not None and review_submits:
+                    if seen["review_idx"] < len(score_plan):
+                        s = score_plan[seen["review_idx"]]
+                    else:
+                        s = score_plan[-1]
+                    seen["review_idx"] += 1
+                    if s is None:
+                        h(score=0, issues=["评审内部错误"])  # 提交但分数无效 → 不会发生；None 用于「未提交」场景见下
+                    else:
+                        h(score=s, passed=s >= 90, issues=["补来源"] if s < 90 else [],
+                          summary="ok", checks=[{"name": "结构", "value": "齐全", "pass": True}])
+                        text = "已提交评审"
+                else:
+                    text = "我觉得写得不错，大概 85 分吧。"   # 未调用 submit_review
+            history.append({"role": "assistant", "content": text})
 
     class _FakeEmitter:
         def __init__(self, queue=None, context_window=0):
             self.tool_calls = []
-            self.usages = []
+            self.usages = ([{"input_tokens": usage_per_turn, "cache_read_input_tokens": 0,
+                             "cache_creation_input_tokens": 0, "output_tokens": 0}] if usage_per_turn else [])
             self.error = None
-            self.queue = queue
-            self.context_window = context_window
 
         def get_full_text(self):
             return "完成"
@@ -125,47 +165,42 @@ def _fake_world(tmp_path: Path, monkeypatch, *, score_plan: list[int], preset_cw
         async def emit(self, event):
             pass
 
-    async def _fake_review(provider, messages, system, cw, review_images, tracer=None):
-        calls["review"] += 1
-        s = score_plan[min(calls["review"] - 1, len(score_plan) - 1)]
-        if s is None:
-            return er.ReviewResult(score=None, passed=False, kind="failed", error="boom")
-        return er.ReviewResult(score=s, passed=s >= 90, issues=["补充来源"] if s < 90 else [])
-
     monkeypatch.setattr("planify.streaming.runner.StreamingAgent", _FakeSA)
     monkeypatch.setattr("doclens.web_v2.api._chat_emitter.ChatEventEmitter", _FakeEmitter)
-    monkeypatch.setattr(er, "_do_review", _fake_review)
-    # persist_round 依赖 extract_round_raw_messages 等；替身为空操作（落库细节由
-    # round_finalizer 自己的测试覆盖）
     monkeypatch.setattr(er, "persist_round", lambda *a, **k: SimpleNamespace(error=None))
     monkeypatch.setattr("planify.core.llm.trace.LLMTracer.create", lambda **k: None)
-    monkeypatch.setattr("planify.streaming.waiter.get_global_waiter", lambda: SimpleNamespace(interrupt_session=lambda s: None))
+    monkeypatch.setattr("planify.streaming.waiter.get_global_waiter",
+                        lambda: SimpleNamespace(interrupt_session=lambda s: None))
+    # 内部 load_skill handler 依赖 access_state；桩掉
+    monkeypatch.setattr(er, "_internal_load_skill_handler",
+                        lambda loader_, runtime_: (lambda name: f"<skill>{name}</skill>"))
 
-    artifact_dir = workdir / "调研" / "20260101-任务"
+    artifact_dir = workdir / "周报" / "20260101-任务"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     state = er.AssignmentState(
         session_id="sess-test", employee_id="e1", employee_name="tom",
         artifact_dir=artifact_dir, started_at="now",
     )
-    store.create(SessionSummary(
-        id="sess-test", type=SessionType.CHAT, title="t", preview="", mode=er.SESSION_MODE,
-        created_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
-        updated_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
-    ))
-    return SimpleNamespace(store=store, state=state, artifact_dir=artifact_dir, workdir=workdir, calls=calls)
+    store.create(SessionSummary(id="sess-test", type=SessionType.CHAT, title="t", preview="",
+                                mode=er.SESSION_MODE, created_at=_now(), updated_at=_now()))
+    return SimpleNamespace(store=store, state=state, artifact_dir=artifact_dir, workdir=workdir, seen=seen)
 
 
-def _brief(task="写报告"):
-    return er.build_brief(task, Path("/k/out"), False, 90, "有来源", 3)
-
-
-async def _run_loop(world, cfg, task="写报告", templates=None):
-    world.store.ensure_message_user(world.state.session_id, _brief(task))
-    await er._loop(world.state, cfg, task, _brief(task), templates or set(), "EXTRA", False)
+async def _run_loop(world, cfg, task="写周报"):
+    brief = er.build_brief(task, world.artifact_dir, False, 90, "三节齐全", 3)
+    world.store.ensure_message_user(world.state.session_id, brief)
+    extra = er.build_system_extra("你是周报撰写员。", world.workdir, world.artifact_dir, ["work-a"])
+    await er._loop(world.state, cfg, task, brief, extra)
 
 
 def _events(store, sid, kind):
     return [json.loads(i.payload) for i in store.get_events(sid, kind)]
+
+
+CFG = dict(model_preset_id="p-work", review_model_presets=[], thinking_depth="auto",
+           score_threshold=90, max_iterations=3, review_criteria="三节齐全",
+           tools_allow=[], tools_deny=[], skills_allow=["work-a"], review_skill="rev-a",
+           token_budget=0, max_tool_rounds=0)
 
 
 # ---------------------------------------------------------------------------
@@ -174,57 +209,49 @@ def _events(store, sid, kind):
 
 
 def _create_payload(**over):
-    base = dict(
-        name="tom", prompt="你是调研员。", model_preset_id="p1", artifact_root="调研",
-        review_criteria="有来源", tools_allow=["read_file"],
-    )
+    base = dict(name="tom", prompt="你是调研员。", model_preset_id="p1", artifact_root="调研",
+                review_criteria="有来源", tools_allow=["read_file"], review_skill="rev-a")
     base.update(over)
     return EmployeeCreate(**base)
 
 
-def test_store_create_get_list_roundtrip():
+def test_store_create_get_list_roundtrip(tmp_path):
+    _mk_internal_skills(tmp_path, "rev-a")
     created = es.create_employee(_create_payload())
     assert created["name"] == "tom" and created["id"]
+    assert created["review_model_presets"] == [] and created["token_budget"] == 2_000_000
     assert es.get_employee(created["id"])["prompt"] == "你是调研员。"
     assert [e["name"] for e in es.list_employees()] == ["tom"]
     assert es.get_employee_by_name("tom")["id"] == created["id"]
+    assert created["skills_missing"] == []
 
 
-def test_store_name_unique_case_insensitive_strip():
+def test_store_name_unique_and_update(tmp_path):
+    _mk_internal_skills(tmp_path, "rev-a")
     es.create_employee(_create_payload(name="tom"))
     with pytest.raises(es.EmployeeError) as ei:
         es.create_employee(_create_payload(name="  TOM "))
     assert ei.value.code == "NAME_CONFLICT"
-
-
-def test_store_update_partial_and_rename_conflict():
     a = es.create_employee(_create_payload(name="a"))
-    es.create_employee(_create_payload(name="b"))
-    upd = es.update_employee(a["id"], EmployeeUpdate(score_threshold=80, tools_deny=["bash"]).model_dump(exclude_unset=True))
-    assert upd["score_threshold"] == 80 and upd["tools_deny"] == ["bash"]
-    assert upd["prompt"] == "你是调研员。"
+    upd = es.update_employee(a["id"], EmployeeUpdate(review_model_presets=["p1", "p2"], token_budget=0).model_dump(exclude_unset=True))
+    assert upd["review_model_presets"] == ["p1", "p2"] and upd["token_budget"] == 0
     with pytest.raises(es.EmployeeError):
-        es.update_employee(a["id"], {"name": "b"})
+        es.update_employee(a["id"], {"name": "tom"})
     with pytest.raises(es.EmployeeError):
-        es.update_employee("nope", {"name": "c"})
+        es.delete_employee("nope")
 
 
-def test_store_delete_and_missing():
-    a = es.create_employee(_create_payload())
-    assert es.delete_employee(a["id"]) is True
-    assert es.get_employee(a["id"]) is None
-    with pytest.raises(es.EmployeeError):
-        es.delete_employee(a["id"])
-
-
-def test_store_model_missing_derived(monkeypatch):
+def test_store_model_and_skill_missing_derived(tmp_path, monkeypatch):
     from doclens.web_v2 import presets_store
 
     monkeypatch.setattr(presets_store, "list_presets", lambda kind=None: [{"id": "p1", "kind": "llm"}])
-    e = es.create_employee(_create_payload(model_preset_id="p1", review_model_preset_id="gone"))
+    _mk_internal_skills(tmp_path, "rev-a", "work-x")
+    e = es.create_employee(_create_payload(model_preset_id="p1", review_model_presets=["p1", "gone"],
+                                           skills_allow=["work-x", "ghost"]))
     assert e["model_missing"] is False and e["review_model_missing"] is True
-    e2 = es.create_employee(_create_payload(name="x", model_preset_id="nope"))
-    assert e2["model_missing"] is True
+    assert e["skills_missing"] == ["ghost"]
+    e2 = es.create_employee(_create_payload(name="x", model_preset_id="nope", review_skill="nope"))
+    assert e2["model_missing"] is True and e2["skills_missing"] == ["nope"]
 
 
 # ---------------------------------------------------------------------------
@@ -234,104 +261,69 @@ def test_store_model_missing_derived(monkeypatch):
 
 def test_resolve_tools_allow_deny_forbidden():
     tools = [{"name": n} for n in ("read_file", "write_file", "bash", "task", "ask_user_question", "load_skill")]
-    assert er.resolve_tools(tools, [], []) == ["read_file", "write_file", "bash"]
+    assert er.resolve_tools(tools, [], []) == ["read_file", "write_file", "bash", "load_skill"]
     assert er.resolve_tools(tools, ["read_file", "bash", "task"], []) == ["read_file", "bash"]
-    assert er.resolve_tools(tools, [], ["bash"]) == ["read_file", "write_file"]
-    assert er.resolve_tools(tools, ["read_file", "bash"], ["bash"]) == ["read_file"]
+    assert er.resolve_tools(tools, [], ["bash", "load_skill"]) == ["read_file", "write_file"]
+    assert "load_skill" not in er.FORBIDDEN_TOOLS
 
 
 def test_assignment_dir_slug_and_collision(tmp_path):
     d1 = er.assignment_dir(tmp_path, "调研", "搜索最新的 agent 技术")
-    assert d1.parent == tmp_path / "调研" and d1.name.startswith("20") and "-搜索最新的-agent-技术" in d1.name
+    assert d1.parent == tmp_path / "调研" and "-搜索最新的-agent-技术" in d1.name
     d1.mkdir(parents=True)
-    d2 = er.assignment_dir(tmp_path, "调研", "搜索最新的 agent 技术")
-    assert d2.name.endswith("-2")
-    assert er.slugify("a/b:c*?") == "a-b-c"   # 非法字符→空格→连字符
+    assert er.assignment_dir(tmp_path, "调研", "搜索最新的 agent 技术").name.endswith("-2")
+    assert er.slugify("a/b:c*?") == "a-b-c"
 
 
-def test_build_brief_and_rework_order():
-    brief = er.build_brief("搜 agent", Path("/k/a"), True, 90, "有来源", 5)
-    assert brief.startswith("<assignment>") and brief.rstrip().endswith("搜 agent")
-    assert "模板拷贝" in brief and "达到 90 分" in brief and "<criteria>" in brief
-    ro = er.build_rework_order(er.ReviewResult(75, False, issues=["缺来源"], suggestions=["补 2025 案例"]), 90, Path("/k/a"))
-    assert ro.startswith(f'<{er.REWORK_TAG} score="75" threshold="90">') and ro.endswith(f"</{er.REWORK_TAG}>")
-    assert "1. 缺来源" in ro and "- 补 2025 案例" in ro
-    na = er.build_rework_order(er.ReviewResult(None, False, kind="no_artifact"), 90, Path("/k/a"))
-    assert "产物目录为空" in na and 'score=""' in na
+def test_build_brief_rework_review_order():
+    brief = er.build_brief("写周报", Path("/k/a"), True, 90, "三节齐全", 5)
+    assert brief.startswith("<assignment>") and brief.rstrip().endswith("写周报") and "模板拷贝" in brief
+    ro = er.build_rework_order(er.ReviewResult(75, False, issues=["缺来源"], suggestions=["补案例"]), 90, Path("/k/a"))
+    assert ro.startswith('<rework-order score="75" threshold="90">') and "1. 缺来源" in ro
+    vo = er.build_review_order("rev-a", Path("/k/a"), "写周报", "三节齐全", 90)
+    assert vo.startswith('<review-order skill="rev-a" threshold="90">')
+    assert "load_skill" in vo and "submit_review" in vo and "三节齐全" in vo and "/k/a" in vo
+    assert er.build_budget_warning(850_000, 1_000_000).startswith("⚠️ 预算已用 85%")
 
 
-def test_build_system_extra_preloads_skills_and_rules():
-    s = er.build_system_extra("你是调研员。", [("s1", "<skill>body</skill>")], Path("/k"), Path("/k/out/x"), ["gone"])
-    assert "# Your role" in s and "<skill>body</skill>" in s and "gone" in s
-    assert "只能写入产物目录" in s and "/k/out/x" in s
+def test_build_system_extra_names_work_skills():
+    s = er.build_system_extra("你是周报撰写员。", Path("/k"), Path("/k/out/x"), ["work-a", "work-b"])
+    assert "# Your role" in s and "`work-a`" in s and "`work-b`" in s and "只能写入产物目录" in s
 
 
-def test_list_artifacts_ignores_tmp_and_marks_template(tmp_path):
-    d = tmp_path / "out"
-    (d / "tmp").mkdir(parents=True)
-    (d / "报告.md").write_text("x", encoding="utf-8")
-    (d / "tmp" / "s.py").write_text("y", encoding="utf-8")
-    (d / "模板.md").write_text("t", encoding="utf-8")
-    arts = er.list_artifacts(d, {"模板.md"})
-    assert [a.path for a in arts] == ["报告.md", "模板.md"]
-    assert arts[1].is_template and not arts[0].is_template
-    assert er.has_deliverable(d, {"模板.md"}) is True
-    assert er.has_deliverable(d, {"报告.md", "模板.md"}) is False
-    assert er.has_deliverable(tmp_path / "nope", set()) is False
+def test_sum_usage_four_fields_unweighted():
+    assert er.sum_usage([{"input_tokens": 10, "cache_read_input_tokens": 5,
+                          "cache_creation_input_tokens": 2, "output_tokens": 3}]) == 20
+    assert er.sum_usage([]) == 0 and er.sum_usage([{"junk": 1}, "x"]) == 0
 
 
-def test_collect_review_material_budget_primary_protection(tmp_path):
-    d = tmp_path / "out"
-    d.mkdir()
-    big = "甲" * 50_000
-    (d / "主报告.md").write_text(big, encoding="utf-8")
-    for i in range(3):
-        (d / f"小{i}.txt").write_text("乙" * 2_000, encoding="utf-8")
-    (d / "data.bin").write_bytes(b"\x00\x01")
-    m = er.collect_review_material(d, set(), context_window=40_000)
-    by = {f["path"]: f for f in m["files"]}
-    budget = m["budget_chars"]
-    assert budget == int(40_000 * 0.5 * 1.5)
-    # 主报告至少六成预算：50_000 字 > 0.6*30000=18000 → 被截断，长度=18000
-    assert by["主报告.md"]["truncated"] is True and len(by["主报告.md"]["text"]) == int(budget * 0.6)
-    # 其余均分：30000-18000=12000/3=4000 > 2000 → 不截断
-    assert all(by[f"小{i}.txt"]["included"] and not by[f"小{i}.txt"]["truncated"] for i in range(3))
-    assert by["data.bin"]["included"] is False and by["data.bin"]["kind"] == "binary"
-    system, msgs = er.build_review_messages(m, "任务", "标准", 90, False)
-    assert "submit_review" in system and "主报告.md [TRUNCATED" in msgs[0]["content"]
-    assert "not included in review" in msgs[0]["content"] and "Task\n任务" in msgs[0]["content"]
-
-
-def test_collect_review_material_omits_when_share_too_small(tmp_path):
-    d = tmp_path / "out"
-    d.mkdir()
-    (d / "a.md").write_text("x" * 100, encoding="utf-8")
-    for i in range(60):
-        (d / f"f{i:02d}.md").write_text("y" * 100, encoding="utf-8")
-    m = er.collect_review_material(d, set(), context_window=20_000)
-    assert m["omitted"], "预算不足时应省略部分文件"
-    assert all(not f["included"] for f in m["files"] if f["path"] in m["omitted"])
-
-
-def test_parse_review_variants():
-    r = er.parse_review([{"type": "tool_use", "name": "submit_review",
-                          "input": {"score": 93.4, "passed": True, "issues": [], "suggestions": ["s"],
-                                    "summary": "好"}}], 0)
-    assert r.score == 93 and r.passed and r.suggestions == ["s"]
-    r2 = er.parse_review([{"type": "text", "text": "x"},
-                          {"type": "tool_use", "name": "submit_review",
-                           "input": {"score": 50, "passed": False, "issues": ["a", " ", "b"]}}], 90)
-    assert r2.score == 50 and r2.issues == ["a", "b"]
+def test_review_result_from_input():
+    r = er._review_result_from_input({"score": 93.4, "issues": ["a", " "], "suggestions": ["s"],
+                                      "checks": [{"name": "结构", "value": "齐全", "pass": True}, "bad"]}, 90)
+    assert r.score == 93 and r.passed and r.issues == ["a"] and len(r.checks) == 1
+    r2 = er._review_result_from_input({"score": 50, "issues": []}, 90)
+    assert r2.passed is False
     with pytest.raises(ValueError):
-        er.parse_review([{"type": "text", "text": "no tool"}], 0)
+        er._review_result_from_input({"score": "x", "issues": []}, 90)
     with pytest.raises(ValueError):
-        er.parse_review([{"type": "tool_use", "name": "submit_review", "input": {"score": "x"}}], 0)
-    # dataclass 块（ToolUseBlock）
-    r3 = er.parse_review([ToolUseBlock(id="1", name="submit_review", input={"score": 1, "passed": False, "issues": []})], 0)
-    assert r3.score == 1
+        er._review_result_from_input({"issues": []}, 90)
 
 
-def test_bind_write_boundary_file_tools(tmp_path):
+def test_skill_allowlist_handler():
+    calls = []
+
+    def orig(name):
+        calls.append(name)
+        return f"<skill>{name}</skill>"
+
+    h = er.build_skill_allowlist_handler(orig, {"work-a", "rev-a"})
+    assert h(name="work-a") == "<skill>work-a</skill>"
+    out = h(name="evil")
+    assert out.startswith("Error:") and "白名单" in out and "work-a" in out
+    assert calls == ["work-a"]
+
+
+def test_bind_write_boundary_file_and_shell(tmp_path):
     root = tmp_path / "kb" / "out" / "a"
     wd = tmp_path / "kb"
     root.mkdir(parents=True)
@@ -341,38 +333,25 @@ def test_bind_write_boundary_file_tools(tmp_path):
         calls.append(path)
         return "written"
 
-    h = er.bind_write_boundary({"write_file": write_file, "edit_file": write_file, "read_file": lambda p: "r"}, root, wd)
-    assert h["write_file"](path="out/a/x.md", content="x") == "written"             # 产物目录内放行
-    assert "拒绝" in h["write_file"](path="out/x.md", content="x")                  # 同级目录在外
-    assert "拒绝" in h["write_file"](path=str(wd / "elsewhere.md"), content="x")    # 绝对路径在外
-    assert h["write_file"](str(root / "y.md"), "x") == "written"                     # positional：首位是路径（在内），内容不当路径
-    assert "拒绝" in h["write_file"](str(wd / "z.md"), "x")                          # positional 路径在外
-    assert h["read_file"]("whatever") == "r"
-    assert calls == ["out/a/x.md", str(root / "y.md")]
-
-
-def test_bind_write_boundary_shell(tmp_path):
-    root = tmp_path / "kb" / "out"
-    wd = tmp_path / "kb"
-    root.mkdir(parents=True)
-    (wd / "outside.txt").parent.mkdir(exist_ok=True)
-    h = er.bind_write_boundary({"bash": lambda command: f"ran:{command}"}, root, wd)
+    h = er.bind_write_boundary({"write_file": write_file, "bash": lambda command: f"ran:{command}"}, root, wd)
+    assert h["write_file"](path="out/a/x.md", content="x") == "written"
+    assert "拒绝" in h["write_file"](path="out/x.md", content="x")
+    assert "拒绝" in h["write_file"](path=str(wd / "z.md"), content="x")
+    assert h["write_file"](str(root / "y.md"), "x") == "written"   # positional 首位是路径
     assert "拒绝" in h["bash"]("echo hi > 调研/x.md")
-    assert "拒绝" in h["bash"](f"echo hi > {wd / 'x.md'}")
-    assert h["bash"]("ls 调研").startswith("ran:")
-    assert h["bash"]("echo hi > out/ok.md").startswith("ran:")       # 产物目录内放行
-    assert h["bash"]("python script.py").startswith("ran:")          # 无写信号放行
-    assert h["bash"]("echo hi > /tmp/x").startswith("ran:")          # 工作目录外不拦（交门禁）
+    assert h["bash"]("echo hi > out/a/ok.md").startswith("ran:")
+    assert h["bash"]("python script.py").startswith("ran:")
+    assert calls == ["out/a/x.md", str(root / "y.md")]
 
 
 def test_tool_catalog_groups():
     cat = er.tool_catalog([{"name": "bash"}, {"name": "search_kb"}, {"name": "mcp__wordcraft__execute"},
-                           {"name": "task"}, {"name": "read_file"}])
+                           {"name": "task"}, {"name": "read_file"}, {"name": "load_skill"}])
     by = {c["name"]: c for c in cat}
-    assert by["bash"]["group"] == "builtin" and by["bash"]["writable"] and not by["bash"]["forbidden"]
+    assert by["bash"]["group"] == "builtin" and by["bash"]["writable"]
     assert by["search_kb"]["group"] == "kb"
-    assert by["mcp__wordcraft__execute"]["group"] == "mcp" and by["mcp__wordcraft__execute"]["server"] == "wordcraft"
-    assert by["task"]["forbidden"] and by["read_file"]["group"] == "builtin" and not by["read_file"]["writable"]
+    assert by["mcp__wordcraft__execute"]["server"] == "wordcraft"
+    assert by["task"]["forbidden"] and not by["load_skill"]["forbidden"]
 
 
 # ---------------------------------------------------------------------------
@@ -380,146 +359,123 @@ def test_tool_catalog_groups():
 # ---------------------------------------------------------------------------
 
 
-CFG = dict(model_preset_id="p-work", review_model_preset_id=None, thinking_depth="auto",
-           score_threshold=90, max_iterations=3, review_criteria="有来源",
-           tools_allow=[], tools_deny=[], skills_allow=[])
-
-
-def test_loop_passes_then_ends(tmp_path, monkeypatch):
-    w = _fake_world(tmp_path, monkeypatch, score_plan=[95])
+def test_loop_passes_on_second_iteration(tmp_path, monkeypatch):
+    w = _fake_world(tmp_path, monkeypatch, score_plan=[70, 95])
     asyncio.run(_run_loop(w, CFG))
-    ends = _events(w.store, "sess-test", er.KIND_END)
-    assert len(ends) == 1 and ends[0]["outcome"] == er.OUTCOME_PASSED and ends[0]["score"] == 95
     revs = _events(w.store, "sess-test", er.KIND_REVIEW)
-    # 第 1 轮无产物（FakeSA 首轮不写文件）→ 预检；第 2 轮评审 95 分通过
-    assert [r["kind"] for r in revs] == ["no_artifact", "review"]
-    assert revs[1]["score"] == 95 and revs[1]["passed"] is True
-    assert ends[0]["iterations"] == 2
-    starts = _events(w.store, "sess-test", er.KIND_START)
-    assert starts[0]["employee_name"] == "tom" and starts[0]["threshold"] == 90
-    assert er.is_assignment("sess-test") is False   # 结束后出注册表
+    assert [r["score"] for r in revs] == [70, 95] and revs[1]["passed"] is True
+    assert revs[0]["checks"] == [{"name": "结构", "value": "齐全", "pass": True}]
+    end = _events(w.store, "sess-test", er.KIND_END)[0]
+    assert end["outcome"] == er.OUTCOME_PASSED and end["score"] == 95 and end["iterations"] == 2
+    # 回合序列：工作、评审、工作（返工）、评审
+    assert [t["kind"] for t in w.seen["turns"]] == ["work", "review", "work", "review"]
+    # 评审回合才有 submit_review；两类回合都有 load_skill；技能清单只列白名单
+    for t in w.seen["turns"]:
+        assert "load_skill" in t["tools"] and t["skills"] == ["rev-a", "work-a"]
+        assert t["has_submit"] == (t["kind"] == "review")
+    # 消息流：brief、评审指令、返工指令（评审指令以 user 消息落库）
+    users = [json.loads(i.payload)["content"] for i in w.store.get_detail("sess-test") if i.kind == "message_user"]
+    assert users[0].startswith("<assignment>") and users[1].startswith("<review-order") and users[2].startswith("<rework-order")
+    assert er.is_assignment("sess-test") is False
 
 
-def test_loop_exhausted_after_max_iterations(tmp_path, monkeypatch):
+def test_loop_exhausted(tmp_path, monkeypatch):
     w = _fake_world(tmp_path, monkeypatch, score_plan=[70, 80])
     asyncio.run(_run_loop(w, CFG))
-    revs = _events(w.store, "sess-test", er.KIND_REVIEW)
-    # 第 1 轮无产物（no_artifact），第 2、3 轮评审 70、80 → 轮数耗尽
-    assert [r["kind"] for r in revs] == ["no_artifact", "review", "review"]
-    assert [r["score"] for r in revs] == [None, 70, 80]
+    assert [r["score"] for r in _events(w.store, "sess-test", er.KIND_REVIEW)] == [70, 80, 80]
     end = _events(w.store, "sess-test", er.KIND_END)[0]
     assert end["outcome"] == er.OUTCOME_EXHAUSTED and end["score"] == 80 and end["iterations"] == 3
-    # 第 2 轮的 user 消息是返工指令（带标签）
-    users = [json.loads(i.payload)["content"] for i in w.store.get_detail("sess-test")
-             if i.kind == "message_user"]
-    assert users[0].startswith("<assignment>")                    # 派活说明（首轮，幂等不重复）
-    assert len([u for u in users if u.startswith("<assignment>")]) == 1
-    assert users[1].startswith(f'<{er.REWORK_TAG} score=""')   # 无产物 → 合成返工
-    assert users[2].startswith(f'<{er.REWORK_TAG} score="70"')  # 评审未达标 → 评审返工
 
 
-def test_loop_review_failed_terminates(tmp_path, monkeypatch):
-    w = _fake_world(tmp_path, monkeypatch, score_plan=[None])
-    asyncio.run(_run_loop(w, {**CFG, "max_iterations": 5}))
+def test_loop_review_failed_when_not_submitted(tmp_path, monkeypatch):
+    w = _fake_world(tmp_path, monkeypatch, score_plan=[95], review_submits=False)
+    asyncio.run(_run_loop(w, CFG))
     revs = _events(w.store, "sess-test", er.KIND_REVIEW)
-    assert revs[-1]["kind"] == "failed" and revs[-1]["error"] == "boom"
+    assert revs[-1]["kind"] == "failed" and "未调用 submit_review" in revs[-1]["error"]
     assert _events(w.store, "sess-test", er.KIND_END)[0]["outcome"] == er.OUTCOME_REVIEW_FAILED
-    assert w.calls["rounds"] == 2   # 第 1 轮无产物 + 第 2 轮评审失败后停止，不再续跑
+    assert len(w.seen["turns"]) == 2   # 工作一次、评审一次即止
+
+
+def test_loop_budget_exhausted(tmp_path, monkeypatch):
+    # 每回合 1000 token，预算 1500 → 工作(1000) + 评审(2000) ≥ 1500 → 评审后预算耗尽
+    w = _fake_world(tmp_path, monkeypatch, score_plan=[70], usage_per_turn=1000)
+    asyncio.run(_run_loop(w, {**CFG, "token_budget": 1500}))
+    end = _events(w.store, "sess-test", er.KIND_END)[0]
+    assert end["outcome"] == er.OUTCOME_BUDGET and end["tokens_spent"] == 2000 and end["token_budget"] == 1500
+    assert len(w.seen["turns"]) == 2
+
+
+def test_loop_budget_warning_prefix_on_rework(tmp_path, monkeypatch):
+    # 每回合 300，预算 1000：工作(300)+评审(600) 后 60%<80% → 返工无预警；第二轮后 1200 ≥ 1000 终止。
+    # 改为预算 2000：第一轮后 600/2000=30%；第二轮后 1200/2000=60%… 需第三轮 1800/2000=90% 才预警——
+    # 用 max_iterations=4 让第四轮工作前触发预警（此时 spent=2400 ≥ 80%*2000=1600）。
+    w = _fake_world(tmp_path, monkeypatch, score_plan=[70], usage_per_turn=300)
+    asyncio.run(_run_loop(w, {**CFG, "token_budget": 2000, "max_iterations": 4}))
+    # 2000 预算在第三轮评审后（1800）未超、第四轮工作后（2100）超 → 第四轮工作消息应带预警
+    users = [json.loads(i.payload)["content"] for i in w.store.get_detail("sess-test") if i.kind == "message_user"]
+    reworks = [u for u in users if u.startswith("<rework-order") or u.startswith("⚠️")]
+    assert any(u.startswith("⚠️ 预算已用") for u in reworks), reworks
+    end = _events(w.store, "sess-test", er.KIND_END)[0]
+    assert end["outcome"] == er.OUTCOME_BUDGET
 
 
 def test_loop_stopped_by_user(tmp_path, monkeypatch):
-    w = _fake_world(tmp_path, monkeypatch, score_plan=[70, 70])
+    w = _fake_world(tmp_path, monkeypatch, score_plan=[70])
 
     async def _go():
-        world_store = w.store
-        world_store.ensure_message_user(w.state.session_id, _brief())
-        task = asyncio.create_task(er._loop(w.state, CFG, "写报告", _brief(), set(), "EXTRA", False))
-        await asyncio.sleep(0.005)      # FakeSA 让出控制权期间
+        brief = er.build_brief("写周报", w.artifact_dir, False, 90, "三节齐全", 3)
+        w.store.ensure_message_user(w.state.session_id, brief)
+        extra = er.build_system_extra("x", w.workdir, w.artifact_dir, [])
+        task = asyncio.create_task(er._loop(w.state, CFG, "写周报", brief, extra))
+        await asyncio.sleep(0.002)
         w.state.interrupt.set()
         w.state.stop_requested = True
         await task
 
     asyncio.run(_go())
-    end = _events(w.store, "sess-test", er.KIND_END)[0]
-    assert end["outcome"] == er.OUTCOME_STOPPED
+    assert _events(w.store, "sess-test", er.KIND_END)[0]["outcome"] == er.OUTCOME_STOPPED
 
 
-def test_loop_works_with_template_only_is_no_artifact(tmp_path, monkeypatch):
+def test_loop_review_preset_list_used_in_review_turn(tmp_path, monkeypatch):
     w = _fake_world(tmp_path, monkeypatch, score_plan=[95])
-    (w.artifact_dir / "模板.md").write_text("模板", encoding="utf-8")
-    asyncio.run(_run_loop(w, {**CFG, "max_iterations": 1}, templates={"模板.md"}))
-    revs = _events(w.store, "sess-test", er.KIND_REVIEW)
-    assert revs[0]["kind"] == "no_artifact"
-    assert _events(w.store, "sess-test", er.KIND_END)[0]["outcome"] == er.OUTCOME_EXHAUSTED
-
-
-def test_do_review_passes_tool_dataclass_not_dict():
-    """契约锁（2026-11-25 真机事故）：provider.chat 的 tools 必须是 Tool dataclass——
-    传 dict 会在 tool_translator 里 'dict' object has no attribute 'name'。"""
-    from planify.core.llm.types import Tool
-
-    seen = {}
-
-    class _P:
-        def chat(self, messages, system, tools, max_tokens, tracer=None):
-            seen["tools"] = tools
-            return SimpleNamespace(content=[ToolUseBlock(id="1", name="submit_review",
-                                                         input={"score": 88, "passed": False, "issues": ["x"]})],
-                                   stop_reason="tool_use", model="m", usage={})
-
-    r = asyncio.run(er._do_review(_P(), [{"role": "user", "content": "m"}], "s", None, False))
-    assert r.score == 88 and r.issues == ["x"]
-    assert len(seen["tools"]) == 1 and isinstance(seen["tools"][0], Tool)
-
-
-def test_do_review_retries_once_then_failed():
-    calls = {"n": 0}
-
-    class _P:
-        def chat(self, *a, **k):
-            calls["n"] += 1
-            raise RuntimeError("boom")
-
-    async def _fast_sleep(_):
-        return None
-
-    with pytest.MonkeyPatch.context() as mp:
-        mp.setattr(er.asyncio, "sleep", _fast_sleep)
-        r = asyncio.run(er._do_review(_P(), [], "s", None, False))
-    assert r.kind == "failed" and r.error == "boom" and calls["n"] == 2
+    asyncio.run(_run_loop(w, {**CFG, "review_model_presets": ["p-review"]}))
+    kinds = {t["kind"]: t["model"] for t in w.seen["turns"]}
+    assert kinds["work"] == "m-p-work" and kinds["review"] == "m-p-review"
 
 
 def test_mark_interrupted_on_startup(tmp_path, monkeypatch):
     w = _fake_world(tmp_path, monkeypatch, score_plan=[95])
-    monkeypatch.setattr(er, "_do_review", None)
-    _now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+    _now_ = _now()
     w.store.create(SessionSummary(id="sess-other", type=SessionType.CHAT, title="t", preview="",
-                                  mode=er.SESSION_MODE, created_at=_now, updated_at=_now))
+                                  mode=er.SESSION_MODE, created_at=_now_, updated_at=_now_))
     w.store.append_event("sess-test", er.KIND_START, {"employee_id": "e1", "employee_name": "tom"})
     w.store.append_event("sess-other", er.KIND_START, {"employee_id": "e2"})
     w.store.append_event("sess-other", er.KIND_END, {"outcome": "passed"})
     assert er.mark_interrupted_on_startup() == 1
     end = _events(w.store, "sess-test", er.KIND_END)[0]
     assert end["outcome"] == er.OUTCOME_INTERRUPTED and end["employee_id"] == "e1"
-    assert er.mark_interrupted_on_startup() == 0   # 幂等
+    assert er.mark_interrupted_on_startup() == 0
+
+
+def test_dispatch_rejects_missing_internal_skill(tmp_path, monkeypatch):
+    w = _fake_world(tmp_path, monkeypatch, score_plan=[95])
+    with pytest.raises(er.DispatchError) as ei:
+        er.dispatch(_emp(skills_allow=["work-a", "ghost"]), "写周报")
+    assert ei.value.code == "SKILL_MISSING" and "ghost" in str(ei.value)
+    with pytest.raises(er.DispatchError):
+        er.dispatch(_emp(review_skill=""), "写周报")
 
 
 def test_sessions_store_append_event_and_open(tmp_path):
     store = _store(tmp_path)
     sid = store.new_session_id()
-    store.create(SessionSummary(
-        id=sid, type=SessionType.CHAT, title="t", preview="", mode=er.SESSION_MODE,
-        created_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
-        updated_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
-    ))
+    store.create(SessionSummary(id=sid, type=SessionType.CHAT, title="t", preview="", mode=er.SESSION_MODE,
+                                created_at=_now(), updated_at=_now()))
     store.append_event(sid, er.KIND_START, {"a": 1})
     store.ensure_message_user(sid, "hi")
-    s2 = store.append_event(sid, er.KIND_REVIEW, {"b": 2})
-    assert s2 == 2
+    assert store.append_event(sid, er.KIND_REVIEW, {"b": 2}) == 2
     assert [i.kind for i in store.get_events(sid, er.KIND_REVIEW)] == [er.KIND_REVIEW]
     assert store.sessions_with_open_event(er.KIND_START, er.KIND_END) == [sid]
     store.append_event(sid, er.KIND_END, {"outcome": "passed"})
     assert store.sessions_with_open_event(er.KIND_START, er.KIND_END) == []
-    # 回放忽略自定义 kind：历史里只有 user（无 assistant）
-    hist = store.get_chat_history(sid)
-    assert [m["role"] for m in hist] == ["user"]
+    assert [m["role"] for m in store.get_chat_history(sid)] == ["user"]

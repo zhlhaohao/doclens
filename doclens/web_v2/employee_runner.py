@@ -34,7 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from doclens.web_v2.chat_interrupt import register_interrupt, request_stop
+from doclens.web_v2.chat_interrupt import register_interrupt, request_stop, unregister_interrupt
 from doclens.web_v2.chat_runner import get_task, try_register
 from doclens.web_v2.round_finalizer import persist_round
 
@@ -56,7 +56,6 @@ FORBIDDEN_TOOLS: frozenset[str] = frozenset({
     "ask_user_question", "ask_user", "user_confirm",
     "task",
     "background_run", "check_background",
-    "load_skill",
     "spawn_teammate", "list_teammates", "send_message", "read_inbox", "broadcast",
     "shutdown_request", "plan_approval", "idle",
     "compress",
@@ -69,24 +68,10 @@ SHELL_TOOLS: frozenset[str] = frozenset({"bash", "powershell"})
 #: doclens 注入的知识库工具（工具目录分组用；定义见 kb_tools.py / grep_tools.py）
 KB_TOOL_NAMES: frozenset[str] = frozenset({"search_kb", "read_document", "file_info", "kb_grep"})
 
-#: 产物目录中被评审忽略的子目录 / 文件
+#: 产物目录内的临时文件子目录
 SCRATCH_SUBDIR = "tmp"
-_IGNORED_NAMES: frozenset[str] = frozenset({SCRATCH_SUBDIR, ".versions", ".DS_Store", "Thumbs.db"})
 
-#: 评审输出上限（结构化 JSON：分数 + 意见清单）
-REVIEW_MAX_TOKENS = 4000
-#: 评审材料预算占评审模型上下文窗口的比例
-REVIEW_BUDGET_RATIO = 0.5
-#: 主产物保护：最大文档类文件至少占预算的比例
-PRIMARY_ARTIFACT_SHARE = 0.6
-#: 单文件最少分到的字符数；低于此则不纳入评审（只列路径）
-_MIN_SHARE_CHARS = 500
 
-_TEXT_EXTS = {".md", ".txt", ".csv", ".json", ".yaml", ".yml", ".toml", ".xml", ".html",
-              ".htm", ".log", ".py", ".js", ".ts", ".sql", ".ini", ".cfg", ".rst"}
-_DOC_EXTS = {".md", ".txt", ".docx", ".pptx", ".xlsx", ".html", ".htm"}
-_OFFICE_EXTS = {".docx", ".pptx", ".xlsx"}
-_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 
 _SLUG_MAX = 40
 
@@ -99,8 +84,9 @@ OUTCOME_EXHAUSTED = "exhausted"
 OUTCOME_REVIEW_FAILED = "review_failed"
 OUTCOME_STOPPED = "stopped"
 OUTCOME_INTERRUPTED = "interrupted"
+OUTCOME_BUDGET = "budget_exhausted"
 OUTCOMES = (OUTCOME_PASSED, OUTCOME_EXHAUSTED, OUTCOME_REVIEW_FAILED,
-            OUTCOME_STOPPED, OUTCOME_INTERRUPTED)
+            OUTCOME_STOPPED, OUTCOME_INTERRUPTED, OUTCOME_BUDGET)
 
 
 @dataclass
@@ -112,7 +98,8 @@ class ReviewResult:
     issues: list[str] = field(default_factory=list)
     suggestions: list[str] = field(default_factory=list)
     summary: str = ""
-    kind: str = "review"   # review | no_artifact | failed
+    checks: list[dict] = field(default_factory=list)
+    kind: str = "review"   # review | failed
     error: str = ""
 
     def to_payload(self, iteration: int, threshold: int) -> dict:
@@ -125,6 +112,7 @@ class ReviewResult:
             "issues": list(self.issues),
             "suggestions": list(self.suggestions),
             "summary": self.summary,
+            "checks": list(self.checks),
             "error": self.error,
         }
 
@@ -175,30 +163,23 @@ def assignment_dir(workdir: Path, artifact_root: str, task: str,
     return candidate
 
 
-def build_system_extra(prompt: str, skills_bodies: list[tuple[str, str]], workdir: Path,
-                       artifact_dir: Path, missing_skills: list[str]) -> str:
-    """专属提示词 + 预加载技能正文 + 员工工作规则（追加在精简基础提示词之后）。"""
-    parts: list[str] = []
-    parts.append("# Your role\n\n" + prompt.strip())
-    if skills_bodies:
-        parts.append(
-            "# Preloaded skills\n\n以下技能已为你预加载（正文完整在下），直接按其指引工作，"
-            "无需也不可再调用任何技能加载工具。\n\n"
-            + "\n\n".join(body for _, body in skills_bodies)
-        )
-    if missing_skills:
-        parts.append(
-            "# 技能提示\n\n以下技能在本机不存在，无法使用，请勿尝试："
-            + ", ".join(missing_skills)
-        )
+def build_system_extra(prompt: str, workdir: Path, artifact_dir: Path,
+                       work_skills: list[str]) -> str:
+    """专属提示词 + 员工工作规则（追加在精简基础提示词之后；技能按需加载不预载）。"""
+    parts: list[str] = ["# Your role\n\n" + prompt.strip()]
     rules = [
         "# 数字员工工作规则\n\n",
         f"- 工作目录：`{workdir.as_posix()}`；本次任务的产物目录：`{artifact_dir.as_posix()}`。",
-        "- 你的全部工作成果**必须落盘到产物目录**。只写在对话里的内容不算交付，评审只看产物目录。",
+        "- 你的全部工作成果**必须落盘到产物目录**（或任务指定的位置）。只写在对话里的内容不算交付。",
         "- 你**只能写入产物目录**（含其子目录）；写别处会被工具拒绝。",
-        f"- 临时脚本与中间文件放产物目录下的 `{SCRATCH_SUBDIR}/`（不参与评审）。",
+        f"- 临时脚本与中间文件放产物目录下的 `{SCRATCH_SUBDIR}/`。",
         "- 完成后用一两句话说明产出了哪些文件（路径）。",
     ]
+    if work_skills:
+        rules.append(
+            "- 工作技能（任务开始前先 load_skill 加载）：" + ", ".join(f"`{s}`" for s in work_skills)
+            + "。白名单外的技能不可用。"
+        )
     parts.append("\n".join(rules))
     return "\n\n".join(parts)
 
@@ -248,273 +229,90 @@ def build_rework_order(review: ReviewResult, threshold: int, artifact_dir: Path)
 
 
 # ---------------------------------------------------------------------------
-# 纯函数层：产物清单与评审材料
+# 纯函数层：评审回合（ADR-0065）
 # ---------------------------------------------------------------------------
 
+REVIEW_ORDER_TAG = "review-order"
 
-@dataclass
-class ArtifactFile:
-    path: str          # 相对产物目录（posix）
-    abs_path: Path
-    ext: str
-    size: int
-    is_template: bool = False
-
-
-def list_artifacts(artifact_dir: Path, template_names: set[str]) -> list[ArtifactFile]:
-    """产物目录清单（忽略 tmp/ 与系统垃圾文件；标记模板拷贝）。"""
-    out: list[ArtifactFile] = []
-    if not artifact_dir.exists():
-        return out
-    for p in sorted(artifact_dir.rglob("*")):
-        if not p.is_file():
-            continue
-        rel = p.relative_to(artifact_dir)
-        if any(part in _IGNORED_NAMES for part in rel.parts):
-            continue
-        rel_posix = rel.as_posix()
-        out.append(ArtifactFile(
-            path=rel_posix, abs_path=p, ext=p.suffix.lower(), size=p.stat().st_size,
-            is_template=(rel_posix in template_names) or (len(rel.parts) == 1 and rel.name in template_names),
-        ))
-    return out
-
-
-def has_deliverable(artifact_dir: Path, template_names: set[str]) -> bool:
-    """无产物预检：产物目录里是否有「非模板」的文件。"""
-    return any(not a.is_template for a in list_artifacts(artifact_dir, template_names))
-
-
-def classify_artifact(ext: str) -> str:
-    """text | office | image | binary"""
-    if ext in _OFFICE_EXTS:
-        return "office"
-    if ext in _IMAGE_EXTS:
-        return "image"
-    if ext in _TEXT_EXTS or ext == "":
-        return "text"
-    return "binary"
-
-
-def _is_primary_candidate(a: ArtifactFile) -> bool:
-    return (not a.is_template) and a.ext in _DOC_EXTS
-
-
-def extract_text(path: Path, limit: int) -> tuple[str, bool]:
-    """读文本类文件（只保开头）。返回 (文本, 是否截断)。"""
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError as e:
-        return f"[读取失败：{e}]", False
-    if len(text) > limit:
-        return text[:limit], True
-    return text, False
-
-
-def extract_office_text(path: Path, limit: int) -> tuple[str, bool]:
-    """Office 文档抽文本——复用索引同一套解析器（树节点带文本）→ 渲染为 markdown。
-
-    不走索引库（产物是刚写的新文件，尚未索引）。不生成节点摘要（不调模型）。
-    """
-    try:
-        from treesearch.parsers.registry import get_parser
-        from doclens.web_v2.preview_synthesizer import render_tree_to_md
-
-        parser = get_parser(path.suffix.lower())
-        if parser is None:
-            return "[该文档类型无可用解析器]", False
-        doc = asyncio.run(parser(str(path), if_add_node_text=True, if_add_node_summary=False))
-        md, _ = render_tree_to_md(doc.get("structure"), doc.get("source_type") or path.suffix.lower().lstrip("."))
-    except RuntimeError:
-        # 已在事件循环内（评审在 to_thread 之外被同步调用时）——退线程池跑
-        try:
-            doc = asyncio.run_coroutine_threadsafe(
-                _parse_office(path), _bg_loop()
-            ).result(timeout=60)
-            from doclens.web_v2.preview_synthesizer import render_tree_to_md
-
-            md, _ = render_tree_to_md(doc.get("structure"), doc.get("source_type") or path.suffix.lower().lstrip("."))
-        except Exception as e:  # noqa: BLE001
-            return f"[文档解析失败：{e}]", False
-    except Exception as e:  # noqa: BLE001
-        return f"[文档解析失败：{e}]", False
-    if len(md) > limit:
-        return md[:limit], True
-    return md, False
-
-
-async def _parse_office(path: Path) -> dict:
-    from treesearch.parsers.registry import get_parser
-
-    parser = get_parser(path.suffix.lower())
-    if parser is None:
-        return {"structure": [], "source_type": None}
-    return await parser(str(path), if_add_node_text=True, if_add_node_summary=False)
-
-
-_bg_loop_singleton: dict = {}
-
-
-def _bg_loop():
-    """专供同步上下文里跑异步解析器的事件循环（懒建，守护线程）。"""
-    loop = _bg_loop_singleton.get("loop")
-    if loop is None or loop.is_closed():
-        import threading as _th
-
-        ev = _th.Event()
-        new_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
-
-        def _run():
-            asyncio.set_event_loop(new_loop)
-            ev.set()
-            new_loop.run_forever()
-
-        _th.Thread(target=_run, name="employee-office-parser", daemon=True).start()
-        ev.wait(5)
-        _bg_loop_singleton["loop"] = new_loop
-        loop = new_loop
-    return loop
-
-
-def _char_budget(context_window: Optional[int]) -> int:
-    """评审材料的字符预算：窗口 × 比例 × 1.5 字符/token（CJK/英文折中）。"""
-    cw = context_window or 128_000
-    return max(20_000, int(cw * REVIEW_BUDGET_RATIO * 1.5))
-
-
-def collect_review_material(artifact_dir: Path, template_names: set[str],
-                            context_window: Optional[int]) -> dict:
-    """评审材料：产物目录的文本化清单（预算：主产物保护 + 只保开头）。
-
-    Returns:
-        {"files": [{"path","kind","text","truncated","included"}], "images": [Path],
-         "omitted": [path], "budget_chars": int}
-    """
-    files = list_artifacts(artifact_dir, template_names)
-    budget = _char_budget(context_window)
-    images: list[Path] = []
-    out: list[dict] = []
-
-    def _meta(a: ArtifactFile, included: bool, kind: Optional[str] = None) -> None:
-        out.append({"path": a.path, "kind": kind or classify_artifact(a.ext), "text": "",
-                    "truncated": False, "included": included})
-
-    # 模板拷贝：只列路径，不纳入正文
-    for a in files:
-        if a.is_template:
-            _meta(a, False, "template")
-
-    content = [a for a in files if not a.is_template]
-    for a in content:
-        if classify_artifact(a.ext) == "image":
-            images.append(a.abs_path)
-            _meta(a, True, "image")
-        elif classify_artifact(a.ext) == "binary":
-            _meta(a, False, "binary")
-
-    textual = [a for a in content if classify_artifact(a.ext) in ("text", "office")]
-    textual.sort(key=lambda a: a.size, reverse=True)
-    primary = next((a for a in textual if _is_primary_candidate(a)), None)
-    remaining = [a for a in textual if a is not primary]
-
-    def _emit(a: ArtifactFile, limit: int) -> None:
-        if classify_artifact(a.ext) == "office":
-            text, truncated = extract_office_text(a.abs_path, limit)
-        else:
-            text, truncated = extract_text(a.abs_path, limit)
-        out.append({"path": a.path, "kind": classify_artifact(a.ext), "text": text,
-                    "truncated": truncated, "included": True})
-
-    primary_budget = int(budget * PRIMARY_ARTIFACT_SHARE) if primary else 0
-    if primary is not None:
-        _emit(primary, max(primary_budget, 4_000))
-    rest_budget = budget - primary_budget
-    share = rest_budget // max(len(remaining), 1)
-    omitted: list[str] = []
-    for a in remaining:
-        if share < _MIN_SHARE_CHARS:
-            omitted.append(a.path)
-            _meta(a, False)
-        else:
-            _emit(a, share)
-    # 按目录顺序稳定输出
-    order = {a.path: i for i, a in enumerate(files)}
-    out.sort(key=lambda f: order.get(f["path"], 10**9))
-    return {"files": out, "images": images, "omitted": omitted, "budget_chars": budget}
-
-
-def build_review_messages(material: dict, task: str, criteria: str, threshold: int,
-                          review_images: bool) -> tuple[str, list[dict]]:
-    """评审提示骨架（系统）+ 用户消息。评审标准由员工配置提供，骨架固定。"""
-    system = (
-        "You are an artifact reviewer. You judge whether the produced artifacts satisfy the task "
-        "and the review criteria. You do NOT have any tools; judge only from the material given.\n"
-        "Be strict but fair. Do not inflate scores. Respond ONLY by calling the `submit_review` tool."
-    )
-    parts: list[str] = [
-        f"# Task\n{task.strip()}\n",
-        "# Review criteria\n" + criteria.strip() + "\n",
-        f"# Passing threshold\n{threshold} / 100\n",
-        "# Artifacts",
-    ]
-    for f in material["files"]:
-        if f["kind"] == "template":
-            parts.append(f"## {f['path']} (template copy — NOT part of the review)\n")
-        elif not f["included"]:
-            parts.append(f"## {f['path']} (not included in review: unsupported or over budget)\n")
-        elif f["kind"] == "image":
-            note = "" if review_images else " (image — you cannot view images; noted only)"
-            parts.append(f"## {f['path']}{note}\n")
-        else:
-            tr = " [TRUNCATED — only the beginning is shown]" if f["truncated"] else ""
-            parts.append(f"## {f['path']}{tr}\n```\n{f['text']}\n```\n")
-    return system, [{"role": "user", "content": "\n".join(parts)}]
-
-
+#: 评审回合的结束契约：模型调用它提交结果；未调用即评审失败
 REVIEW_TOOL_SCHEMA = {
     "name": "submit_review",
-    "description": "提交评审结果：0-100 总分、是否达标、问题清单与修改建议。",
+    "description": (
+        "提交评审结果并结束评审。这是评审回合唯一被接受的结束方式：分析完成后必须调用它，"
+        "不要以文字总结结束。score 为 0-100 整数；issues 是员工返工的依据，每条要指向具体位置并说明期望。"
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
             "score": {"type": "integer", "minimum": 0, "maximum": 100,
                       "description": "0-100 的单个总分"},
-            "passed": {"type": "boolean", "description": "是否达到通过阈值"},
+            "passed": {"type": "boolean", "description": "是否达到通过阈值（仅作参考，达标判定以分数为准）"},
             "issues": {"type": "array", "items": {"type": "string"},
                        "description": "必须修正的问题（给返工用，具体可执行）"},
             "suggestions": {"type": "array", "items": {"type": "string"},
                             "description": "可选的改进建议"},
             "summary": {"type": "string", "description": "一两句话的总体评价"},
+            "checks": {"type": "array",
+                       "description": "逐项检查明细（可选）：评审技能跑脚本/核对得到的逐项结果",
+                       "items": {"type": "object",
+                                 "properties": {"name": {"type": "string"},
+                                                "value": {"type": "string"},
+                                                "pass": {"type": "boolean"}}}},
         },
-        "required": ["score", "passed", "issues"],
+        "required": ["score", "issues"],
     },
 }
 
 
-def _block_dict(block: Any) -> dict:
-    if isinstance(block, dict):
-        return block
-    return {"type": getattr(block, "type", None), "name": getattr(block, "name", None),
-            "input": getattr(block, "input", None)}
+def build_review_order(skill: str, artifact_dir: Path, task: str, criteria: str,
+                       threshold: int) -> str:
+    """评审指令：以用户消息形态落库（带标签），驱动评审回合。"""
+    return (
+        f"<{REVIEW_ORDER_TAG} skill=\"{skill}\" threshold=\"{threshold}\">\n"
+        "请使用评审技能评审本次产物：\n"
+        f"- 评审技能：`{skill}`（先 load_skill 加载，按其方法评审）\n"
+        f"- 产物目录：{artifact_dir.as_posix()}\n"
+        f"- 原始任务：{task.strip()}\n"
+        f"- 评审标准：{criteria.strip()}\n"
+        f"- 通过阈值：{threshold} 分\n"
+        "要求：用工具核实，不凭印象；每条意见指向具体位置。不要修改被评审的交付物。"
+        "分析完成后**调用 submit_review 提交结果**——这是评审回合唯一被接受的结束方式。\n"
+        f"</{REVIEW_ORDER_TAG}>"
+    )
 
 
-def parse_review(content: Any, fallback_threshold: int) -> ReviewResult:
-    """从 provider 响应的 content blocks 解析 ``submit_review`` 的入参。"""
-    for block in content or []:
-        b = _block_dict(block)
-        if b.get("type") == "tool_use" and b.get("name") == "submit_review":
-            inp = b.get("input") or {}
-            try:
-                score = int(round(float(inp.get("score"))))
-            except (TypeError, ValueError):
-                raise ValueError("评审结果缺少合法分数")
-            score = max(0, min(100, score))
-            issues = [str(x).strip() for x in (inp.get("issues") or []) if str(x).strip()]
-            suggestions = [str(x).strip() for x in (inp.get("suggestions") or []) if str(x).strip()]
-            passed = bool(inp.get("passed")) or score >= fallback_threshold
-            return ReviewResult(score=score, passed=passed, issues=issues,
-                                suggestions=suggestions, summary=str(inp.get("summary") or ""))
-    raise ValueError("评审结果中没有 submit_review 调用")
+def build_budget_warning(used: int, budget: int) -> str:
+    """预算预警（作为返工指令前缀）。"""
+    pct = int(used * 100 / budget) if budget else 0
+    return f"⚠️ 预算已用 {pct}%（{used:,} / {budget:,} token），请尽快收尾。\n"
+
+
+def sum_usage(usages: list[dict]) -> int:
+    """一次回合的 token 消耗（四字段全算不加权，与 usage 归一契约同口径）。"""
+    total = 0
+    for u in usages or []:
+        if not isinstance(u, dict):
+            continue
+        for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"):
+            v = u.get(k)
+            if isinstance(v, (int, float)):
+                total += int(v)
+    return total
+
+
+def build_skill_allowlist_handler(original_handler, allow: set[str]):
+    """包装 load_skill：只允许白名单内的技能名，其余明确拒绝。"""
+
+    def _h(name: str = "", **kw):
+        n = (name or kw.get("name") or "").strip()
+        if n not in allow:
+            return (
+                f"Error: 技能 `{n}` 不在你的白名单内，无法加载。"
+                f"可用技能：{', '.join(sorted(allow)) or '（无）'}。请如实说明并停止，不要绕过。"
+            )
+        return original_handler(name=n, **kw) if original_handler else f"Error: 技能 `{n}` 不存在"
+
+    return _h
 
 
 # ---------------------------------------------------------------------------
@@ -776,28 +574,119 @@ def _copy_template(template_path: Optional[str], artifact_dir: Path, workdir: Pa
     return True, names
 
 
-def _preload_skills(runtime, allow: list[str]) -> tuple[list[tuple[str, str]], list[str]]:
-    bodies: list[tuple[str, str]] = []
-    missing: list[str] = []
-    loader = getattr(runtime, "skills", None)
-    for name in allow or []:
-        body = loader.load(name) if loader is not None else f"Error: Unknown skill '{name}'."
-        if not body or body.startswith("Error:"):
-            missing.append(name)
-        else:
-            bodies.append((name, body))
-    return bodies, missing
+def internal_skill_loader():
+    """内部技能库的独立加载器（与公开技能的全局单例互不可见）。目录不存在 → None。"""
+    from planify.skills.skill_loader import SkillLoader
+    from doclens.web_v2.employees_store import internal_skills_dir
+
+    root = internal_skills_dir()
+    if not root.exists():
+        return None
+    return SkillLoader(root, auto_refresh=False)
+
+
+def _check_internal_skills(cfg: dict, loader) -> None:
+    """派活前校验：引用的内部技能必须存在，否则派活失败（不静默降级）。"""
+    from doclens.web_v2.employees_store import internal_skills_dir
+
+    names = set(loader.skills.keys()) if loader is not None else set()
+    missing = [n for n in (cfg.get("skills_allow") or []) if n not in names]
+    rs = cfg.get("review_skill")
+    if rs and rs not in names:
+        missing.append(rs)
+    if missing:
+        raise DispatchError(
+            f"内部技能不存在：{', '.join(missing)}（内部技能库：{internal_skills_dir()}）",
+            "SKILL_MISSING", 400,
+        )
+
+
+# ---- 回合执行 ----
+
+
+async def _run_turn(store, session_id: str, message: str, *, runtime, workdir: Path, provider,
+                    model: str, tools: list, handlers: dict, skills_loader, system_extra: str,
+                    interrupt, tracer, max_tool_rounds: int) -> Any:
+    """跑一个回合（工作或评审通用）并落库。返回 (RoundOutcome, emitter)。"""
+    from planify.streaming.runner import StreamingAgent
+    from planify.streaming.types import StreamingConfig
+    from planify.streaming.waiter import get_global_waiter
+    from doclens.web_v2.api._chat_emitter import ChatEventEmitter
+
+    # 调用方已 ensure_message_user（首轮由 dispatch 落库；此处不再 ensure——
+    # ensure 的幂等只看「末条是否同内容 user」，此刻末条是流程事件条目会重复落）
+    history = store.get_chat_history(session_id)
+    if history and history[-1].get("role") == "user":
+        tail = history[-1].get("content")
+        if isinstance(tail, str) and tail == message:
+            history.pop()
+    round_start = len(history)
+    emitter = ChatEventEmitter(queue=None, context_window=runtime.config.planify_context_window)
+    kw = {}
+    if max_tool_rounds:
+        kw["force_answer_rounds"] = max_tool_rounds
+    sa = StreamingAgent(
+        client=provider, model=model, tools=tools, tool_handlers=handlers, emitter=emitter,
+        config=StreamingConfig(
+            compact_threshold=int(round(runtime.config.planify_context_window * 0.8)),
+            context_window=runtime.config.planify_context_window,
+            max_tokens=runtime.config.planify_max_tokens, **kw,
+        ),
+        waiter=get_global_waiter(), skills_loader=skills_loader, logger_instance=runtime.logger,
+        runtime=runtime, interrupt_event=interrupt, system_prompt_extra=system_extra,
+        tracer=tracer, base_prompt="minimal",
+    )
+    await sa.run_stream(history, message, session_id)
+    outcome = persist_round(
+        store, session_id, history=history, message=message, agent=sa, emitter=emitter,
+        round_start=round_start, loaded_skill_marker=_loaded_skill_marker(),
+        interrupt_event=interrupt,
+    )
+    return outcome, emitter
+
+
+def _loaded_skill_marker() -> str:
+    from doclens.web_v2.api._chat_markers import LOADED_SKILL_MARKER
+
+    return LOADED_SKILL_MARKER
+
+
+class _SubmitReviewCatcher:
+    """评审回合的 submit_review handler：收到入参即记录；重复调用以首次为准。"""
+
+    def __init__(self):
+        self.result: Optional[dict] = None
+
+    def __call__(self, **kw):
+        if self.result is None:
+            self.result = dict(kw)
+            return "评审结果已提交。评审结束。"
+        return "评审结果已提交过，无需重复。"
+
+
+def _review_result_from_input(inp: dict, threshold: int) -> ReviewResult:
+    try:
+        score = int(round(float(inp.get("score"))))
+    except (TypeError, ValueError):
+        raise ValueError("评审结果缺少合法分数")
+    score = max(0, min(100, score))
+    issues = [str(x).strip() for x in (inp.get("issues") or []) if str(x).strip()]
+    suggestions = [str(x).strip() for x in (inp.get("suggestions") or []) if str(x).strip()]
+    checks = []
+    for c in inp.get("checks") or []:
+        if isinstance(c, dict):
+            checks.append({"name": str(c.get("name", "")), "value": str(c.get("value", "")),
+                           "pass": bool(c.get("pass"))})
+    return ReviewResult(score=score, passed=score >= threshold, issues=issues,
+                        suggestions=suggestions, summary=str(inp.get("summary") or ""),
+                        checks=checks)
 
 
 async def _loop(state: AssignmentState, cfg: dict, task: str, first_message: str,
-                template_names: set[str], skills_extra: str, review_images: bool) -> None:
-    """派活主循环（后台 task）。``first_message`` = 派活说明（dispatch 已落库为首条 user）。"""
+                system_extra: str) -> None:
+    """派活主循环（后台 task）：工作回合 → 评审回合 → 返工指令，直至结局。"""
     from doclens.web_v2.deps import get_agent, get_sessions_store
-    from doclens.web_v2.api._chat_emitter import ChatEventEmitter
     from planify.core.llm.trace import LLMTracer
-    from planify.streaming.runner import StreamingAgent
-    from planify.streaming.types import StreamingConfig
-
     store = get_sessions_store()
     agent = get_agent()
     runtime = agent.runtime
@@ -807,104 +696,139 @@ async def _loop(state: AssignmentState, cfg: dict, task: str, first_message: str
     work_preset = _preset_or_none(cfg["model_preset_id"])
     if work_preset is None:
         raise DispatchError("工作模型预设不存在", "MODEL_MISSING", 400)
-    review_preset = _preset_or_none(cfg.get("review_model_preset_id")) or work_preset
     depth = cfg.get("thinking_depth") or "auto"
     provider = _make_provider(work_preset, depth)
-    review_provider = _make_provider(review_preset, depth)
     model = work_preset.get("model_id") or ""
 
     threshold = int(cfg.get("score_threshold") or 90)
     max_iter = int(cfg.get("max_iterations") or 5)
+    budget = int(cfg.get("token_budget") or 0)
+    max_rounds = int(cfg.get("max_tool_rounds") or 0)
     criteria = cfg.get("review_criteria") or ""
-    cw = review_preset.get("context_window")
+    review_skill = cfg.get("review_skill") or ""
+    artifact_dir = state.artifact_dir
 
     allowed = set(resolve_tools(runtime.tools, cfg.get("tools_allow") or [], cfg.get("tools_deny") or []))
-    tools = [t for t in runtime.tools if t.get("name") in allowed]
-    handlers = bind_write_boundary(
-        {k: v for k, v in runtime.tool_handlers.items() if k in allowed}, state.artifact_dir, workdir,
+    # 员工需要 load_skill 才能按需加载内部技能；强制加入（白名单由 handler 校验）
+    skill_names = set(cfg.get("skills_allow") or [])
+    if review_skill:
+        skill_names.add(review_skill)
+    base_handlers = {k: v for k, v in runtime.tool_handlers.items() if k in allowed}
+    base_handlers = bind_write_boundary(base_handlers, artifact_dir, workdir)
+    loader = internal_skill_loader()
+    if loader is None:
+        raise DispatchError("内部技能库不存在", "SKILL_MISSING", 400)
+    base_handlers["load_skill"] = build_skill_allowlist_handler(
+        _internal_load_skill_handler(loader, runtime), skill_names,
     )
-    from planify.streaming.waiter import get_global_waiter
+    base_tools = [t for t in runtime.tools if t.get("name") in allowed]
+    if "load_skill" not in allowed:
+        base_tools = [t for t in runtime.tools if t.get("name") == "load_skill"] + base_tools
+    # 清单只列白名单内的内部技能：用 loader 的 disabled 机制（只影响 descriptions）
+    loader.set_disabled(set(loader.skills.keys()) - skill_names)
 
-    waiter = get_global_waiter()
     interrupt = state.interrupt
     tracer = LLMTracer.create(label="employee", session_key=session_id, workdir=agent.workdir)
 
     store.append_event(session_id, KIND_START, {
         "employee_id": state.employee_id, "employee_name": state.employee_name,
-        "artifact_dir": state.artifact_dir.as_posix(), "threshold": threshold,
-        "max_iterations": max_iter, "task": task,
+        "artifact_dir": artifact_dir.as_posix(), "threshold": threshold,
+        "max_iterations": max_iter, "token_budget": budget, "task": task,
     })
     outcome: str = OUTCOME_INTERRUPTED
     final_score: Optional[int] = None
     last_review: Optional[ReviewResult] = None
+    spent = 0
     try:
         for i in range(1, max_iter + 1):
             if interrupt.is_set():
                 outcome = OUTCOME_STOPPED
                 break
             state.iteration = i
+            # ---- 工作回合 ----
             if i == 1:
-                # 首条 = 派活说明，dispatch 已落库（ensure 的幂等只看「末条是否同内容
-                # 的 user」，而此刻末条是 assignment_start 事件，再 ensure 会重复落一条）
                 message = first_message
             else:
-                message = build_rework_order(last_review, threshold, state.artifact_dir)
+                assert last_review is not None
+                message = build_rework_order(last_review, threshold, artifact_dir)
+                if budget and spent * 5 >= budget * 4:
+                    message = build_budget_warning(spent, budget) + message
                 store.ensure_message_user(session_id, message)
-            history = store.get_chat_history(session_id)
-            if history and history[-1].get("role") == "user":
-                tail = history[-1].get("content")
-                if isinstance(tail, str) and tail == message:
-                    history.pop()
-            round_start = len(history)
-            emitter = ChatEventEmitter(queue=None, context_window=runtime.config.planify_context_window)
-            sa = StreamingAgent(
-                client=provider, model=model, tools=tools, tool_handlers=handlers,
-                emitter=emitter,
-                config=StreamingConfig(
-                    compact_threshold=int(round(runtime.config.planify_context_window * 0.8)),
-                    context_window=runtime.config.planify_context_window,
-                    max_tokens=runtime.config.planify_max_tokens,
-                ),
-                waiter=waiter, skills_loader=None, logger_instance=runtime.logger,
-                runtime=runtime, interrupt_event=interrupt, system_prompt_extra=skills_extra,
-                tracer=tracer, base_prompt="minimal",
-                scratch_dir=f"{state.artifact_dir.as_posix()}/{SCRATCH_SUBDIR}",
+            round_outcome, emitter = await _run_turn(
+                store, session_id, message, runtime=runtime, workdir=workdir, provider=provider,
+                model=model, tools=base_tools, handlers=base_handlers, skills_loader=loader,
+                system_extra=system_extra, interrupt=interrupt, tracer=tracer,
+                max_tool_rounds=max_rounds,
             )
-            await sa.run_stream(history, message, session_id)
+            spent += sum_usage(emitter.usages)
             if interrupt.is_set():
-                persist_round(store, session_id, history=history, message=message, agent=sa,
-                              emitter=emitter, round_start=round_start,
-                              loaded_skill_marker=_loaded_skill_marker(), interrupt_event=interrupt)
                 outcome = OUTCOME_STOPPED
                 break
-            outcome_round = persist_round(store, session_id, history=history, message=message,
-                                          agent=sa, emitter=emitter, round_start=round_start,
-                                          loaded_skill_marker=_loaded_skill_marker(), interrupt_event=interrupt)
-            if outcome_round.error:
+            if round_outcome.error:
                 last_review = ReviewResult(score=None, passed=False, kind="failed",
-                                           error=f"工作回合失败：{outcome_round.error}")
+                                           error=f"工作回合失败：{round_outcome.error}")
                 store.append_event(session_id, KIND_REVIEW, last_review.to_payload(i, threshold))
                 outcome = OUTCOME_REVIEW_FAILED
                 break
-            if not has_deliverable(state.artifact_dir, template_names):
-                last_review = ReviewResult(score=None, passed=False, kind="no_artifact")
+            if budget and spent >= budget:
+                outcome = OUTCOME_BUDGET
+                break
+            # ---- 评审回合 ----
+            catcher = _SubmitReviewCatcher()
+            review_handlers = dict(base_handlers)
+            review_handlers["submit_review"] = catcher
+            review_tools = base_tools + [{"name": "submit_review",
+                                          "description": REVIEW_TOOL_SCHEMA["description"],
+                                          "input_schema": REVIEW_TOOL_SCHEMA["input_schema"]}]
+            review_provider, review_model = provider, model
+            for pid in cfg.get("review_model_presets") or []:
+                p = _preset_or_none(pid)
+                if p is not None:
+                    try:
+                        review_provider = _make_provider(p, depth)
+                        review_model = p.get("model_id") or ""
+                        break
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning("review preset %s unusable: %s", pid, e)
+            order = build_review_order(review_skill, artifact_dir, task, criteria, threshold)
+            store.ensure_message_user(session_id, order)
+            review_outcome, review_emitter = await _run_turn(
+                store, session_id, order, runtime=runtime, workdir=workdir,
+                provider=review_provider, model=review_model, tools=review_tools,
+                handlers=review_handlers, skills_loader=loader, system_extra=system_extra,
+                interrupt=interrupt, tracer=tracer, max_tool_rounds=max_rounds,
+            )
+            spent += sum_usage(review_emitter.usages)
+            if interrupt.is_set():
+                outcome = OUTCOME_STOPPED
+                break
+            if catcher.result is None:
+                last_review = ReviewResult(
+                    score=None, passed=False, kind="failed",
+                    error=(f"评审回合未调用 submit_review 就结束。{('错误：' + review_outcome.error) if review_outcome.error else '员工最后说：' + (review_emitter.get_full_text() or '（无）')[:300]}"),
+                )
                 store.append_event(session_id, KIND_REVIEW, last_review.to_payload(i, threshold))
-                continue
-            material = collect_review_material(state.artifact_dir, template_names, cw)
-            system, msgs = build_review_messages(material, task, criteria, threshold, review_images)
-            last_review = await _do_review(review_provider, msgs, system, cw, review_images, tracer)
+                outcome = OUTCOME_REVIEW_FAILED
+                break
+            try:
+                last_review = _review_result_from_input(catcher.result, threshold)
+            except ValueError as e:
+                last_review = ReviewResult(score=None, passed=False, kind="failed", error=str(e))
+                store.append_event(session_id, KIND_REVIEW, last_review.to_payload(i, threshold))
+                outcome = OUTCOME_REVIEW_FAILED
+                break
             store.append_event(session_id, KIND_REVIEW, last_review.to_payload(i, threshold))
-            if last_review.kind == "failed":
-                outcome = OUTCOME_REVIEW_FAILED
-                break
             if last_review.score is not None and last_review.score >= threshold:
                 outcome, final_score = OUTCOME_PASSED, last_review.score
+                break
+            if budget and spent >= budget:
+                outcome = OUTCOME_BUDGET
                 break
         else:
             outcome = OUTCOME_EXHAUSTED
             final_score = last_review.score if last_review is not None else None
-        if state.stop_requested or interrupt.is_set():
-            outcome = OUTCOME_STOPPED if outcome != OUTCOME_PASSED else outcome
+        if (state.stop_requested or interrupt.is_set()) and outcome != OUTCOME_PASSED:
+            outcome = OUTCOME_STOPPED
     except asyncio.CancelledError:
         outcome = OUTCOME_STOPPED if (state.stop_requested or interrupt.is_set()) else OUTCOME_INTERRUPTED
         raise
@@ -918,7 +842,7 @@ async def _loop(state: AssignmentState, cfg: dict, task: str, first_message: str
     finally:
         store.append_event(session_id, KIND_END, {
             "outcome": outcome, "score": final_score, "iterations": state.iteration,
-            "employee_id": state.employee_id,
+            "employee_id": state.employee_id, "tokens_spent": spent, "token_budget": budget,
         })
         with _lock:
             _active.pop(session_id, None)
@@ -926,42 +850,23 @@ async def _loop(state: AssignmentState, cfg: dict, task: str, first_message: str
             unregister_interrupt(session_id, interrupt)
         except Exception:  # noqa: BLE001
             pass
-        logger.info("[employee:%s] assignment %s ended: %s score=%s",
-                    state.employee_name, session_id, outcome, final_score)
+        logger.info("[employee:%s] assignment %s ended: %s score=%s tokens=%s/%s",
+                    state.employee_name, session_id, outcome, final_score, spent, budget)
 
 
-def _loaded_skill_marker() -> str:
-    from doclens.web_v2.api._chat_markers import LOADED_SKILL_MARKER
+def _internal_load_skill_handler(loader, runtime):
+    """内部技能的 load_skill 底层 handler（与框架的公开 load_skill 同契约：
+    返回 XML 包装的技能正文；成功时按会话标记已加载）。"""
+    from planify.skills.access_state import get_current_session_id, mark_loaded_if_known
 
-    return LOADED_SKILL_MARKER
+    state = getattr(runtime, "skill_access_state", None)
 
+    def _handle(name: str) -> str:
+        body = loader.load(name)
+        mark_loaded_if_known(state, get_current_session_id(), name, body)
+        return body
 
-async def _do_review(provider, messages: list[dict], system: str, context_window: Optional[int],
-                     review_images: bool, tracer=None) -> ReviewResult:
-    """评审调用（重试一次）。失败返回 ReviewResult(kind='failed')。
-
-    评审**不走兜底切换**：换评审模型即换分数口径（ADR-0062）。
-    """
-    last_err = ""
-    from planify.core.llm.types import Tool
-
-    review_tool = Tool(
-        name=REVIEW_TOOL_SCHEMA["name"],
-        description=REVIEW_TOOL_SCHEMA["description"],
-        input_schema=REVIEW_TOOL_SCHEMA["input_schema"],
-    )
-    for attempt in range(2):
-        try:
-            resp = await asyncio.to_thread(
-                provider.chat, messages, system, [review_tool], REVIEW_MAX_TOKENS, tracer,
-            )
-            return parse_review(getattr(resp, "content", None), 0)
-        except Exception as e:  # noqa: BLE001
-            last_err = str(e)
-            logger.warning("review attempt %d failed: %s", attempt + 1, last_err)
-            if attempt == 0:
-                await asyncio.sleep(1.0)
-    return ReviewResult(score=None, passed=False, kind="failed", error=last_err)
+    return _handle
 
 
 def _new_session(employee: dict, task: str) -> str:
@@ -985,7 +890,7 @@ def dispatch(employee: dict, task: str) -> dict:
     """派活入口（同步预处理 + 后台 task）。返回 {session_id, artifact_dir}。
 
     错误以 DispatchError 抛出：同员工有进行中派活（409）/ 模型预设缺失（400）/
-    模板缺失（400）。
+    内部技能缺失（400）/ 模板缺失（400）。
     """
     from doclens.web_v2.chat_interrupt import register_interrupt_hook
     from doclens.web_v2.deps import get_agent, get_sessions_store
@@ -997,27 +902,29 @@ def dispatch(employee: dict, task: str) -> dict:
         raise DispatchError(f"员工「{employee['name']}」有进行中的派活", "EMPLOYEE_BUSY", 409)
     if _preset_or_none(employee.get("model_preset_id")) is None:
         raise DispatchError("工作模型预设不存在，请先在员工设置里改配", "MODEL_MISSING", 400)
-    if employee.get("review_model_preset_id") and _preset_or_none(employee["review_model_preset_id"]) is None:
-        raise DispatchError("评审模型预设不存在，请先在员工设置里改配", "MODEL_MISSING", 400)
+    if not employee.get("review_skill"):
+        raise DispatchError("未配置评审技能", "SKILL_MISSING", 400)
+    loader = internal_skill_loader()
+    if loader is None:
+        raise DispatchError("内部技能库不存在", "SKILL_MISSING", 400)
+    _check_internal_skills(employee, loader)
 
     agent = get_agent()
-    runtime = agent.runtime
     workdir = Path(agent.workdir)
 
     artifact_dir = assignment_dir(workdir, employee["artifact_root"], task)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     (artifact_dir / SCRATCH_SUBDIR).mkdir(exist_ok=True)
     try:
-        has_template, template_names = _copy_template(employee.get("template_path"), artifact_dir, workdir)
+        has_template, _template_names = _copy_template(employee.get("template_path"), artifact_dir, workdir)
     except DispatchError:
         shutil.rmtree(artifact_dir, ignore_errors=True)
         raise
 
     session_id = _new_session(employee, task)
 
-    skills_bodies, missing = _preload_skills(runtime, employee.get("skills_allow") or [])
-    skills_extra = build_system_extra(
-        employee.get("prompt") or "", skills_bodies, workdir, artifact_dir, missing,
+    system_extra = build_system_extra(
+        employee.get("prompt") or "", workdir, artifact_dir, employee.get("skills_allow") or [],
     )
     brief = build_brief(
         task, artifact_dir, has_template,
@@ -1043,11 +950,9 @@ def dispatch(employee: dict, task: str) -> dict:
             _active.pop(session_id, None)
         raise DispatchError("派活需要在事件循环上启动", "NO_LOOP", 500) from e
 
-    # 配置快照：整个派活按此刻的员工配置运行（期间改配置不影响进行中的派活）
+    # 配置快照：整个派活按此刻的员工配置运行
     cfg = {k: (list(v) if isinstance(v, list) else v) for k, v in employee.items()}
-    review_preset = _preset_or_none(employee.get("review_model_preset_id")) or _preset_or_none(employee["model_preset_id"])
-    review_images = bool((review_preset or {}).get("vision"))
-    task_obj = loop.create_task(_loop(state, cfg, task, brief, template_names, skills_extra, review_images))
+    task_obj = loop.create_task(_loop(state, cfg, task, brief, system_extra))
 
     if not try_register(session_id, task_obj):
         task_obj.cancel()

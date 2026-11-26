@@ -33,6 +33,10 @@ DEFAULT_TOOL_ALLOWLIST: tuple[str, ...] = (
 
 DEFAULT_SCORE_THRESHOLD = 90
 DEFAULT_MAX_ITERATIONS = 5
+#: 消耗预算：一次派活的 token 上限（四字段全算）；0 = 不限
+DEFAULT_TOKEN_BUDGET = 2_000_000
+#: 单回合工具调用上限（防一个回合内死循环）
+DEFAULT_MAX_TOOL_ROUNDS = 40
 
 
 class EmployeeBase(BaseModel):
@@ -55,12 +59,18 @@ class EmployeeBase(BaseModel):
     )
     skills_allow: list[str] = Field(
         default_factory=list,
-        description="技能白名单（派活开始时预加载注入系统提示词；空 = 无技能）",
+        description="工作技能白名单（内部技能名；员工可按需加载；空 = 无工作技能）",
+    )
+    review_skill: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="评审技能（内部技能名，必填；评审回合由员工加载）；不存在则派活失败",
     )
     model_preset_id: str = Field(..., min_length=1, description="工作模型预设 id（kind=llm）")
-    review_model_preset_id: Optional[str] = Field(
-        default=None,
-        description="评审模型预设 id；空 = 由工作模型自评",
+    review_model_presets: list[str] = Field(
+        default_factory=list,
+        description="评审模型有序清单（预设 id）；按序尝试，首个不可用顺延；空 = 用工作模型评审",
     )
     thinking_depth: ThinkingDepth = Field(
         default="auto",
@@ -85,6 +95,14 @@ class EmployeeBase(BaseModel):
     )
     score_threshold: int = Field(default=DEFAULT_SCORE_THRESHOLD, ge=0, le=100)
     max_iterations: int = Field(default=DEFAULT_MAX_ITERATIONS, ge=1, le=50)
+    token_budget: int = Field(
+        default=DEFAULT_TOKEN_BUDGET, ge=0,
+        description="消耗预算：一次派活的 token 上限（工作+评审回合全算）；超出即终止；0 = 不限",
+    )
+    max_tool_rounds: int = Field(
+        default=DEFAULT_MAX_TOOL_ROUNDS, ge=0,
+        description="单回合工具调用上限；达到后强制终答；0 = 不限",
+    )
 
 
 class EmployeeCreate(EmployeeBase):
@@ -109,14 +127,17 @@ class EmployeeUpdate(BaseModel):
     tools_allow: Optional[list[str]] = None
     tools_deny: Optional[list[str]] = None
     skills_allow: Optional[list[str]] = None
+    review_skill: Optional[str] = Field(default=None, min_length=1, max_length=100)
     model_preset_id: Optional[str] = Field(default=None, min_length=1)
-    review_model_preset_id: Optional[str] = None
+    review_model_presets: Optional[list[str]] = None
     thinking_depth: Optional[ThinkingDepth] = None
     artifact_root: Optional[str] = Field(default=None, min_length=1, max_length=500)
     template_path: Optional[str] = Field(default=None, max_length=500)
     review_criteria: Optional[str] = Field(default=None, min_length=1, max_length=20000)
     score_threshold: Optional[int] = Field(default=None, ge=0, le=100)
     max_iterations: Optional[int] = Field(default=None, ge=1, le=50)
+    token_budget: Optional[int] = Field(default=None, ge=0)
+    max_tool_rounds: Optional[int] = Field(default=None, ge=0)
 
 
 class Employee(EmployeeBase):
@@ -128,7 +149,9 @@ class Employee(EmployeeBase):
     updated_at: str
     # 派生状态（非存储字段，由 store 根据 LLM 预设存在性计算）
     model_missing: bool = Field(default=False, description="工作模型预设已不存在")
-    review_model_missing: bool = Field(default=False, description="评审模型预设已不存在")
+    review_model_missing: bool = Field(default=False, description="评审模型清单里有预设已不存在")
+    skills_missing: list[str] = Field(default_factory=list, description="引用了内部技能库里不存在的技能（工作技能或评审技能）")
+    running: Optional["RunInfoOut"] = Field(default=None, description="进行中的派活（同员工串行提示）")
 
 
 class EmployeeListResponse(BaseModel):
@@ -152,6 +175,12 @@ class EmployeeDispatchResponse(BaseModel):
 class EmployeeRunInfo(BaseModel):
     """某员工当前进行中的派活（用于「同员工串行」提示与前端跳转）。"""
 
+    session_id: str
+    started_at: str
+    iteration: int
+
+
+class RunInfoOut(BaseModel):
     session_id: str
     started_at: str
     iteration: int

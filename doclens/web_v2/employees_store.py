@@ -21,7 +21,6 @@ from doclens.web_v2.models.employee import (
 )
 
 _LOCK = threading.Lock()
-_FILENAME = "digital_employees.json"
 _SCHEMA_VERSION = 1
 
 # 持久化字段白名单（= EmployeeBase 的字段）
@@ -88,20 +87,44 @@ def _llm_preset_ids() -> set[str]:
         return set()
 
 
+_FILENAME = "digital_employees.json"
+#: 内部技能库目录名（与员工库同位；ADR-0065 内部技能）
+INTERNAL_SKILLS_DIRNAME = "employee_skills"
+
+
+def internal_skills_dir():
+    """内部技能库路径（机器级，与员工库同位）。不存在时返回路径但不创建。"""
+    return get_global_cortex_dir() / INTERNAL_SKILLS_DIRNAME
+
+
+def internal_skill_names() -> set[str]:
+    """内部技能库里全部技能名（按 ``<技能名>/SKILL.md`` 一层发现）。"""
+    root = internal_skills_dir()
+    if not root.exists():
+        return set()
+    return {p.parent.name for p in root.glob("*/SKILL.md")}
+
+
 def _decorate(emp: dict) -> dict:
-    """补派生字段（预设缺失标记），去除非模型字段。"""
+    """补派生字段（预设缺失 / 内部技能缺失标记），去除非模型字段。"""
     out = {k: emp.get(k) for k in ("id", "name", "created_at", "updated_at", *_FIELDS)}
     llm_ids = _llm_preset_ids()
     out["model_missing"] = out.get("model_preset_id") not in llm_ids
-    out["review_model_missing"] = bool(out.get("review_model_preset_id")) and (
-        out.get("review_model_preset_id") not in llm_ids
-    )
+    review_list = out.get("review_model_presets") or []
+    out["review_model_missing"] = any(pid not in llm_ids for pid in review_list)
     if out.get("tools_allow") is None:
         out["tools_allow"] = list(DEFAULT_TOOL_ALLOWLIST)
     if out.get("tools_deny") is None:
         out["tools_deny"] = []
     if out.get("skills_allow") is None:
         out["skills_allow"] = []
+    if out.get("review_model_presets") is None:
+        out["review_model_presets"] = []
+    names = internal_skill_names()
+    missing = [n for n in (out.get("skills_allow") or []) if n not in names]
+    if out.get("review_skill") and out["review_skill"] not in names:
+        missing.append(out["review_skill"])
+    out["skills_missing"] = missing
     return out
 
 

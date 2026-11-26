@@ -60,14 +60,13 @@ async def tools_catalog():
 
 @router.get("/employees/skills", response_model=SkillCatalogResponse)
 async def skills_catalog():
-    """可用技能目录（名字 + 描述）。深读技能（_bookskill_ 前缀）不列。"""
-    from doclens.web_v2.deps import get_agent
+    """内部技能库目录（名字 + 描述）——员工的工作技能与评审技能只能从这里选。"""
+    from doclens.web_v2 import employee_runner
 
-    loader = get_agent().runtime.skills
+    loader = employee_runner.internal_skill_loader()
     items: list[SkillCatalogItem] = []
-    for name, meta in sorted((getattr(loader, "skills", {}) or {}).items()):
-        if name.startswith("_bookskill_"):
-            continue
+    for name, info in sorted((getattr(loader, "skills", {}) or {}).items()):
+        meta = (info or {}).get("meta") or {}
         desc = str(meta.get("description", "") or "").strip()
         items.append(SkillCatalogItem(name=name, description=desc[:300]))
     return SkillCatalogResponse(skills=items)
@@ -140,7 +139,10 @@ async def dispatch_employee(emp_id: str, req: EmployeeDispatchRequest):
     if emp.get("model_missing"):
         raise CortexAPIError(400, "MODEL_MISSING", "工作模型预设缺失，请先在员工设置里改配")
     if emp.get("review_model_missing"):
-        raise CortexAPIError(400, "MODEL_MISSING", "评审模型预设缺失，请先在员工设置里改配")
+        raise CortexAPIError(400, "MODEL_MISSING", "评审模型清单里有预设缺失，请先在员工设置里改配")
+    if emp.get("skills_missing"):
+        raise CortexAPIError(400, "SKILL_MISSING",
+                             f"内部技能不存在：{', '.join(emp['skills_missing'])}")
     try:
         res = employee_runner.dispatch(emp, req.task)
     except employee_runner.DispatchError as e:

@@ -27,13 +27,19 @@ from doclens.web_v2.models.employee import (
 @pytest.fixture(autouse=True)
 def _isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(es, "get_global_cortex_dir", lambda: Path(tmp_path) / "global")
+    d = Path(tmp_path) / "global" / "employee_skills" / "rev-a"
+    d.mkdir(parents=True)
+    (d / "SKILL.md").write_text(
+        "---\nname: rev-a\ndescription: 评审技能\n---\n", encoding="utf-8",
+    )
     er._active.clear()
     yield
     er._active.clear()
 
 
 def _req(**over):
-    base = dict(name="tom", prompt="调研", model_preset_id="p1", artifact_root="调研", review_criteria="有来源")
+    base = dict(name="tom", prompt="调研", model_preset_id="p1", artifact_root="调研", review_criteria="有来源",
+                review_skill="rev-a")
     base.update(over)
     return EmployeeCreate(**base)
 
@@ -70,23 +76,25 @@ def test_crud_mapping(monkeypatch):
     assert ei3.value.status == 404
 
 
-def test_catalogs(monkeypatch):
+def test_catalogs(monkeypatch, tmp_path):
     runtime = SimpleNamespace(
         tools=[{"name": "bash"}, {"name": "search_kb"}, {"name": "mcp__wordcraft__execute"}, {"name": "task"}],
-        skills=SimpleNamespace(skills={
-            "alpha": {"description": "A 技能"},
-            "_bookskill_x": {"description": "hidden"},
-            "beta": {},
-        }),
     )
     monkeypatch.setattr("doclens.web_v2.deps.get_agent", lambda: SimpleNamespace(runtime=runtime))
+    monkeypatch.setattr(es, "get_global_cortex_dir", lambda: Path(tmp_path) / "cat")
+    for n in ("alpha", "beta"):
+        d = Path(tmp_path) / "cat" / "employee_skills" / n
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text(
+            f"---\nname: {n}\ndescription: {n} 技能\n---\n", encoding="utf-8",
+        )
     tools = asyncio.run(api.tools_catalog())
     by = {t.name: t for t in tools.tools}
     assert by["bash"].group == "builtin" and by["search_kb"].group == "kb"
     assert by["mcp__wordcraft__execute"].server == "wordcraft" and by["task"].forbidden
-    skills = asyncio.run(api.skills_catalog())
+    skills = asyncio.run(api.skills_catalog())   # 读内部技能库，不再是公开技能
     assert [s.name for s in skills.skills] == ["alpha", "beta"]
-    assert skills.skills[0].description == "A 技能"
+    assert skills.skills[0].description == "alpha 技能"
 
 
 def test_dispatch_validation(monkeypatch):
