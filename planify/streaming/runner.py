@@ -1474,8 +1474,14 @@ class StreamingAgent:
         self._log_request_payload(messages, system)
 
         # 把工具定义转换为 Tool dataclass（suppress_tools 时置空强制文本作答）；
-        # 描述占位符（如超时秒数）在转换时现值替换（热生效）
-        tool_defs = [] if suppress_tools else to_tool_defs(self.tools)
+        # 描述占位符（如超时秒数）在转换时现值替换（热生效）。
+        # suppress_tools 时仍可按 force_answer_keep_tools 保留「提交结果」类工具。
+        if suppress_tools:
+            keep = set(self.config.force_answer_keep_tools or ())
+            kept = [t for t in self.tools if t.get("name") in keep] if keep else []
+            tool_defs = to_tool_defs(kept)
+        else:
+            tool_defs = to_tool_defs(self.tools)
 
         # 本次请求的输入 messages 长度（usage 基线锚点）：astream 拿到的
         # 输入就是此刻的 messages 全量，usage 的 input 类字段精确覆盖它

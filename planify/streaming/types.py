@@ -413,6 +413,10 @@ class StreamingConfig:
     max_tool_rounds: Optional[int] = None  # 软阈值：超过后每轮注入"停止工具、如实作答"提醒
     tool_round_limit_reminder: Optional[str] = None  # 提醒文案；None 用中性默认
     force_answer_rounds: Optional[int] = None  # 硬阈值：达到后以 tools=[] 强制终答
+    # 强制终答时仍保留的工具名（如结构化「提交结果」类工具）：硬阈值的本意是
+    # 「别再查了」，不是「禁止交卷」——保留名单内的工具让模型仍能按规定方式收尾。
+    # None/空 = 全部置空（旧行为）。
+    force_answer_keep_tools: Optional[tuple] = None
 
     # 纯轮询退避（P3 热轮询止血）：连续纯轮询轮（全部 check_background 且
     # [running]）之间注入确定性等待——每轮轮询都是真实 LLM 往返，无等待时
