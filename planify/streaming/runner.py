@@ -401,18 +401,10 @@ class StreamingAgent:
         """
         context_parts: List[str] = []
 
-        # 精简变体（无人值守工作代理）：不注技能清单与 agent.md（技能已由宿主
-        # 预加载进 system prompt；agent.md 是交互式对话助手的用户上下文），
-        # 只注临时文件指引（目录可由宿主指定）。
-        if self.base_prompt == "minimal":
-            if session_id:
-                context_parts.append(self._scratch_files_guidance(session_id))
-            if context_parts:
-                combined = "\n\n".join(context_parts)
-                if CONTEXT_MARKER not in combined:
-                    combined = f"{CONTEXT_MARKER}:\n\n(no skills)\n\n" + combined
-                _refresh_or_insert_context(messages, CONTEXT_MARKER, combined)
-            return
+        # 精简变体（无人值守工作代理）：不注 agent.md（交互式对话助手的用户
+        # 上下文）；技能清单仍注入——技能按需加载，清单是代理感知可用技能的
+        # 唯一渠道（清单内容由宿主的 skills_loader 决定，宿主可按白名单过滤）。
+        minimal = self.base_prompt == "minimal"
 
         # 1. skills descriptions（稳定：仅安装/卸载技能时变化；含技能根目录事实，
         #    恒非空——空清单也注入目录，防对话安装时装错地方）
@@ -426,9 +418,11 @@ class StreamingAgent:
                     "</system-reminder>"
                 )
 
-        # 2. agent.md 内容
+        # 2. agent.md 内容（精简变体跳过：无人值守代理不需要用户级对话上下文）
         agent_md_content = ""
-        if self.runtime and self.runtime.config.assets_dir:
+        if minimal:
+            pass
+        elif self.runtime and self.runtime.config.assets_dir:
             agent_md_path = self.runtime.config.assets_dir / "agent.md"
             if agent_md_path.exists():
                 agent_md_content = agent_md_path.read_text(encoding="utf-8")

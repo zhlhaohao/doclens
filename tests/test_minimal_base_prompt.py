@@ -89,8 +89,8 @@ def test_variants_closed_set():
 
 
 @pytest.mark.parametrize("section", [
-    "TaskCreate", "load_skill", "ask_user_question", "TodoWrite",
-    "# Tone and style", "# Doing tasks", "Skill vs Tool priority", "# Task Guide",
+    "TaskCreate", "ask_user_question", "TodoWrite",
+    "# Tone and style", "# Doing tasks", "# Task Guide", "Use task for subagent delegation",
 ])
 def test_minimal_drops_assistant_only_sections(section):
     assert section not in build_minimal_system_prompt(".", None)
@@ -99,6 +99,7 @@ def test_minimal_drops_assistant_only_sections(section):
 @pytest.mark.parametrize("section", [
     "# Using your tools", "# Environment", "# Working Directory Guard",
     "# Output efficiency", "read_file", "edit_file", "write_file",
+    "# Skill vs Tool priority", "load_skill",   # 技能按需加载（ADR-0065）
 ])
 def test_minimal_keeps_tool_rules_and_environment(section):
     assert section in build_minimal_system_prompt(".", None)
@@ -142,29 +143,40 @@ def test_default_head_context_still_has_skills_and_default_tmp(tmp_path: Path):
 
 # ---------- 3. minimal 路径 ----------
 
-def test_minimal_agent_uses_minimal_prompt_and_head(tmp_path: Path):
+def test_minimal_agent_uses_minimal_prompt_and_skips_agent_md(tmp_path: Path):
     import asyncio
 
     provider = _TextProvider()
     sa = _agent(
         provider, tmp_path,
         base_prompt="minimal",
-        skills_loader=_Skills(),       # 即使传了 loader 也不注清单
+        skills_loader=_Skills(),       # 清单照常注入（宿主按白名单过滤的 loader）
         system_prompt_extra="EMPLOYEE_RULES",
     )
     history = []
     asyncio.run(sa.run_stream(history, "hi", "sess-2"))
 
-    # 系统提示词 = 精简变体 + 追加段
     sys_prompt = provider.systems[0]
-    assert "TaskCreate" not in sys_prompt and "load_skill" not in sys_prompt
-    assert "EMPLOYEE_RULES" in sys_prompt
+    assert "TaskCreate" not in sys_prompt and "ask_user_question" not in sys_prompt
+    assert "EMPLOYEE_RULES" in sys_prompt and "load_skill" in sys_prompt
 
-    # 头部注入：有 CONTEXT_MARKER（供刷新/去重），但无技能清单、无 agent.md 段
+    # 头部注入：技能清单在、agent.md 段不在、临时目录指引在
     ctx = next(m["content"] for m in history if CONTEXT_MARKER in str(m.get("content", "")))
-    assert "demo-skill" not in ctx
+    assert "demo-skill" in ctx
     assert "following context" not in ctx
     assert "# Temporary Files" in ctx
+
+
+def test_minimal_without_skills_loader_has_no_skill_list(tmp_path: Path):
+    import asyncio
+
+    sa = _agent(_TextProvider(), tmp_path, base_prompt="minimal", scratch_dir="x/tmp")
+    history = []
+    asyncio.run(sa.run_stream(history, "hi", "sess-3"))
+    ctx = next(m["content"] for m in history if CONTEXT_MARKER in str(m.get("content", "")))
+    assert "demo-skill" not in ctx
+    assert "out/assignment-1/tmp/sess-3" not in ctx
+    assert "x/tmp/sess-3" in ctx
 
 
 def test_minimal_with_scratch_dir_points_there(tmp_path: Path):
@@ -175,9 +187,9 @@ def test_minimal_with_scratch_dir_points_there(tmp_path: Path):
         base_prompt="minimal", scratch_dir="out/assignment-1/tmp",
     )
     history = []
-    asyncio.run(sa.run_stream(history, "hi", "sess-3"))
+    asyncio.run(sa.run_stream(history, "hi", "sess-4"))
     ctx = next(m["content"] for m in history if CONTEXT_MARKER in str(m.get("content", "")))
-    assert "out/assignment-1/tmp/sess-3" in ctx
+    assert "out/assignment-1/tmp/sess-4" in ctx
 
 
 def test_minimal_head_context_is_stable_across_rounds(tmp_path: Path):
@@ -186,9 +198,9 @@ def test_minimal_head_context_is_stable_across_rounds(tmp_path: Path):
 
     sa = _agent(_TextProvider(), tmp_path, base_prompt="minimal", scratch_dir="x/tmp")
     history = []
-    asyncio.run(sa.run_stream(history, "q1", "sess-4"))
+    asyncio.run(sa.run_stream(history, "q1", "sess-5"))
     n_after_r1 = len(history)
-    asyncio.run(sa.run_stream(history, "q2", "sess-4"))
+    asyncio.run(sa.run_stream(history, "q2", "sess-5"))
     ctx_msgs = [m for m in history if CONTEXT_MARKER in str(m.get("content", ""))]
     assert len(ctx_msgs) == 1, "头部上下文被重复插入"
     assert n_after_r1 < len(history)

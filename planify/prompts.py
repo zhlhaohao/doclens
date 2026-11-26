@@ -277,11 +277,11 @@ def build_minimal_system_prompt(
     """构建精简基础提示词——面向无人值守的工作代理。
 
     与 ``build_system_prompt`` 的区别：只保留「系统约定 / 工具使用规则 /
-    环境信息 / 门禁当前配置 / 输出简洁」，剔除对话助手专属段——任务管理
-    工具引导、技能加载引导、子代理引导、向用户提问的流程、语气风格。
-    这些段落描述的工具与交互通道，无人值守的工作代理并不具备（技能已由
-    宿主预加载、无人可问），保留会误导它去寻找不存在的工具或挂起等待
-    确认。
+    技能加载引导 / 环境信息 / 门禁当前配置 / 输出简洁」，剔除对话助手
+    专属段——任务管理工具引导、子代理引导、向用户提问的流程、语气风格。
+    这些段落描述的工具与交互通道，无人值守的工作代理并不具备（无人可问），
+    保留会误导它去寻找不存在的工具或挂起等待确认。技能加载引导**保留**：
+    技能按需加载，清单由宿主的 skills_loader 决定（宿主可按白名单过滤）。
 
     该变体不随 agent_type 变化；``extra_prompt`` 仍追加在末尾（宿主的
     领域策略）。
@@ -342,6 +342,10 @@ def build_minimal_system_prompt(
 {search_tool_rules}  - Reserve using the Bash exclusively for system commands and terminal operations that require shell execution. If you are unsure and there is a relevant dedicated tool, default to using the dedicated tool and only fallback on the Bash tool for these if it is absolutely necessary.
  - You can call multiple tools in a single response. If you intend to call multiple tools and there are no dependencies between them, make all independent tool calls in parallel. Maximize use of parallel tool calls where possible to increase efficiency. However, if some operations must complete before others start, run them sequentially instead.
  - Do not fabricate tool results. If you did not run a command or read a file, say so rather than describing what it would have shown.
+
+# Skill vs Tool priority
+
+Skills 包含领域专属知识（方法、步骤、检查清单）。当任务或指令点名某个技能、或某个技能的描述与当前工作匹配时，**必须先用 load_skill 工具加载它**，再按其指引工作，而不是凭印象直接开始。只加载清单里有的技能；指令点名的技能不在清单里时，如实说明并停止，不要用别的方式绕过。
 
 # Environment
 You have been invoked in the following environment:
