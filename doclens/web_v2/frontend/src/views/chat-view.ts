@@ -1198,6 +1198,9 @@ export class ChatView extends LitElement {
     this._abortController = new AbortController();
     this._suppressLifecycleRecovery = false;
     this._stopRecoveryRetry();
+    // 新回合由本地流接管展示：残留的恢复轮询一并退场（不变量：轮询在场
+    // ⇒ 恢复态 ⇒ 输入锁定；否则本轮 finally 会因轮询在场而不解锁）。
+    this._stopGeneratingPoll();
     this._recoveryRetryDelayMs = 5000;
 
     // 会话归属守卫（2026-10-22 串台修复）：本流的增量只允许写回发起它的
@@ -1429,13 +1432,13 @@ export class ChatView extends LitElement {
       this._interjectPending = false; // 插话态复位（ADR-0048；丢弃 toast 已另行送达）
       // streaming 是当前展示会话的状态：切走了就不要解锁别人的输入框
       // （另开一轮的输入锁归它自己的流管）。
-      if (stillOwn() && this._recoveryRetryTimer === undefined) {
+      // 恢复态在场（5s 轮询已接管 / 恢复重试在退避）时不得解锁：后端仍在
+      // 生成，停止钮必须留着。静默超时路径 await 了 _recoverSession，本段
+      // 晚于它执行——无条件解锁会把恢复态刚置起的 streaming 压回 false
+      // （真机现象：占位写着「后台继续生成」，按钮却是绿色「发送」）。
+      // 解锁只由轮询判定「已结束」、恢复失败收场或 _stop() 负责。
+      if (stillOwn() && this._recoveryRetryTimer === undefined && this._genPollTimer === undefined) {
         actions.setChatState({ streaming: false, pendingAsk: null });
-        // 恢复接管成功：后续 5s 轮询独占展示；已正常完成：无需生命周期重拉。
-        if (this._genPollTimer !== undefined) {
-          this._stopRecoveryRetry();
-          this._recoveryRetryDelayMs = 5000;
-        }
       }
     }
   }
