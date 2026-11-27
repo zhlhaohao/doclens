@@ -1,6 +1,6 @@
 ---
 name: gen-readme
-description: 重新生成 README（构建产物，全量重生成，适配任意技术栈）。未指定对象 = 整个项目（根 README.md + README.zh-CN.md 中英双语），指定模块 = 该目录 README.md。仅当用户明确要求"生成/更新 README"时使用。
+description: 重新生成 README（构建产物，全量重生成，适配任意技术栈）。未指定对象 = 整个项目（根 README.md 中文 + README.en.md 英文双语），指定模块 = 该目录 README.md。仅当用户明确要求"生成/更新 README"时使用。
 icon: book-open
 ---
 
@@ -12,7 +12,7 @@ icon: book-open
 
 | 范围 | 产物 |
 |---|---|
-| 整个项目（未指定对象） | 根 `README.md`（英文，GitHub 默认首页）+ `README.zh-CN.md`（中文），两份顶部互链、同步重生成 |
+| 整个项目（未指定对象） | 根 `README.md`（中文，GitHub 默认首页）+ `README.en.md`（英文），两份顶部互链、同步重生成 |
 | 用户指定模块路径 | `<模块路径>/README.md`（语言同上双份规则） |
 
 普通"讲讲这个项目"类提问不跑本技能——直接口头回答。
@@ -69,7 +69,7 @@ icon: book-open
 
 覆盖写入两份文件（模块模式写在模块目录下）：
 
-- `README.md`（英文）与 `README.zh-CN.md`（中文）**内容等价**，顶部互链（英文版顶部 `[简体中文](README.zh-CN.md)`，中文版反之）；
+- `README.md`（中文）与 `README.en.md`（英文）**内容等价**，顶部互链（中文版顶部 `[English](README.en.md)`，英文版顶部 `[简体中文](README.md)`）；
 - 不插入任何构建产物声明或生成日期（README 是对外门面，保持干净）；
 - 启动命令、配置项必须来自第 1 步实际收集的命令与文件路径，禁止编造；默认账密找不到就写"见配置文件"并注明位置，不虚构；
 - License 以仓库实际存在的 LICENSE 文件为准；无则该节省略并提醒用户补充。
