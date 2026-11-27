@@ -29,7 +29,7 @@ Structure-aware document retrieval — FTS5/BM25 keyword search over document tr
 
 ## Vibe coding
 
-The chat is not a thin "search + LLM" wrapper — it is a full **harness agent** built on [planify](planify/), doclens' in-repo AI agent framework — editing the knowledge base (or any working directory) through natural language.
+The personal assistant page is not a thin "search + LLM" wrapper — it is a full **harness agent** built on [planify](planify/), doclens' in-repo AI agent framework — editing the knowledge base (or any working directory) through natural language.
 
 | Capability | What it does |
 |---|---|
@@ -57,7 +57,7 @@ The chat is not a thin "search + LLM" wrapper — it is a full **harness agent**
 | Capability | What it does |
 |---|---|
 | **Questions from your knowledge base** | You ask; it goes looking in your **working directory** — Markdown, PDF, Word, PPT, Excel, code, email archives, all formats uniformly indexed. It retrieves the relevant passages, reads the original text of each, then **synthesizes** an answer with sources — not a paste of the matching snippets. When it finds nothing, it says so, rather than passing off a web result as one of your files |
-| **Full-text search** | searches the structured nodes of indexed documents (headings, classes, functions, sections), anchoring results on actual definitions |
+| **Full-library search** | searches the structured nodes of indexed documents (headings, classes, functions, sections), anchoring results on actual definitions |
 | **Regex grep** | ripgrep across the disk plus the body text of indexed PDF / DOCX files, so files that were never indexed are still searchable |
 | **Five weighted factors** | keyword hits, file name, FTS score, title, and proximity (word span between hits); terms that sit close together rank higher |
 | **Index updates itself** | watchdog watches file changes in real time (debounced) and rebuilds only the documents that changed, comparing node-level content hashes and skipping the rest |
@@ -237,6 +237,39 @@ The **搜索** and **技能** sections carry no loose fields: search parameters 
 
 ---
 
+## Updating
+
+If you installed it with pip, upgrade directly:
+
+```bash
+pip install -U doclens
+```
+
+Then **restart the app** (stop the process in your terminal and run `doclens` again) — a running process still holds the old code.
+
+To see your current version: the user menu at the top right of the web interface → About; or run `pip show doclens` on the command line.
+
+**Your configuration and documents are safe**: model presets, the access PIN, skills, and MCP servers all live in your user directory (`~/.doclens/`), not inside the installed package, so upgrading does not touch them. The index is rebuilt automatically.
+
+**If you installed from source** (cloned from GitHub to develop):
+
+```bash
+git pull
+pip install -e ".[dev]"
+```
+
+When the frontend changed, build it again:
+
+```bash
+cd doclens/web_v2/frontend
+npm install
+npm run build      # output goes to doclens/web_v2/static/
+```
+
+**Two things worth checking after an upgrade**: that the personal assistant page still sends and receives messages (a vendor's endpoint protocol may have changed), and that your model presets are still there (they live on your machine and won't be lost, but you may need to update a base URL if the vendor retired that endpoint).
+
+---
+
 ## Development
 
 ```bash
@@ -277,12 +310,6 @@ Backend tests:
 ```bash
 .venv/Scripts/python.exe -m pytest
 ```
-
----
-
-## Documentation
-
-Architecture write-ups, ADRs, configuration reference and other technical docs are indexed in [docs/README.md](docs/README.md).
 
 ---
 
