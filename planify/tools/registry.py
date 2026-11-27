@@ -72,7 +72,12 @@ def register_external_tools(tools: List[Dict], handlers: Dict[str, Any]) -> None
         handlers: 工具处理器字典
     """
     global _external_tools, _external_handlers
-    _external_tools.extend(tools)
+    # 按名去重（后注册覆盖）：宿主切换工作目录会重装配 agent 并再次注册，
+    # 若只 extend，同一进程内工具表会累积 N 份同名定义，API 侧直接 400。
+    by_name = {t["name"]: t for t in _external_tools}
+    for t in tools:
+        by_name[t["name"]] = t
+    _external_tools[:] = list(by_name.values())
     _external_handlers.update(handlers)
 
 
@@ -520,6 +525,22 @@ def build_tool_registry(
                     "向用户结构化提问（已按配置执行，移除该项可恢复）"
                 )
             logger.info("[tools] 黑名单生效：屏蔽 %d 个: %s", len(hits), sorted(hits))
+
+    # 同名去重兜底：任何来源（内置/外部）重复注册都不应把两份同名定义发给
+    # 模型——API 侧唯一性校验会直接 400（DeepSeek "Tool names must be unique"）。
+    # 保留首次出现的定义；handlers 是按名字典天然无重名，无需处理。
+    _seen: set = set()
+    _deduped: List[Dict] = []
+    _dupes: set = set()
+    for _t in tools:
+        if _t["name"] in _seen:
+            _dupes.add(_t["name"])
+            continue
+        _seen.add(_t["name"])
+        _deduped.append(_t)
+    if _dupes:
+        logger.warning("[tools] 工具表存在同名重复，已去重: %s", sorted(_dupes))
+        tools = _deduped
 
     # 外部访问门禁：shell 工具包装（gui_mode 链路）。放在黑白名单过滤之后——
     # 被过滤掉的工具不包装。task 工具运行时按名取 handlers（缺失则从子代理
