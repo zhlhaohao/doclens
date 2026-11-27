@@ -1842,7 +1842,7 @@ export class ChatView extends LitElement {
               .images=${this._pendingImages}
               .skillItems=${this._skills.recentItems}
               .slashItems=${this._skills.candidates}
-              .employeeItems=${this._employees.recentItems}
+              ?showEmployeeMenu=${true}
               @input-change=${(e: any) => (this.draft = e.detail.value)}
               @images-change=${(e: any) => (this._pendingImages = e.detail.images)}
               @image-reject=${(e: any) => this._pushToast(e.detail.reason, "error", 4000)}
@@ -1851,10 +1851,6 @@ export class ChatView extends LitElement {
               @skill-pick-empty=${(e: CustomEvent<{ name: string }>) => this._skills.prefillOnly(e.detail.name)}
               @skill-browse=${() => this._skills.openDialog()}
               @employee-browse=${() => this._employees.openDialog()}
-              @employee-pick=${(e: CustomEvent<{ id: string }>) => {
-                const emp = (this._employees.employees ?? []).find((x) => x.id === e.detail.id);
-                if (emp) void this._employees.pick(emp, this.draft);
-              }}
               @submit=${this._submit}>
             </input-box>
           </div>

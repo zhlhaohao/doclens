@@ -1,8 +1,8 @@
 /** 数字员工（ADR-0062）前端纯函数与控制器：
  * - chat-timeline：review 条目 → 评审卡节点；返工指令并入卡内不单独成气泡，
  *   评审指令按原位渲染；与回退折叠条同 seq 时的排序；
- * - chat-employees-controller：最近员工求交、派活校验（空任务 / 预设缺失）、
- *   成功回调与失败回调。
+ * - chat-employees-controller：派活校验（空任务 / 预设缺失）、
+ *   成功回调与失败回调、不记最近员工。
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { buildChatTimeline, mergeTimeline, isReworkOrder, isAssignmentBrief } from "../src/views/chat-timeline";
@@ -143,7 +143,7 @@ describe("chat-employees-controller", () => {
     expect(calls.err[0]).toMatch(/预设缺失/);
   });
 
-  it("派活成功：记录最近员工、清草稿、回调", async () => {
+  it("派活成功：清草稿、回调", async () => {
     dispatchMock.mockResolvedValue({ session_id: "s1", employee_id: "e1", artifact_dir: "a/x" });
     const { c, calls } = make();
     await c.pick(emp(), "写报告");
@@ -161,15 +161,10 @@ describe("chat-employees-controller", () => {
     expect(calls.ok.length).toBe(0);
   });
 
-  it("最近员工与候选求交；无候选 → null", async () => {
-    localStorage.setItem("cortex.recentEmployees", JSON.stringify(["e1", "gone"]));
-    listMock.mockResolvedValue([emp()]);
+  it("派活不记最近员工", async () => {
+    dispatchMock.mockResolvedValue({ session_id: "s1", employee_id: "e1", artifact_dir: "a/x" });
     const { c } = make();
-    expect(c.recentItems).toEqual([]);       // 未加载
-    await c.load();
-    expect(c.recentItems).toEqual([{ name: "tom", id: "e1", disabled: false }]);
-    listMock.mockResolvedValue([]);
-    await c.load();
-    expect(c.recentItems).toBeNull();
+    await c.pick(emp(), "写报告");
+    expect(localStorage.getItem("cortex.recentEmployees")).toBeNull();
   });
 });

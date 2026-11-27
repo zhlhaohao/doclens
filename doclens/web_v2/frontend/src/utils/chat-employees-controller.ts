@@ -1,8 +1,8 @@
-/** 对话员工域（数字员工，ADR-0062）：chat-view 的员工候选菜单与派活。
+/** 对话员工域（数字员工，ADR-0062）：chat-view 的员工派活入口与派活。
  *
  * 与 ChatSkillsController 同构但行为相反：技能是「发往当前会话」，员工是
  * 「新建会话派活」。只在 initial 态（无当前会话）提供入口——由宿主决定
- * 是否把 recentItems 传给 input-box（focus 态传 null 即隐藏员工段）。
+ * 是否开启菜单项（showMenu；focus 态传 false 即隐藏员工段）。
  *
  * 派活 = POST /employees/{id}/dispatch → 跳转到返回的会话。
  */
@@ -14,11 +14,6 @@ import {
   type DispatchResult,
   type Employee,
 } from "../api/employees";
-import {
-  getRecentEmployeeIds,
-  recordEmployeeUse,
-  RECENT_EMPLOYEES_MENU_CAP,
-} from "../state/recent-employees";
 
 export interface ChatEmployeesOptions {
   /** 派活成功后跳转到该会话（宿主：setPendingSession + navigate chat）。 */
@@ -62,21 +57,6 @@ export class ChatEmployeesController implements ReactiveController {
     this._touch();
   }
 
-  /** 传给 input-box 的最近员工：与候选求交取前 3；无候选 → null（隐藏员工段）。 */
-  get recentItems(): { name: string; id: string; disabled?: boolean }[] | null {
-    const cands = this.employees;
-    if (cands === null) return []; // 未加载：菜单可开，暂只显示「选择员工…」
-    if (cands.length === 0) return null;
-    const byId = new Map(cands.map((c) => [c.id, c]));
-    return getRecentEmployeeIds()
-      .filter((id) => byId.has(id))
-      .slice(0, RECENT_EMPLOYEES_MENU_CAP)
-      .map((id) => {
-        const c = byId.get(id)!;
-        return { name: c.name, id, disabled: c.model_missing || c.review_model_missing };
-      });
-  }
-
   get hasAny(): boolean {
     return (this.employees?.length ?? 0) > 0;
   }
@@ -96,11 +76,11 @@ export class ChatEmployeesController implements ReactiveController {
     this._touch();
   }
 
-  /** 对话框/菜单选中员工 → 派活。 */
-  async pick(employee: Employee, task: string): Promise<void> {
+  /** 对话框选中员工 → 派活。 */
+  async pick(employee: Employee, employeeTask: string): Promise<void> {
     this.dialogOpen = false;
     this._touch();
-    const t = task.trim();
+    const t = employeeTask.trim();
     if (!t) {
       this.opts.onError("请先输入一句话任务，再选择员工");
       return;
@@ -113,7 +93,6 @@ export class ChatEmployeesController implements ReactiveController {
     this._touch();
     try {
       const res = await dispatchEmployee(employee.id, t);
-      recordEmployeeUse(employee.id);
       this.opts.clearDraft();
       await this.opts.onDispatched(res, employee);
     } catch (e) {

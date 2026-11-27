@@ -16,31 +16,17 @@ export class EmployeePickerDialog extends LitElement {
   static styles = [emptyStateStyles, buttonBaseStyles, css`
     :host {
       display: block;
+      position: relative;
       width: 50vw;
       max-width: 100%;
       box-sizing: border-box;
-      padding: var(--cortex-space-5, 20px) var(--cortex-space-6, 24px);
+      /* 内边距由宿主 <c-dialog> 的 .card 统一承担，此处不再叠加 */
     }
-    .dlg-head {
-      display: flex; align-items: flex-start; justify-content: space-between;
-      gap: var(--cortex-space-3);
-      margin-bottom: var(--cortex-space-5);
-    }
-    .title-wrap { display: flex; align-items: center; gap: var(--cortex-space-3); min-width: 0; }
-    .title-icon {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 40px; height: 40px; flex-shrink: 0;
-      border-radius: var(--cortex-radius-circle);
-      background: var(--cortex-primary-soft);
-      color: var(--cortex-primary);
-      font-size: 20px;
-    }
-    h3 { margin: 0; font-size: var(--cortex-fs-lg); font-weight: 600; letter-spacing: -0.01em;
-         color: var(--cortex-text); line-height: var(--cortex-lh-heading); }
-    .subtitle { margin: 2px 0 0 0; font-size: var(--cortex-fs-xs); color: var(--cortex-text-subtle); line-height: 1.4; }
+    /* 关闭钮浮在右上角，不独占一行（无标题时避免头部整行留白） */
     .close {
+      position: absolute; top: calc(-1 * var(--cortex-space-2)); right: calc(-1 * var(--cortex-space-2));
       display: inline-flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px; flex-shrink: 0;
+      width: 32px; height: 32px;
       border: none; border-radius: var(--cortex-radius-circle);
       background: transparent; color: var(--cortex-text-caption);
       font-size: 16px; cursor: pointer;
@@ -99,11 +85,8 @@ export class EmployeePickerDialog extends LitElement {
     .item .desc { -webkit-line-clamp: 2; width: 100%; min-width: 0; overflow-wrap: anywhere; }
 
     .err { color: var(--cortex-danger); font-size: var(--cortex-fs-sm); padding: var(--cortex-space-4); text-align: center; }
-    .actions { display: flex; justify-content: flex-end; margin-top: var(--cortex-space-5); }
-    button.cancel { padding: 8px 20px; border-radius: var(--cortex-radius-pill); font-weight: 600; }
     @media (max-width: 1023px) {
       :host { width: 100%; box-sizing: border-box; }
-      button.cancel { padding: 12px 20px; min-height: var(--cortex-touch-target); }
     }
   `];
 
@@ -171,22 +154,10 @@ export class EmployeePickerDialog extends LitElement {
 
   render() {
     return html`
-      <div class="dlg-head">
-        <div class="title-wrap">
-          <span class="title-icon"><doclens-icon name="user-round"></doclens-icon></span>
-          <div>
-            <h3>选择员工</h3>
-            <p class="subtitle">点选一位数字员工，在新建会话中派活：它会把成果写进产物目录，评审达标后自动结束</p>
-          </div>
-        </div>
-        <button type="button" class="close" aria-label="关闭" @click=${this._cancel}>
-          <doclens-icon name="x"></doclens-icon>
-        </button>
-      </div>
+      <button type="button" class="close" aria-label="关闭" @click=${this._cancel}>
+        <doclens-icon name="x"></doclens-icon>
+      </button>
       ${this._body()}
-      <div class="actions">
-        <button type="button" class="cancel plain" @click=${this._cancel}>取消</button>
-      </div>
     `;
   }
 }
